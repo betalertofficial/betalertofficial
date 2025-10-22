@@ -7,15 +7,20 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Bell } from "lucide-react";
+import { Loader2, Search, Bell, TrendingUp } from "lucide-react";
 import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
-import type { BetType, OddsComparator, TriggerFrequency } from "@/types/database";
+import type { BetType, TriggerFrequency } from "@/types/database";
 
 interface CreateTriggerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+}
+
+interface TeamOdds {
+  moneyline?: number;
+  spread?: { point: number; odds: number };
 }
 
 export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerProps) {
@@ -31,10 +36,13 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
   const [searchQuery, setSearchQuery] = useState("");
   const [events, setEvents] = useState<OddsApiEvent[]>([]);
   const [selectedTeam, setSelectedTeam] = useState("");
+  const [selectedEvent, setSelectedEvent] = useState<OddsApiEvent | null>(null);
+  const [teamOdds, setTeamOdds] = useState<TeamOdds | null>(null);
   
   const [betType, setBetType] = useState<BetType>("moneyline");
-  const [oddsComparator, setOddsComparator] = useState<OddsComparator>("<=");
+  const [oddsSign, setOddsSign] = useState<"+" | "-">("+");
   const [oddsValue, setOddsValue] = useState("");
+  const [oddsDirection, setOddsDirection] = useState<"higher" | "lower">("higher");
   const [gameTimeContext, setGameTimeContext] = useState("anytime");
   const [frequency, setFrequency] = useState<TriggerFrequency>("once");
 
@@ -49,6 +57,12 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       loadOddsForSport();
     }
   }, [selectedSport]);
+
+  useEffect(() => {
+    if (selectedTeam && events.length > 0) {
+      loadTeamOdds();
+    }
+  }, [selectedTeam, sportsbook, events]);
 
   const loadSports = async () => {
     try {
@@ -80,6 +94,48 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
     }
   };
 
+  const loadTeamOdds = () => {
+    const event = events.find(e => 
+      e.home_team === selectedTeam || e.away_team === selectedTeam
+    );
+
+    if (!event) {
+      setSelectedEvent(null);
+      setTeamOdds(null);
+      return;
+    }
+
+    setSelectedEvent(event);
+
+    const bookmakerKey = sportsbook === "fanduel" ? "fanduel" : "draftkings";
+    const bookmaker = event.bookmakers.find(b => b.key === bookmakerKey);
+
+    if (!bookmaker) {
+      setTeamOdds(null);
+      return;
+    }
+
+    const odds: TeamOdds = {};
+
+    const h2hMarket = bookmaker.markets.find(m => m.key === "h2h");
+    if (h2hMarket) {
+      const outcome = h2hMarket.outcomes.find(o => o.name === selectedTeam);
+      if (outcome) {
+        odds.moneyline = outcome.price;
+      }
+    }
+
+    const spreadMarket = bookmaker.markets.find(m => m.key === "spreads");
+    if (spreadMarket) {
+      const outcome = spreadMarket.outcomes.find(o => o.name === selectedTeam);
+      if (outcome && outcome.point !== undefined) {
+        odds.spread = { point: outcome.point, odds: outcome.price };
+      }
+    }
+
+    setTeamOdds(odds);
+  };
+
   const handleCreateTrigger = async () => {
     if (!user || !selectedTeam || !oddsValue) {
       alert("Please fill in all required fields");
@@ -101,12 +157,16 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
         throw new Error("Odds API vendor not found. Please contact support.");
       }
 
+      const numericValue = parseFloat(oddsValue);
+      const finalOddsValue = oddsSign === "-" ? -numericValue : numericValue;
+      const oddsComparator = oddsDirection === "higher" ? ">=" : "<=";
+
       await triggerService.createTrigger(user.id, {
         sport: selectedSportTitle,
         team_or_player: selectedTeam,
         bet_type: betType,
         odds_comparator: oddsComparator,
-        odds_value: parseFloat(oddsValue),
+        odds_value: finalOddsValue,
         frequency,
         status: "active",
         vendor_id: oddsApiVendor.id
@@ -117,6 +177,8 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       
       setSearchQuery("");
       setSelectedTeam("");
+      setSelectedEvent(null);
+      setTeamOdds(null);
       setOddsValue("");
     } catch (error: any) {
       console.error("Error creating trigger:", error);
@@ -139,6 +201,24 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
     
     return acc;
   }, [] as string[]);
+
+  const formatOdds = (odds: number) => {
+    return odds > 0 ? `+${odds}` : odds.toString();
+  };
+
+  const isGameLive = (commenceTime: string) => {
+    const gameTime = new Date(commenceTime);
+    const now = new Date();
+    const diffHours = (now.getTime() - gameTime.getTime()) / (1000 * 60 * 60);
+    return diffHours > 0 && diffHours < 3;
+  };
+
+  const getOpponentTeam = () => {
+    if (!selectedEvent) return "";
+    return selectedEvent.home_team === selectedTeam 
+      ? selectedEvent.away_team 
+      : selectedEvent.home_team;
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -225,7 +305,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                 className="pl-10 bg-[#242B33] border-border"
               />
             </div>
-            {searchQuery && filteredTeams.length > 0 && (
+            {searchQuery && filteredTeams.length > 0 && !selectedTeam && (
               <div className="mt-2 max-h-40 overflow-y-auto bg-[#242B33] border border-border rounded-lg">
                 {filteredTeams.slice(0, 5).map((team) => (
                   <button
@@ -244,6 +324,59 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
             )}
           </div>
 
+          {selectedEvent && teamOdds && (
+            <div className="bg-[#242B33] border border-border rounded-lg p-4 space-y-4">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                <h3 className="font-semibold text-foreground">Current Market Context</h3>
+              </div>
+
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Current game:</span>
+                <span className="text-foreground font-medium">
+                  {selectedEvent.home_team} vs {selectedEvent.away_team}
+                </span>
+                {isGameLive(selectedEvent.commence_time) && (
+                  <Badge className="bg-red-600 text-white">LIVE</Badge>
+                )}
+              </div>
+
+              {teamOdds.moneyline !== undefined && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Live moneyline odds for {selectedTeam} on {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}:
+                  </p>
+                  <div className="bg-[#1B2229] rounded-lg p-3">
+                    <Badge className="bg-[#2A3139] text-foreground mb-2">
+                      {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}: {formatOdds(teamOdds.moneyline)}
+                    </Badge>
+                    <p className="text-sm">
+                      Current {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} odds:{" "}
+                      <span className="text-primary font-bold">{formatOdds(teamOdds.moneyline)}</span>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {teamOdds.spread && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Live spread odds for {selectedTeam} on {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}:
+                  </p>
+                  <div className="bg-[#1B2229] rounded-lg p-3">
+                    <Badge className="bg-[#2A3139] text-foreground mb-2">
+                      {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}: {formatOdds(teamOdds.spread.point)} ({formatOdds(teamOdds.spread.odds)})
+                    </Badge>
+                    <p className="text-sm">
+                      Current {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} odds:{" "}
+                      <span className="text-primary font-bold">{formatOdds(teamOdds.spread.point)}</span>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label className="text-sm font-medium text-muted-foreground">Bet Type</Label>
             <Select value={betType} onValueChange={(v) => setBetType(v as BetType)}>
@@ -259,20 +392,14 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
 
           <div className="space-y-2">
             <Label className="text-sm font-medium text-muted-foreground">Odds Threshold</Label>
-            <div className="grid grid-cols-5 gap-3">
-              <Select 
-                value={oddsComparator} 
-                onValueChange={(v) => setOddsComparator(v as OddsComparator)}
-              >
-                <SelectTrigger className="col-span-2 bg-[#242B33] border-border">
+            <div className="grid grid-cols-7 gap-3">
+              <Select value={oddsSign} onValueChange={(v) => setOddsSign(v as "+" | "-")}>
+                <SelectTrigger className="col-span-1 bg-[#242B33] border-border">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value=">=">Greater or equal</SelectItem>
-                  <SelectItem value="<=">Less or equal</SelectItem>
-                  <SelectItem value=">">Greater than</SelectItem>
-                  <SelectItem value="<">Less than</SelectItem>
-                  <SelectItem value="==">Equal to</SelectItem>
+                  <SelectItem value="+">+</SelectItem>
+                  <SelectItem value="-">-</SelectItem>
                 </SelectContent>
               </Select>
               <Input
@@ -282,6 +409,15 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                 onChange={(e) => setOddsValue(e.target.value)}
                 className="col-span-3 bg-[#242B33] border-border"
               />
+              <Select value={oddsDirection} onValueChange={(v) => setOddsDirection(v as "higher" | "lower")}>
+                <SelectTrigger className="col-span-3 bg-[#242B33] border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="higher">or higher</SelectItem>
+                  <SelectItem value="lower">or lower</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
