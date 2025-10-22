@@ -245,6 +245,7 @@ export type Database = {
           id: string
           name: string | null
           phone_e164: string
+          role: string | null
           subscription_tier: string | null
           trigger_limit: number | null
           updated_at: string | null
@@ -255,6 +256,7 @@ export type Database = {
           id: string
           name?: string | null
           phone_e164: string
+          role?: string | null
           subscription_tier?: string | null
           trigger_limit?: number | null
           updated_at?: string | null
@@ -265,6 +267,7 @@ export type Database = {
           id?: string
           name?: string | null
           phone_e164?: string
+          role?: string | null
           subscription_tier?: string | null
           trigger_limit?: number | null
           updated_at?: string | null
