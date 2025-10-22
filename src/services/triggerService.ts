@@ -74,7 +74,7 @@ export const triggerService = {
       .single();
 
     if (error) throw error;
-    return data;
+    return data as Trigger;
   },
 
   async deleteTrigger(userId: string, triggerId: string): Promise<void> {

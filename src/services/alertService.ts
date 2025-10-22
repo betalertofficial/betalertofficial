@@ -89,7 +89,7 @@ export const alertService = {
       .single();
 
     if (error) throw error;
-    return data;
+    return data as Alert;
   },
 
   async updateAlertStatus(
