@@ -1,0 +1,137 @@
+
+import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { triggerService } from "@/services/triggerService";
+import { TriggerStats } from "./TriggerStats";
+import { TriggerCard } from "./TriggerCard";
+import { Button } from "@/components/ui/button";
+import { Plus, Loader2 } from "lucide-react";
+import type { ProfileTrigger } from "@/types/database";
+
+interface MyTriggersProps {
+  onCreateNew: () => void;
+}
+
+export function MyTriggers({ onCreateNew }: MyTriggersProps) {
+  const { user, profile } = useAuth();
+  const [triggers, setTriggers] = useState<ProfileTrigger[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ active: 0, completed: 0, paused: 0, total: 0 });
+
+  const loadTriggers = async () => {
+    if (!user) return;
+    
+    try {
+      setLoading(true);
+      const data = await triggerService.getUserTriggers(user.id);
+      setTriggers(data);
+      
+      const statsData = await triggerService.getTriggerStats(user.id);
+      setStats(statsData);
+    } catch (error) {
+      console.error("Error loading triggers:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTriggers();
+  }, [user]);
+
+  const handlePause = async (triggerId: string) => {
+    try {
+      await triggerService.updateTrigger(triggerId, { status: "paused" });
+      loadTriggers();
+    } catch (error) {
+      console.error("Error pausing trigger:", error);
+    }
+  };
+
+  const handleResume = async (triggerId: string) => {
+    try {
+      await triggerService.updateTrigger(triggerId, { status: "active" });
+      loadTriggers();
+    } catch (error) {
+      console.error("Error resuming trigger:", error);
+    }
+  };
+
+  const handleDelete = async (triggerId: string) => {
+    if (!user) return;
+    
+    if (!confirm("Are you sure you want to delete this trigger?")) return;
+    
+    try {
+      await triggerService.deleteTrigger(user.id, triggerId);
+      loadTriggers();
+    } catch (error) {
+      console.error("Error deleting trigger:", error);
+    }
+  };
+
+  const handleEdit = (triggerId: string) => {
+    console.log("Edit trigger:", triggerId);
+  };
+
+  const remaining = profile ? profile.trigger_limit - stats.active : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">My Triggers</h2>
+        <Button 
+          onClick={onCreateNew}
+          disabled={remaining <= 0}
+          className="btn-primary"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Create Trigger
+        </Button>
+      </div>
+
+      <TriggerStats 
+        active={stats.active} 
+        completed={stats.completed} 
+        remaining={remaining}
+      />
+
+      {remaining <= 0 && (
+        <div className="bg-accent/10 border border-accent/20 text-accent px-4 py-3 rounded-lg">
+          You have reached your trigger limit. Pause or delete existing triggers to create new ones.
+        </div>
+      )}
+
+      {triggers.length === 0 ? (
+        <div className="text-center py-12 glass-panel rounded-lg">
+          <p className="text-muted-foreground mb-4">No triggers yet. Create your first trigger to get started!</p>
+          <Button onClick={onCreateNew} className="btn-primary">
+            <Plus className="h-4 w-4 mr-2" />
+            Create Your First Trigger
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {triggers.map((pt) => (
+            <TriggerCard
+              key={pt.id}
+              profileTrigger={pt}
+              onPause={handlePause}
+              onResume={handleResume}
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
