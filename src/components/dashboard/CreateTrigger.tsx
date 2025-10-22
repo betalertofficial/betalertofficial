@@ -5,63 +5,74 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, ExternalLink } from "lucide-react";
+import { Loader2, Search, Bell } from "lucide-react";
 import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
 import type { BetType, OddsComparator, TriggerFrequency } from "@/types/database";
 
 interface CreateTriggerProps {
-  onBack: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
 
-export function CreateTrigger({ onBack, onSuccess }: CreateTriggerProps) {
+export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerProps) {
   const { user } = useAuth();
-  const [step, setStep] = useState<"sport" | "team" | "odds" | "configure">("sport");
   const [loading, setLoading] = useState(false);
   
+  const [subjectType, setSubjectType] = useState<"team" | "player">("team");
   const [sports, setSports] = useState<any[]>([]);
   const [selectedSport, setSelectedSport] = useState("");
   const [selectedSportTitle, setSelectedSportTitle] = useState("");
   
+  const [sportsbook, setSportsbook] = useState<"fanduel" | "draftkings">("fanduel");
+  const [searchQuery, setSearchQuery] = useState("");
   const [events, setEvents] = useState<OddsApiEvent[]>([]);
-  const [selectedEvent, setSelectedEvent] = useState<OddsApiEvent | null>(null);
   const [selectedTeam, setSelectedTeam] = useState("");
   
   const [betType, setBetType] = useState<BetType>("moneyline");
   const [oddsComparator, setOddsComparator] = useState<OddsComparator>("<=");
   const [oddsValue, setOddsValue] = useState("");
+  const [gameTimeContext, setGameTimeContext] = useState("anytime");
   const [frequency, setFrequency] = useState<TriggerFrequency>("once");
 
   useEffect(() => {
-    loadSports();
-  }, []);
+    if (open) {
+      loadSports();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (selectedSport) {
+      loadOddsForSport();
+    }
+  }, [selectedSport]);
 
   const loadSports = async () => {
     try {
-      setLoading(true);
       const data = await oddsApiService.getSports();
       const activeSports = data.filter((s: any) => s.active);
       setSports(activeSports);
+      
+      const nba = activeSports.find((s: any) => s.key === "basketball_nba");
+      if (nba) {
+        setSelectedSport(nba.key);
+        setSelectedSportTitle(nba.title);
+      }
     } catch (error) {
       console.error("Error loading sports:", error);
-    } finally {
-      setLoading(false);
     }
   };
 
-  const handleSelectSport = async (sportKey: string) => {
-    const sport = sports.find(s => s.key === sportKey);
-    setSelectedSport(sportKey);
-    setSelectedSportTitle(sport?.title || sportKey);
+  const loadOddsForSport = async () => {
+    if (!selectedSport) return;
     
     try {
       setLoading(true);
-      const data = await oddsApiService.getOddsForSport(sportKey);
+      const data = await oddsApiService.getOddsForSport(selectedSport);
       setEvents(data);
-      setStep("team");
     } catch (error) {
       console.error("Error loading odds:", error);
     } finally {
@@ -69,21 +80,26 @@ export function CreateTrigger({ onBack, onSuccess }: CreateTriggerProps) {
     }
   };
 
-  const handleSelectTeam = (event: OddsApiEvent, team: string) => {
-    setSelectedEvent(event);
-    setSelectedTeam(team);
-    setStep("odds");
-  };
-
   const handleCreateTrigger = async () => {
-    if (!user || !selectedEvent) return;
+    if (!user || !selectedTeam || !oddsValue) {
+      alert("Please fill in all required fields");
+      return;
+    }
 
     try {
       setLoading(true);
       
       const vendorResponse = await fetch("/api/vendors");
+      if (!vendorResponse.ok) {
+        throw new Error("Failed to fetch vendors");
+      }
+      
       const vendors = await vendorResponse.json();
       const oddsApiVendor = vendors.find((v: any) => v.name === "the_odds_api");
+
+      if (!oddsApiVendor) {
+        throw new Error("Odds API vendor not found. Please contact support.");
+      }
 
       await triggerService.createTrigger(user.id, {
         sport: selectedSportTitle,
@@ -93,279 +109,230 @@ export function CreateTrigger({ onBack, onSuccess }: CreateTriggerProps) {
         odds_value: parseFloat(oddsValue),
         frequency,
         status: "active",
-        vendor_id: oddsApiVendor?.id
+        vendor_id: oddsApiVendor.id
       });
 
       onSuccess();
-    } catch (error) {
+      onOpenChange(false);
+      
+      setSearchQuery("");
+      setSelectedTeam("");
+      setOddsValue("");
+    } catch (error: any) {
       console.error("Error creating trigger:", error);
-      alert("Failed to create trigger");
+      alert(error.message || "Failed to create trigger");
     } finally {
       setLoading(false);
     }
   };
 
-  const formatOdds = (value: number) => {
-    return value > 0 ? `+${value}` : value.toString();
-  };
+  const filteredTeams = events.reduce((acc, event) => {
+    const homeTeam = event.home_team;
+    const awayTeam = event.away_team;
+    
+    if (homeTeam.toLowerCase().includes(searchQuery.toLowerCase()) && !acc.includes(homeTeam)) {
+      acc.push(homeTeam);
+    }
+    if (awayTeam.toLowerCase().includes(searchQuery.toLowerCase()) && !acc.includes(awayTeam)) {
+      acc.push(awayTeam);
+    }
+    
+    return acc;
+  }, [] as string[]);
 
-  if (step === "sport") {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={onBack}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <h2 className="text-2xl font-bold">Create Trigger - Select Sport</h2>
-        </div>
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-[#1B2229] border-border">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-bold text-foreground">Create Trigger</DialogTitle>
+        </DialogHeader>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sports.map((sport) => (
-              <Card
-                key={sport.key}
-                className="glass-panel cursor-pointer hover:border-primary/50 transition-all"
-                onClick={() => handleSelectSport(sport.key)}
+        <div className="space-y-6 py-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-muted-foreground">Subject Type</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant={subjectType === "team" ? "default" : "outline"}
+                className={subjectType === "team" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                onClick={() => setSubjectType("team")}
               >
-                <CardHeader>
-                  <CardTitle className="text-lg">{sport.title}</CardTitle>
-                  <CardDescription>{sport.description}</CardDescription>
-                </CardHeader>
-              </Card>
-            ))}
+                Team
+              </Button>
+              <Button
+                type="button"
+                variant={subjectType === "player" ? "default" : "outline"}
+                className={subjectType === "player" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                onClick={() => setSubjectType("player")}
+                disabled
+              >
+                Player
+              </Button>
+            </div>
           </div>
-        )}
-      </div>
-    );
-  }
 
-  if (step === "team") {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => setStep("sport")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <h2 className="text-2xl font-bold">Select Team - {selectedSportTitle}</h2>
-        </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-muted-foreground">Sport</Label>
+            <Select value={selectedSport} onValueChange={(v) => {
+              setSelectedSport(v);
+              const sport = sports.find(s => s.key === v);
+              setSelectedSportTitle(sport?.title || v);
+            }}>
+              <SelectTrigger className="bg-[#242B33] border-border">
+                <SelectValue placeholder="Select sport" />
+              </SelectTrigger>
+              <SelectContent>
+                {sports.map((sport) => (
+                  <SelectItem key={sport.key} value={sport.key}>
+                    {sport.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-muted-foreground">Sportsbook</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant={sportsbook === "fanduel" ? "default" : "outline"}
+                className={sportsbook === "fanduel" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                onClick={() => setSportsbook("fanduel")}
+              >
+                FanDuel
+              </Button>
+              <Button
+                type="button"
+                variant={sportsbook === "draftkings" ? "default" : "outline"}
+                className={sportsbook === "draftkings" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                onClick={() => setSportsbook("draftkings")}
+              >
+                DraftKings
+              </Button>
+            </div>
           </div>
-        ) : events.length === 0 ? (
-          <div className="text-center py-12 glass-panel rounded-lg">
-            <p className="text-muted-foreground">No upcoming games found for this sport.</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {events.map((event) => (
-              <Card key={event.id} className="glass-panel">
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    {event.home_team} vs {event.away_team}
-                  </CardTitle>
-                  <CardDescription>
-                    {new Date(event.commence_time).toLocaleString()}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex gap-2">
-                  <Button
-                    className="flex-1 btn-primary"
-                    onClick={() => handleSelectTeam(event, event.home_team)}
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-muted-foreground">Team</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search for a team..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 bg-[#242B33] border-border"
+              />
+            </div>
+            {searchQuery && filteredTeams.length > 0 && (
+              <div className="mt-2 max-h-40 overflow-y-auto bg-[#242B33] border border-border rounded-lg">
+                {filteredTeams.slice(0, 5).map((team) => (
+                  <button
+                    key={team}
+                    type="button"
+                    className="w-full text-left px-4 py-2 hover:bg-[#2A3139] transition-colors text-sm"
+                    onClick={() => {
+                      setSelectedTeam(team);
+                      setSearchQuery(team);
+                    }}
                   >
-                    {event.home_team}
-                  </Button>
-                  <Button
-                    className="flex-1 btn-primary"
-                    onClick={() => handleSelectTeam(event, event.away_team)}
-                  >
-                    {event.away_team}
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                    {team}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-    );
-  }
 
-  if (step === "odds" && selectedEvent) {
-    const moneylineOdds = oddsApiService.extractMoneylineOdds(selectedEvent, selectedTeam);
-    const spreadOdds = oddsApiService.extractSpreadOdds(selectedEvent, selectedTeam);
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-muted-foreground">Bet Type</Label>
+            <Select value={betType} onValueChange={(v) => setBetType(v as BetType)}>
+              <SelectTrigger className="bg-[#242B33] border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="moneyline">Moneyline</SelectItem>
+                <SelectItem value="spread">Spread</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => setStep("team")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <h2 className="text-2xl font-bold">Current Odds - {selectedTeam}</h2>
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card className="glass-panel">
-            <CardHeader>
-              <CardTitle>Moneyline</CardTitle>
-              <CardDescription>Win/Loss odds</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {moneylineOdds.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No moneyline odds available</p>
-              ) : (
-                moneylineOdds.map((odd, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                    <span className="font-semibold">{odd.bookmaker}</span>
-                    <Badge>{formatOdds(odd.odds)}</Badge>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="glass-panel">
-            <CardHeader>
-              <CardTitle>Spread</CardTitle>
-              <CardDescription>Point spread odds</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {spreadOdds.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No spread odds available</p>
-              ) : (
-                spreadOdds.map((odd, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                    <div>
-                      <span className="font-semibold">{odd.bookmaker}</span>
-                      <p className="text-xs text-muted-foreground">
-                        {odd.point > 0 ? `+${odd.point}` : odd.point}
-                      </p>
-                    </div>
-                    <Badge>{formatOdds(odd.odds)}</Badge>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <Button className="w-full btn-primary" onClick={() => setStep("configure")}>
-          Continue to Configure Trigger
-        </Button>
-      </div>
-    );
-  }
-
-  if (step === "configure") {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => setStep("odds")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <h2 className="text-2xl font-bold">Configure Trigger</h2>
-        </div>
-
-        <Card className="glass-panel max-w-2xl mx-auto">
-          <CardHeader>
-            <CardTitle>{selectedTeam}</CardTitle>
-            <CardDescription>{selectedSportTitle}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label>Bet Type</Label>
-              <Select value={betType} onValueChange={(v) => setBetType(v as BetType)}>
-                <SelectTrigger>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-muted-foreground">Odds Threshold</Label>
+            <div className="grid grid-cols-5 gap-3">
+              <Select 
+                value={oddsComparator} 
+                onValueChange={(v) => setOddsComparator(v as OddsComparator)}
+              >
+                <SelectTrigger className="col-span-2 bg-[#242B33] border-border">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="moneyline">Moneyline</SelectItem>
-                  <SelectItem value="spread">Spread</SelectItem>
+                  <SelectItem value=">=">Greater or equal</SelectItem>
+                  <SelectItem value="<=">Less or equal</SelectItem>
+                  <SelectItem value=">">Greater than</SelectItem>
+                  <SelectItem value="<">Less than</SelectItem>
+                  <SelectItem value="==">Equal to</SelectItem>
                 </SelectContent>
               </Select>
+              <Input
+                type="number"
+                placeholder="200"
+                value={oddsValue}
+                onChange={(e) => setOddsValue(e.target.value)}
+                className="col-span-3 bg-[#242B33] border-border"
+              />
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Comparator</Label>
-                <Select value={oddsComparator} onValueChange={(v) => setOddsComparator(v as OddsComparator)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value=">=">Greater or Equal (≥)</SelectItem>
-                    <SelectItem value="<=">Less or Equal (≤)</SelectItem>
-                    <SelectItem value=">">Greater Than ({">"}) </SelectItem>
-                    <SelectItem value="<">Less Than ({"<"})</SelectItem>
-                    <SelectItem value="==">Equal (=)</SelectItem>
-                  </SelectContent>
-                </Select>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-muted-foreground">Game Time Context</Label>
+            <Select value={gameTimeContext} onValueChange={setGameTimeContext}>
+              <SelectTrigger className="bg-[#242B33] border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="anytime">Anytime</SelectItem>
+                <SelectItem value="pregame">Pre-game only</SelectItem>
+                <SelectItem value="live">Live only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-muted-foreground">Notification Frequency</Label>
+            <div className="bg-[#242B33] border border-border rounded-lg p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <p className="font-semibold text-foreground">Once</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    You'll be notified the first time the odds threshold is met
+                  </p>
+                </div>
               </div>
-
-              <div className="space-y-2">
-                <Label>Odds Value</Label>
-                <Input
-                  type="number"
-                  placeholder="e.g., -200 or +150"
-                  value={oddsValue}
-                  onChange={(e) => setOddsValue(e.target.value)}
-                  required
-                />
-              </div>
             </div>
+          </div>
 
-            <div className="space-y-2">
-              <Label>Frequency</Label>
-              <Select value={frequency} onValueChange={(v) => setFrequency(v as TriggerFrequency)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="once">Once (trigger completes after first match)</SelectItem>
-                  <SelectItem value="recurring">Recurring (trigger stays active)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-              <p className="text-sm font-semibold mb-2">Trigger Summary</p>
-              <p className="text-sm text-muted-foreground">
-                Alert me when <span className="font-bold text-foreground">{selectedTeam}</span>{" "}
-                <span className="font-bold text-foreground">{betType}</span> odds are{" "}
-                <span className="font-bold text-foreground">
-                  {oddsComparator} {oddsValue || "___"}
-                </span>{" "}
-                on FanDuel or DraftKings
-              </p>
-            </div>
-
-            <Button
-              className="w-full btn-primary"
-              onClick={handleCreateTrigger}
-              disabled={loading || !oddsValue}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Create Trigger"
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return null;
+          <Button
+            type="button"
+            className="w-full btn-primary h-12 text-base"
+            onClick={handleCreateTrigger}
+            disabled={loading || !selectedTeam || !oddsValue}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Bell className="h-4 w-4 mr-2" />
+                Create Trigger
+              </>
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }

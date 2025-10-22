@@ -1,21 +1,17 @@
-
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { PhoneAuth } from "@/components/auth/PhoneAuth";
 import { MyTriggers } from "@/components/dashboard/MyTriggers";
 import { History } from "@/components/dashboard/History";
 import { Settings } from "@/components/dashboard/Settings";
-import { CreateTrigger } from "@/components/dashboard/CreateTrigger";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Bell } from "lucide-react";
 
 type TabValue = "triggers" | "history" | "settings";
-type ViewMode = "dashboard" | "create";
 
 export default function HomePage() {
   const { user, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<TabValue>("triggers");
-  const [viewMode, setViewMode] = useState<ViewMode>("dashboard");
 
   if (loading) {
     return (
@@ -47,35 +43,25 @@ export default function HomePage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        {viewMode === "create" ? (
-          <CreateTrigger
-            onBack={() => setViewMode("dashboard")}
-            onSuccess={() => {
-              setViewMode("dashboard");
-              setActiveTab("triggers");
-            }}
-          />
-        ) : (
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
-            <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8">
-              <TabsTrigger value="triggers">My Triggers</TabsTrigger>
-              <TabsTrigger value="history">History</TabsTrigger>
-              <TabsTrigger value="settings">Settings</TabsTrigger>
-            </TabsList>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
+          <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8">
+            <TabsTrigger value="triggers">My Triggers</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+          </TabsList>
 
-            <TabsContent value="triggers">
-              <MyTriggers onCreateNew={() => setViewMode("create")} />
-            </TabsContent>
+          <TabsContent value="triggers">
+            <MyTriggers />
+          </TabsContent>
 
-            <TabsContent value="history">
-              <History />
-            </TabsContent>
+          <TabsContent value="history">
+            <History />
+          </TabsContent>
 
-            <TabsContent value="settings">
-              <Settings />
-            </TabsContent>
-          </Tabs>
-        )}
+          <TabsContent value="settings">
+            <Settings />
+          </TabsContent>
+        </Tabs>
       </main>
 
       <footer className="border-t border-border mt-16 py-8">

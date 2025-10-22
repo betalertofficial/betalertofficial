@@ -1,22 +1,19 @@
-
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { triggerService } from "@/services/triggerService";
 import { TriggerStats } from "./TriggerStats";
 import { TriggerCard } from "./TriggerCard";
+import { CreateTrigger } from "./CreateTrigger";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";
 import type { ProfileTrigger } from "@/types/database";
 
-interface MyTriggersProps {
-  onCreateNew: () => void;
-}
-
-export function MyTriggers({ onCreateNew }: MyTriggersProps) {
+export function MyTriggers() {
   const { user, profile } = useAuth();
   const [triggers, setTriggers] = useState<ProfileTrigger[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ active: 0, completed: 0, paused: 0, total: 0 });
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const loadTriggers = async () => {
     if (!user) return;
@@ -89,7 +86,7 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">My Triggers</h2>
         <Button 
-          onClick={onCreateNew}
+          onClick={() => setCreateModalOpen(true)}
           disabled={remaining <= 0}
           className="btn-primary"
         >
@@ -113,7 +110,7 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
       {triggers.length === 0 ? (
         <div className="text-center py-12 glass-panel rounded-lg">
           <p className="text-muted-foreground mb-4">No triggers yet. Create your first trigger to get started!</p>
-          <Button onClick={onCreateNew} className="btn-primary">
+          <Button onClick={() => setCreateModalOpen(true)} className="btn-primary">
             <Plus className="h-4 w-4 mr-2" />
             Create Your First Trigger
           </Button>
@@ -132,6 +129,12 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
           ))}
         </div>
       )}
+
+      <CreateTrigger 
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        onSuccess={loadTriggers}
+      />
     </div>
   );
 }
