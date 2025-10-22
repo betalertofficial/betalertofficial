@@ -96,25 +96,29 @@ export function PhoneAuth() {
     setError("");
 
     try {
-      const adminPhone = "+15555550001";
-      
-      // Sign in with OTP for the admin phone
-      const { error: sendError } = await supabase.auth.signInWithOtp({
-        phone: adminPhone,
+      const response = await fetch("/api/dev-admin-login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        }
       });
 
-      if (sendError) {
-        // If OTP fails, try to sign in directly (for development)
-        console.log("OTP send failed, attempting direct sign-in");
-        setError("Please use the regular sign-in flow or contact support.");
-        return;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create admin session");
       }
 
-      alert("A verification code has been sent to the super admin phone number. Please check and enter the code.");
-      setPhone("(555) 555-0001");
-      setStep("otp");
+      const { access_token, refresh_token } = await response.json();
+
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token,
+        refresh_token
+      });
+
+      if (sessionError) throw sessionError;
+
     } catch (err: any) {
-      setError(err.message || "Failed to initiate super admin login");
+      setError(err.message || "Failed to sign in as super admin");
     } finally {
       setAdminLoading(false);
     }
