@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { profileService } from "@/services/profileService";
+import { Shield } from "lucide-react";
 
 export function PhoneAuth() {
   const [phone, setPhone] = useState("");
@@ -13,6 +13,7 @@ export function PhoneAuth() {
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [adminLoading, setAdminLoading] = useState(false);
 
   const formatPhone = (value: string) => {
     const cleaned = value.replace(/\D/g, "");
@@ -90,6 +91,35 @@ export function PhoneAuth() {
     }
   };
 
+  const handleAdminOverride = async () => {
+    setAdminLoading(true);
+    setError("");
+
+    try {
+      const adminPhone = "+15555550001";
+      
+      // Sign in with OTP for the admin phone
+      const { error: sendError } = await supabase.auth.signInWithOtp({
+        phone: adminPhone,
+      });
+
+      if (sendError) {
+        // If OTP fails, try to sign in directly (for development)
+        console.log("OTP send failed, attempting direct sign-in");
+        setError("Please use the regular sign-in flow or contact support.");
+        return;
+      }
+
+      alert("A verification code has been sent to the super admin phone number. Please check and enter the code.");
+      setPhone("(555) 555-0001");
+      setStep("otp");
+    } catch (err: any) {
+      setError(err.message || "Failed to initiate super admin login");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md glass-panel">
@@ -131,6 +161,34 @@ export function PhoneAuth() {
                 disabled={loading}
               >
                 {loading ? "Sending..." : "Send Verification Code"}
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">
+                    Development Only
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-primary/30 hover:bg-primary/10"
+                onClick={handleAdminOverride}
+                disabled={adminLoading || loading}
+              >
+                {adminLoading ? (
+                  "Processing..."
+                ) : (
+                  <>
+                    <Shield className="h-4 w-4 mr-2" />
+                    Sign in as Super Admin
+                  </>
+                )}
               </Button>
             </form>
           ) : (
