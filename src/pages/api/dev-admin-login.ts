@@ -26,15 +26,23 @@ export default async function handler(
     });
 
     const adminPhone = "+15555550001";
+    const adminEmail = "admin@betalert.dev";
 
+    // List all users to find existing admin
     const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     
-    if (listError) throw listError;
+    if (listError) {
+      console.error("Error listing users:", listError);
+      throw listError;
+    }
 
-    let adminUser = existingUsers.users.find(u => u.phone === adminPhone);
+    let adminUser = existingUsers.users.find(u => u.email === adminEmail);
 
     if (!adminUser) {
+      // Create new admin user with email (more reliable than phone for dev)
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email: adminEmail,
+        email_confirm: true,
         phone: adminPhone,
         phone_confirm: true,
         user_metadata: {
@@ -42,9 +50,14 @@ export default async function handler(
         }
       });
 
-      if (createError) throw createError;
+      if (createError) {
+        console.error("Error creating user:", createError);
+        throw createError;
+      }
+      
       adminUser = newUser.user;
 
+      // Create profile
       const { error: profileError } = await supabaseAdmin
         .from("profiles")
         .insert([
@@ -60,9 +73,11 @@ export default async function handler(
         ]);
 
       if (profileError && profileError.code !== "23505") {
+        console.error("Error creating profile:", profileError);
         throw profileError;
       }
     } else {
+      // Ensure profile exists and is super_admin
       const { data: profile } = await supabaseAdmin
         .from("profiles")
         .select("*")
@@ -85,47 +100,72 @@ export default async function handler(
           ]);
 
         if (profileError && profileError.code !== "23505") {
+          console.error("Error creating profile:", profileError);
           throw profileError;
         }
       } else if (profile.role !== "super_admin") {
         await supabaseAdmin
           .from("profiles")
-          .update({ role: "super_admin", subscription_tier: "enterprise", trigger_limit: 999 })
+          .update({ 
+            role: "super_admin", 
+            subscription_tier: "enterprise", 
+            trigger_limit: 999 
+          })
           .eq("id", adminUser.id);
       }
     }
 
-    // The createSession method does not exist on the admin API in this version.
-    // We will call the underlying GoTrue Admin API endpoint directly.
-    const sessionResponse = await fetch(`${supabaseUrl}/auth/v1/admin/sessions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${supabaseServiceKey}`,
-        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ user_id: adminUser.id }),
+    // Generate a real access token using the signInWithPassword method
+    // Since we don't have a password, we'll use the admin API to generate tokens
+    const { data: tokenData, error: tokenError } = await supabaseAdmin.auth.admin.generateLink({
+      type: "magiclink",
+      email: adminEmail,
+      options: {
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/`
+      }
     });
 
-    if (!sessionResponse.ok) {
-      const errorBody = await sessionResponse.json();
-      console.error("Failed to create session via raw API call", errorBody);
-      throw new Error(errorBody.message || "Failed to create session via raw API call");
+    if (tokenError) {
+      console.error("Error generating token:", tokenError);
+      throw tokenError;
     }
-    
-    const sessionData = await sessionResponse.json();
 
-    if (!sessionData.access_token) {
-       throw new Error("Admin session creation did not return an access token.");
+    // Extract the token from the magic link
+    const urlParams = new URL(tokenData.properties.action_link).searchParams;
+    const token = urlParams.get("token");
+    const type = urlParams.get("type") as "magiclink";
+
+    if (!token) {
+      throw new Error("Failed to extract token from magic link");
+    }
+
+    // Verify the token and get a session
+    const { data: sessionData, error: verifyError } = await supabaseAdmin.auth.verifyOtp({
+      token_hash: token,
+      type: type
+    });
+
+    if (verifyError) {
+      console.error("Error verifying OTP:", verifyError);
+      throw verifyError;
+    }
+
+    if (!sessionData.session) {
+      throw new Error("No session returned from verification");
     }
 
     res.status(200).json({
-      access_token: sessionData.access_token,
-      refresh_token: sessionData.refresh_token,
-      user: sessionData.user,
+      access_token: sessionData.session.access_token,
+      refresh_token: sessionData.session.refresh_token,
+      expires_in: sessionData.session.expires_in,
+      token_type: "bearer",
+      user: sessionData.user
     });
   } catch (error: any) {
     console.error("Dev admin login error:", error);
-    res.status(500).json({ error: error.message || "Failed to create admin session" });
+    res.status(500).json({ 
+      error: error.message || "Failed to create admin session",
+      details: error
+    });
   }
 }
