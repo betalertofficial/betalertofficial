@@ -10,8 +10,11 @@ export const profileService = {
       .eq("id", userId)
       .single();
 
-    if (error) throw error;
-    return data;
+    if (error && error.code !== "PGRST116") { // PGRST116 is the code for "Not Found"
+      throw error;
+    }
+    
+    return data as Profile | null;
   },
 
   async createProfile(profile: Omit<Profile, "created_at" | "updated_at" | "name" | "subscription_tier" | "trigger_limit"> & Partial<Pick<Profile, "name" | "subscription_tier" | "trigger_limit">>): Promise<Profile> {
@@ -29,7 +32,7 @@ export const profileService = {
       .single();
 
     if (error) throw error;
-    return data;
+    return data as Profile;
   },
 
   async updateProfile(userId: string, updates: Partial<Profile>): Promise<Profile> {
@@ -41,7 +44,7 @@ export const profileService = {
       .single();
 
     if (error) throw error;
-    return data;
+    return data as Profile;
   },
 
   async checkPhoneExists(phone: string): Promise<boolean> {
