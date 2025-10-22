@@ -23,6 +23,50 @@ interface TeamOdds {
   spread?: { point: number; odds: number };
 }
 
+const GAME_TIME_CONTEXTS = {
+  basketball_nba: [
+    { value: "anytime", label: "Anytime" },
+    { value: "pregame", label: "Pre-game" },
+    { value: "q1_or_later", label: "Q1 or later" },
+    { value: "q2_or_later", label: "Q2 or later" },
+    { value: "q3_or_later", label: "Q3 or later" },
+    { value: "q4_or_later", label: "Q4 or later" }
+  ],
+  americanfootball_nfl: [
+    { value: "anytime", label: "Anytime" },
+    { value: "pregame", label: "Pre-game" },
+    { value: "q1_or_later", label: "Q1 or later" },
+    { value: "q2_or_later", label: "Q2 or later" },
+    { value: "q3_or_later", label: "Q3 or later" },
+    { value: "q4_or_later", label: "Q4 or later" }
+  ],
+  icehockey_nhl: [
+    { value: "anytime", label: "Anytime" },
+    { value: "pregame", label: "Pre-game" },
+    { value: "p1_or_later", label: "1st period or later" },
+    { value: "p2_or_later", label: "2nd period or later" },
+    { value: "p3_or_later", label: "3rd period or later" }
+  ],
+  baseball_mlb: [
+    { value: "anytime", label: "Anytime" },
+    { value: "pregame", label: "Pre-game" },
+    { value: "i1_or_later", label: "1st inning or later" },
+    { value: "i2_or_later", label: "2nd inning or later" },
+    { value: "i3_or_later", label: "3rd inning or later" },
+    { value: "i4_or_later", label: "4th inning or later" },
+    { value: "i5_or_later", label: "5th inning or later" },
+    { value: "i6_or_later", label: "6th inning or later" },
+    { value: "i7_or_later", label: "7th inning or later" },
+    { value: "i8_or_later", label: "8th inning or later" },
+    { value: "i9_or_later", label: "9th inning or later" }
+  ],
+  default: [
+    { value: "anytime", label: "Anytime" },
+    { value: "pregame", label: "Pre-game" },
+    { value: "live", label: "Live only" }
+  ]
+};
+
 export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -46,6 +90,8 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
   const [gameTimeContext, setGameTimeContext] = useState("anytime");
   const [frequency, setFrequency] = useState<TriggerFrequency>("once");
 
+  const gameTimeOptions = GAME_TIME_CONTEXTS[selectedSport as keyof typeof GAME_TIME_CONTEXTS] || GAME_TIME_CONTEXTS.default;
+
   useEffect(() => {
     if (open) {
       loadSports();
@@ -55,6 +101,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
   useEffect(() => {
     if (selectedSport) {
       loadOddsForSport();
+      setGameTimeContext("anytime");
     }
   }, [selectedSport]);
 
@@ -180,6 +227,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       setSelectedEvent(null);
       setTeamOdds(null);
       setOddsValue("");
+      setGameTimeContext("anytime");
     } catch (error: any) {
       console.error("Error creating trigger:", error);
       alert(error.message || "Failed to create trigger");
@@ -211,13 +259,6 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
     const now = new Date();
     const diffHours = (now.getTime() - gameTime.getTime()) / (1000 * 60 * 60);
     return diffHours > 0 && diffHours < 3;
-  };
-
-  const getOpponentTeam = () => {
-    if (!selectedEvent) return "";
-    return selectedEvent.home_team === selectedTeam 
-      ? selectedEvent.away_team 
-      : selectedEvent.home_team;
   };
 
   return (
@@ -331,7 +372,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                 <h3 className="font-semibold text-foreground">Current Market Context</h3>
               </div>
 
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                 <span>Current game:</span>
                 <span className="text-foreground font-medium">
                   {selectedEvent.home_team} vs {selectedEvent.away_team}
@@ -428,9 +469,11 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="anytime">Anytime</SelectItem>
-                <SelectItem value="pregame">Pre-game only</SelectItem>
-                <SelectItem value="live">Live only</SelectItem>
+                {gameTimeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
