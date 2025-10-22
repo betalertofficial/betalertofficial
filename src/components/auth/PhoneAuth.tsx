@@ -96,33 +96,13 @@ export function PhoneAuth() {
     setError("");
 
     try {
-      const response = await fetch("/api/dev-admin-login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to create admin session");
-      }
-
-      const { access_token, refresh_token } = await response.json();
-
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token,
-        refresh_token
-      });
-
-      if (sessionError) throw sessionError;
+      // Set bypass mode flag in localStorage
+      localStorage.setItem("dev_bypass_auth", "true");
       
-      // Force a reload to update the auth context and redirect to the dashboard
+      // Reload to trigger the bypass auth flow
       window.location.reload();
-
     } catch (err: any) {
       setError(err.message || "Failed to sign in as super admin");
-    } finally {
       setAdminLoading(false);
     }
   };

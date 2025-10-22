@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +13,33 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Create a mock super admin user for bypass mode
+const createMockSuperAdmin = (): { user: User; profile: Profile } => {
+  const mockUser = {
+    id: "00000000-0000-0000-0000-000000000001",
+    phone: "+15555550001",
+    email: null,
+    app_metadata: {},
+    user_metadata: { name: "Super Admin" },
+    aud: "authenticated",
+    created_at: new Date().toISOString(),
+  } as User;
+
+  const mockProfile: Profile = {
+    id: mockUser.id,
+    phone_e164: "+15555550001",
+    country_code: "US",
+    name: "Super Admin",
+    role: "super_admin",
+    subscription_tier: "enterprise",
+    trigger_limit: 999,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  return { user: mockUser, profile: mockProfile };
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -32,6 +58,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Check for bypass mode first
+    const bypassMode = localStorage.getItem("dev_bypass_auth");
+    
+    if (bypassMode === "true") {
+      const { user: mockUser, profile: mockProfile } = createMockSuperAdmin();
+      setUser(mockUser);
+      setProfile(mockProfile);
+      setLoading(false);
+      return;
+    }
+
+    // Normal auth flow
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -53,9 +91,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [user?.id]);
+  }, []);
 
   const signOut = async () => {
+    // Clear bypass mode
+    localStorage.removeItem("dev_bypass_auth");
+    
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
