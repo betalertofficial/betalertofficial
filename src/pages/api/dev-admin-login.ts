@@ -95,16 +95,34 @@ export default async function handler(
       }
     }
 
-    const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.admin.createSession({
-      user_id: adminUser.id
+    // The createSession method does not exist on the admin API in this version.
+    // We will call the underlying GoTrue Admin API endpoint directly.
+    const sessionResponse = await fetch(`${supabaseUrl}/auth/v1/admin/sessions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ user_id: adminUser.id }),
     });
 
-    if (sessionError) throw sessionError;
+    if (!sessionResponse.ok) {
+      const errorBody = await sessionResponse.json();
+      console.error("Failed to create session via raw API call", errorBody);
+      throw new Error(errorBody.message || "Failed to create session via raw API call");
+    }
+    
+    const sessionData = await sessionResponse.json();
+
+    if (!sessionData.access_token) {
+       throw new Error("Admin session creation did not return an access token.");
+    }
 
     res.status(200).json({
       access_token: sessionData.access_token,
       refresh_token: sessionData.refresh_token,
-      user: adminUser
+      user: sessionData.user,
     });
   } catch (error: any) {
     console.error("Dev admin login error:", error);

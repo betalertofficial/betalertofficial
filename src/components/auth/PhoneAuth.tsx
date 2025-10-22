@@ -116,6 +116,9 @@ export function PhoneAuth() {
       });
 
       if (sessionError) throw sessionError;
+      
+      // Force a reload to update the auth context and redirect to the dashboard
+      window.location.reload();
 
     } catch (err: any) {
       setError(err.message || "Failed to sign in as super admin");
