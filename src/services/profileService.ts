@@ -14,10 +14,17 @@ export const profileService = {
     return data;
   },
 
-  async createProfile(profile: Omit<Profile, "created_at" | "updated_at">): Promise<Profile> {
+  async createProfile(profile: Omit<Profile, "created_at" | "updated_at" | "name" | "subscription_tier" | "trigger_limit"> & Partial<Pick<Profile, "name" | "subscription_tier" | "trigger_limit">>): Promise<Profile> {
     const { data, error } = await supabase
       .from("profiles")
-      .insert([profile])
+      .insert([
+        {
+          ...profile,
+          name: profile.name || "",
+          subscription_tier: profile.subscription_tier || "free",
+          trigger_limit: profile.trigger_limit || 3,
+        }
+      ])
       .select()
       .single();
 

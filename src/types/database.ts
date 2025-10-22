@@ -11,6 +11,7 @@ export interface Profile {
   phone_e164: string;
   country_code: string;
   name?: string;
+  role: "user" | "admin" | "super_admin";
   subscription_tier: string;
   trigger_limit: number;
   created_at: string;

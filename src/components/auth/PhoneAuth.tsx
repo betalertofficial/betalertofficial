@@ -70,12 +70,16 @@ export function PhoneAuth() {
         const existingProfile = await profileService.getProfile(data.user.id);
         
         if (!existingProfile) {
+          const isAdmin = phoneE164 === "+15555550001";
+          
           await profileService.createProfile({
             id: data.user.id,
             phone_e164: phoneE164,
             country_code: "US",
-            subscription_tier: "free",
-            trigger_limit: 3,
+            role: isAdmin ? "super_admin" : "user",
+            subscription_tier: isAdmin ? "enterprise" : "free",
+            trigger_limit: isAdmin ? 999 : 3,
+            name: isAdmin ? "Super Admin" : ""
           });
         }
       }
