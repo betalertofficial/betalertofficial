@@ -96,12 +96,33 @@ export function PhoneAuth() {
     setError("");
 
     try {
-      // Set bypass mode flag in localStorage
-      localStorage.setItem("dev_bypass_auth", "true");
-      
-      // Reload to trigger the bypass auth flow
-      window.location.reload();
+      // Call the dev-admin-login API to create a real session
+      const response = await fetch("/api/dev-admin-login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create admin session");
+      }
+
+      const { access_token, refresh_token } = await response.json();
+
+      // Set the session in Supabase client
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token,
+        refresh_token
+      });
+
+      if (sessionError) throw sessionError;
+
+      // Session is now active - the AuthContext will pick it up automatically
+      // No need to reload, just let the auth state change handler do its job
     } catch (err: any) {
+      console.error("Admin override error:", err);
       setError(err.message || "Failed to sign in as super admin");
       setAdminLoading(false);
     }
