@@ -5,6 +5,10 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+const SUPER_ADMIN_ID = "00000000-0000-0000-0000-000000000001";
+const SUPER_ADMIN_EMAIL = "admin@betalert.dev";
+const SUPER_ADMIN_PHONE = "+15555550001";
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -25,45 +29,39 @@ export default async function handler(
       }
     });
 
-    const adminPhone = "+15555550001";
-    const adminEmail = "admin@betalert.dev";
-
-    // List all users to find existing admin
-    const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    // Step 1: Check if super admin user exists
+    const { data: existingUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(SUPER_ADMIN_ID);
     
-    if (listError) {
-      console.error("Error listing users:", listError);
-      throw listError;
-    }
+    let userId = SUPER_ADMIN_ID;
 
-    let adminUser = existingUsers.users.find(u => u.email === adminEmail);
-
-    if (!adminUser) {
-      // Create new admin user with email (more reliable than phone for dev)
-      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email: adminEmail,
+    if (getUserError || !existingUser.user) {
+      // User doesn't exist, create it
+      const { data: createUserData, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+        id: SUPER_ADMIN_ID,
+        email: SUPER_ADMIN_EMAIL,
+        phone: SUPER_ADMIN_PHONE,
         email_confirm: true,
-        phone: adminPhone,
         phone_confirm: true,
         user_metadata: {
-          name: "Super Admin"
+          name: "Super Admin",
+          role: "super_admin"
         }
       });
 
-      if (createError) {
-        console.error("Error creating user:", createError);
-        throw createError;
+      if (createUserError) {
+        console.error("Error creating super admin user:", createUserError);
+        throw new Error(`Failed to create super admin user: ${createUserError.message}`);
       }
-      
-      adminUser = newUser.user;
 
-      // Create profile
+      userId = createUserData.user.id;
+
+      // Step 2: Create profile for the new user
       const { error: profileError } = await supabaseAdmin
         .from("profiles")
         .insert([
           {
-            id: adminUser.id,
-            phone_e164: adminPhone,
+            id: userId,
+            phone_e164: SUPER_ADMIN_PHONE,
             country_code: "US",
             role: "super_admin",
             subscription_tier: "enterprise",
@@ -73,24 +71,25 @@ export default async function handler(
         ]);
 
       if (profileError && profileError.code !== "23505") {
-        console.error("Error creating profile:", profileError);
-        throw profileError;
+        console.error("Error creating super admin profile:", profileError);
+        throw new Error(`Failed to create super admin profile: ${profileError.message}`);
       }
     } else {
-      // Ensure profile exists and is super_admin
-      const { data: profile } = await supabaseAdmin
+      // User exists, ensure profile exists and has correct role
+      const { data: existingProfile } = await supabaseAdmin
         .from("profiles")
         .select("*")
-        .eq("id", adminUser.id)
+        .eq("id", userId)
         .single();
 
-      if (!profile) {
+      if (!existingProfile) {
+        // Profile doesn't exist, create it
         const { error: profileError } = await supabaseAdmin
           .from("profiles")
           .insert([
             {
-              id: adminUser.id,
-              phone_e164: adminPhone,
+              id: userId,
+              phone_e164: SUPER_ADMIN_PHONE,
               country_code: "US",
               role: "super_admin",
               subscription_tier: "enterprise",
@@ -100,60 +99,34 @@ export default async function handler(
           ]);
 
         if (profileError && profileError.code !== "23505") {
-          console.error("Error creating profile:", profileError);
-          throw profileError;
+          console.error("Error creating super admin profile:", profileError);
+          throw new Error(`Failed to create super admin profile: ${profileError.message}`);
         }
-      } else if (profile.role !== "super_admin") {
+      } else if (existingProfile.role !== "super_admin") {
+        // Update existing profile to super_admin
         await supabaseAdmin
           .from("profiles")
-          .update({ 
-            role: "super_admin", 
-            subscription_tier: "enterprise", 
-            trigger_limit: 999 
+          .update({
+            role: "super_admin",
+            subscription_tier: "enterprise",
+            trigger_limit: 999,
+            updated_at: new Date().toISOString()
           })
-          .eq("id", adminUser.id);
+          .eq("id", userId);
       }
     }
 
-    // Generate a real access token using the signInWithPassword method
-    // Since we don't have a password, we'll use the admin API to generate tokens
-    const { data: tokenData, error: tokenError } = await supabaseAdmin.auth.admin.generateLink({
-      type: "magiclink",
-      email: adminEmail,
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/`
-      }
+    // Step 3: Generate session tokens using admin API
+    const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.admin.createSession({
+      userId: userId
     });
 
-    if (tokenError) {
-      console.error("Error generating token:", tokenError);
-      throw tokenError;
+    if (sessionError || !sessionData) {
+      console.error("Error creating session:", sessionError);
+      throw new Error(`Failed to create session: ${sessionError?.message}`);
     }
 
-    // Extract the token from the magic link
-    const urlParams = new URL(tokenData.properties.action_link).searchParams;
-    const token = urlParams.get("token");
-    const type = urlParams.get("type") as "magiclink";
-
-    if (!token) {
-      throw new Error("Failed to extract token from magic link");
-    }
-
-    // Verify the token and get a session
-    const { data: sessionData, error: verifyError } = await supabaseAdmin.auth.verifyOtp({
-      token_hash: token,
-      type: type
-    });
-
-    if (verifyError) {
-      console.error("Error verifying OTP:", verifyError);
-      throw verifyError;
-    }
-
-    if (!sessionData.session) {
-      throw new Error("No session returned from verification");
-    }
-
+    // Return the session tokens to the client
     res.status(200).json({
       access_token: sessionData.session.access_token,
       refresh_token: sessionData.session.refresh_token,
@@ -163,9 +136,9 @@ export default async function handler(
     });
   } catch (error: any) {
     console.error("Dev admin login error:", error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: error.message || "Failed to create admin session",
-      details: error
+      details: process.env.NODE_ENV === "development" ? error.stack : undefined
     });
   }
 }
