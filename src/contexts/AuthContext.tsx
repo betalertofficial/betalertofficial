@@ -60,13 +60,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Check for bypass mode first
     const bypassMode = localStorage.getItem("dev_bypass_auth");
+    const storedAdminUser = localStorage.getItem("dev_admin_user");
     
-    if (bypassMode === "true") {
-      const { user: mockUser, profile: mockProfile } = createMockSuperAdmin();
-      setUser(mockUser);
-      setProfile(mockProfile);
-      setLoading(false);
-      return;
+    if (bypassMode === "true" && storedAdminUser) {
+      try {
+        const adminData = JSON.parse(storedAdminUser);
+        const mockUser = {
+          id: adminData.id,
+          phone: adminData.phone,
+          email: null,
+          app_metadata: {},
+          user_metadata: { name: "Super Admin" },
+          aud: "authenticated",
+          created_at: new Date().toISOString(),
+        } as User;
+
+        const mockProfile: Profile = {
+          id: adminData.id,
+          phone_e164: adminData.phone,
+          country_code: "US",
+          name: "Super Admin",
+          role: "super_admin",
+          subscription_tier: "enterprise",
+          trigger_limit: 999,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        setUser(mockUser);
+        setProfile(mockProfile);
+        setLoading(false);
+        return;
+      } catch (error) {
+        console.error("Error parsing stored admin user:", error);
+        localStorage.removeItem("dev_bypass_auth");
+        localStorage.removeItem("dev_admin_user");
+      }
     }
 
     // Normal auth flow
@@ -96,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     // Clear bypass mode
     localStorage.removeItem("dev_bypass_auth");
+    localStorage.removeItem("dev_admin_user");
     
     await supabase.auth.signOut();
     setUser(null);

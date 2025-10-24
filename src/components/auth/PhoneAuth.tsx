@@ -6,8 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { profileService } from "@/services/profileService";
 import { Shield } from "lucide-react";
+import { useRouter } from "next/router";
 
 export function PhoneAuth() {
+  const router = useRouter();
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
@@ -186,17 +188,11 @@ export function PhoneAuth() {
                 type="button"
                 variant="outline"
                 className="w-full border-primary/30 hover:bg-primary/10"
-                onClick={handleAdminOverride}
-                disabled={adminLoading || loading}
+                onClick={() => router.push("/admin-login")}
+                disabled={loading}
               >
-                {adminLoading ? (
-                  "Processing..."
-                ) : (
-                  <>
-                    <Shield className="h-4 w-4 mr-2" />
-                    Sign in as Super Admin
-                  </>
-                )}
+                <Shield className="h-4 w-4 mr-2" />
+                Admin Login
               </Button>
             </form>
           ) : (
