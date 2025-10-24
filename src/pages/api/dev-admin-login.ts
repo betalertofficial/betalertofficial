@@ -33,8 +33,9 @@ export default async function handler(
     const { data: existingUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(SUPER_ADMIN_ID);
     
     let userId = SUPER_ADMIN_ID;
+    let user = existingUser?.user;
 
-    if (getUserError || !existingUser.user) {
+    if (getUserError || !user) {
       // User doesn't exist, create it
       const { data: createUserData, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
         id: SUPER_ADMIN_ID,
@@ -53,7 +54,8 @@ export default async function handler(
         throw new Error(`Failed to create super admin user: ${createUserError.message}`);
       }
 
-      userId = createUserData.user.id;
+      user = createUserData.user;
+      userId = user.id;
 
       // Step 2: Create profile for the new user
       const { error: profileError } = await supabaseAdmin
@@ -70,7 +72,7 @@ export default async function handler(
           }
         ]);
 
-      if (profileError && profileError.code !== "23505") {
+      if (profileError && profileError.code !== "23505") { // Ignore if already exists
         console.error("Error creating super admin profile:", profileError);
         throw new Error(`Failed to create super admin profile: ${profileError.message}`);
       }
@@ -83,56 +85,46 @@ export default async function handler(
         .single();
 
       if (!existingProfile) {
-        // Profile doesn't exist, create it
         const { error: profileError } = await supabaseAdmin
           .from("profiles")
-          .insert([
-            {
-              id: userId,
-              phone_e164: SUPER_ADMIN_PHONE,
-              country_code: "US",
-              role: "super_admin",
-              subscription_tier: "enterprise",
-              trigger_limit: 999,
-              name: "Super Admin"
-            }
-          ]);
-
-        if (profileError && profileError.code !== "23505") {
-          console.error("Error creating super admin profile:", profileError);
-          throw new Error(`Failed to create super admin profile: ${profileError.message}`);
-        }
+          .insert([{ id: userId, phone_e164: SUPER_ADMIN_PHONE, country_code: "US", role: "super_admin", subscription_tier: "enterprise", trigger_limit: 999, name: "Super Admin" }]);
+        if (profileError && profileError.code !== "23505") throw profileError;
       } else if (existingProfile.role !== "super_admin") {
-        // Update existing profile to super_admin
-        await supabaseAdmin
-          .from("profiles")
-          .update({
-            role: "super_admin",
-            subscription_tier: "enterprise",
-            trigger_limit: 999,
-            updated_at: new Date().toISOString()
-          })
-          .eq("id", userId);
+        await supabaseAdmin.from("profiles").update({ role: "super_admin", trigger_limit: 999 }).eq("id", userId);
       }
     }
 
-    // Step 3: Generate session tokens using admin API
-    const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.admin.createSession({
-      userId: userId
+    // Step 3: Generate session tokens using a magic link
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: SUPER_ADMIN_EMAIL,
     });
 
-    if (sessionError || !sessionData) {
-      console.error("Error creating session:", sessionError);
-      throw new Error(`Failed to create session: ${sessionError?.message}`);
+    if (linkError) {
+      console.error("Error generating magic link:", linkError);
+      throw new Error(`Failed to generate magic link: ${linkError.message}`);
+    }
+    
+    // The action_link contains the session tokens in the URL fragment
+    const actionLink = linkData.properties.action_link;
+    const url = new URL(actionLink);
+    const hash = new URLSearchParams(url.hash.substring(1)); // remove #
+
+    const access_token = hash.get('access_token');
+    const refresh_token = hash.get('refresh_token');
+    const expires_in = hash.get('expires_in');
+
+    if (!access_token || !refresh_token) {
+        throw new Error("Could not parse tokens from magic link.");
     }
 
     // Return the session tokens to the client
     res.status(200).json({
-      access_token: sessionData.session.access_token,
-      refresh_token: sessionData.session.refresh_token,
-      expires_in: sessionData.session.expires_in,
+      access_token,
+      refresh_token,
+      expires_in: expires_in ? parseInt(expires_in) : undefined,
       token_type: "bearer",
-      user: sessionData.user
+      user
     });
   } catch (error: any) {
     console.error("Dev admin login error:", error);
