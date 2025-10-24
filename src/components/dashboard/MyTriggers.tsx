@@ -9,7 +9,7 @@ import { Plus, Loader2 } from "lucide-react";
 import type { ProfileTrigger } from "@/types/database";
 
 export function MyTriggers() {
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const [triggers, setTriggers] = useState<ProfileTrigger[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ active: 0, completed: 0, paused: 0, total: 0 });
@@ -20,13 +20,16 @@ export function MyTriggers() {
     
     try {
       setLoading(true);
+      console.log("[MyTriggers] Loading triggers for user:", user.id);
       const data = await triggerService.getUserTriggers(user.id);
+      console.log("[MyTriggers] Triggers loaded:", data.length);
       setTriggers(data);
       
       const statsData = await triggerService.getTriggerStats(user.id);
+      console.log("[MyTriggers] Stats loaded:", statsData);
       setStats(statsData);
     } catch (error) {
-      console.error("Error loading triggers:", error);
+      console.error("[MyTriggers] Error loading triggers:", error);
     } finally {
       setLoading(false);
     }
@@ -71,12 +74,29 @@ export function MyTriggers() {
     console.log("Edit trigger:", triggerId);
   };
 
-  const remaining = profile ? profile.trigger_limit - stats.active : 0;
+  // Calculate remaining triggers with proper null checking
+  const remaining = profile?.trigger_limit ? profile.trigger_limit - stats.active : 0;
+  
+  console.log("[MyTriggers] Profile:", profile);
+  console.log("[MyTriggers] Stats:", stats);
+  console.log("[MyTriggers] Remaining triggers:", remaining);
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Show warning if profile isn't loaded yet
+  if (!profile) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 px-4 py-3 rounded-lg">
+          <p className="font-semibold">Loading your profile...</p>
+          <p className="text-sm mt-1">If this persists, try refreshing the page.</p>
+        </div>
       </div>
     );
   }

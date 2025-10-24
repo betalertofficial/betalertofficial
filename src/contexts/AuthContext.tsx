@@ -22,10 +22,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = async () => {
     if (user) {
       try {
+        console.log("[AuthContext] Fetching profile for user:", user.id);
         const profileData = await profileService.getProfile(user.id);
+        console.log("[AuthContext] Profile data received:", profileData);
         setProfile(profileData);
       } catch (error) {
-        console.error("Error fetching profile:", error);
+        console.error("[AuthContext] Error fetching profile:", error);
+        // Don't throw - just log and continue with null profile
+        setProfile(null);
       }
     }
   };
@@ -33,24 +37,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Get the current session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("[AuthContext] Initial session:", session?.user?.id || "no user");
       setUser(session?.user ?? null);
       if (session?.user) {
         refreshProfile();
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     // Listen for auth state changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("[AuthContext] Auth state changed:", session?.user?.id || "no user");
       setUser(session?.user ?? null);
       if (session?.user) {
         refreshProfile();
       } else {
         setProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
