@@ -192,7 +192,7 @@ export function PhoneAuth() {
                 disabled={loading}
               >
                 <Shield className="h-4 w-4 mr-2" />
-                Admin Login
+                Super Admin Login
               </Button>
             </form>
           ) : (

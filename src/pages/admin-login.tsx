@@ -1,49 +1,60 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, Loader2 } from "lucide-react";
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [phone, setPhone] = useState("+15555550001");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleAdminLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    // Check if already authenticated
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.push("/");
+      }
+    };
+    checkAuth();
+  }, [router]);
+
+  const handleSuperAdminLogin = async () => {
     setError("");
     setLoading(true);
 
     try {
-      const response = await fetch("/api/admin-login", {
+      // Call the dev-admin-login API to create a real Supabase session
+      const response = await fetch("/api/dev-admin-login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ phone })
+        }
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to authenticate");
+        throw new Error(errorData.error || "Failed to create admin session");
       }
 
-      const data = await response.json();
+      const { access_token, refresh_token } = await response.json();
 
-      // Store the bypass token and user data in localStorage
-      localStorage.setItem("dev_bypass_auth", "true");
-      localStorage.setItem("dev_admin_user", JSON.stringify(data.user));
+      // Set the session in Supabase client
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token,
+        refresh_token
+      });
 
-      // Redirect to main dashboard
+      if (sessionError) throw sessionError;
+
+      // Redirect to main dashboard after successful login
       router.push("/");
     } catch (err: any) {
-      console.error("Admin login error:", err);
-      setError(err.message || "Failed to authenticate as admin");
-    } finally {
+      console.error("Super admin login error:", err);
+      setError(err.message || "Failed to sign in as super admin");
       setLoading(false);
     }
   };
@@ -57,26 +68,21 @@ export default function AdminLoginPage() {
               <Shield className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-3xl font-bold">Admin Login</CardTitle>
+          <CardTitle className="text-3xl font-bold">Super Admin Login</CardTitle>
           <CardDescription className="text-muted-foreground mt-2">
-            Development access for super admin
+            Development access - no OTP required
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleAdminLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="phone">Super Admin Phone</Label>
-              <Input
-                id="phone"
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="text-lg bg-muted"
-                disabled
-              />
-              <p className="text-xs text-muted-foreground">
-                This is a development-only login. No OTP verification required.
-              </p>
+          <div className="space-y-4">
+            <div className="bg-card/50 border border-border rounded-lg p-4 space-y-2">
+              <p className="text-sm font-medium">Super Admin Credentials:</p>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p><strong>Phone:</strong> +15555550001</p>
+                <p><strong>Email:</strong> admin@betalert.dev</p>
+                <p><strong>Role:</strong> super_admin</p>
+                <p><strong>Trigger Limit:</strong> 999</p>
+              </div>
             </div>
 
             {error && (
@@ -86,14 +92,15 @@ export default function AdminLoginPage() {
             )}
 
             <Button
-              type="submit"
-              className="w-full btn-primary"
+              type="button"
+              className="w-full btn-primary h-12"
+              onClick={handleSuperAdminLogin}
               disabled={loading}
             >
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Authenticating...
+                  Signing in...
                 </>
               ) : (
                 <>
@@ -104,8 +111,8 @@ export default function AdminLoginPage() {
             </Button>
 
             <div className="bg-accent/10 border border-accent/20 text-accent px-4 py-3 rounded-lg text-xs">
-              <strong>Development Mode:</strong> This login bypasses authentication and grants full system access. 
-              Only available in development environment.
+              <strong>⚠️ Development Only:</strong> This creates a real authenticated session with full system access. 
+              The super admin can create triggers, manage users, and control all system functions.
             </div>
 
             <Button
@@ -114,9 +121,9 @@ export default function AdminLoginPage() {
               className="w-full"
               onClick={() => router.push("/")}
             >
-              Back to Normal Login
+              Back to Phone Login
             </Button>
-          </form>
+          </div>
         </CardContent>
       </Card>
     </div>
