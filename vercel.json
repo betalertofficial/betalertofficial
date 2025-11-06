@@ -1,5 +1,11 @@
 {
   "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/evaluate-triggers",
+      "schedule": "* * * * *"
+    }
+  ],
   "redirects": [
     {
       "source": "/old-path",

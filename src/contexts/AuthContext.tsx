@@ -20,53 +20,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refreshProfile = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       try {
-        console.log("[AuthContext] Fetching profile for user:", user.id);
+        console.log("[AuthContext] Manually refreshing profile for user:", user.id);
         const profileData = await profileService.getProfile(user.id);
-        console.log("[AuthContext] Profile data received:", profileData);
         setProfile(profileData);
+        console.log("[AuthContext] Manual refresh complete:", profileData);
       } catch (error) {
-        console.error("[AuthContext] Error fetching profile:", error);
-        // Don't throw - just log and continue with null profile
+        console.error("[AuthContext] Error refreshing profile:", error);
         setProfile(null);
       }
+    } else {
+      setProfile(null);
     }
   };
 
   useEffect(() => {
-    // Get the current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log("[AuthContext] Initial session:", session?.user?.id || "no user");
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        refreshProfile();
-      } else {
+    setLoading(true);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        console.log("[AuthContext] Auth state changed:", _event, session?.user?.id || "no user");
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+
+        if (currentUser) {
+          try {
+            const profileData = await profileService.getProfile(currentUser.id);
+            setProfile(profileData);
+          } catch (error) {
+            console.error("[AuthContext] Error fetching profile on auth change:", error);
+            setProfile(null);
+          }
+        } else {
+          setProfile(null);
+        }
         setLoading(false);
       }
-    });
+    );
 
-    // Listen for auth state changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("[AuthContext] Auth state changed:", session?.user?.id || "no user");
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        refreshProfile();
-      } else {
-        setProfile(null);
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    setUser(null);
-    setProfile(null);
   };
 
   return (

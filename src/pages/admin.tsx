@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/router";
@@ -19,6 +18,7 @@ import {
   Database,
   TrendingUp
 } from "lucide-react";
+import { PollingControlModal } from "@/components/admin/PollingControlModal";
 
 export default function AdminPage() {
   const { user, profile, loading } = useAuth();
@@ -28,6 +28,7 @@ export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [pollingEnabled, setPollingEnabled] = useState(true);
   const [updatingPolling, setUpdatingPolling] = useState(false);
+  const [isPollingModalOpen, setIsPollingModalOpen] = useState(false);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -335,6 +336,21 @@ export default function AdminPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <div className="mt-8">
+          <h2 className="text-2xl font-semibold tracking-tight mb-4">System Controls</h2>
+          <Card>
+            <CardHeader>
+              <CardTitle>API Polling</CardTitle>
+              <CardDescription>
+                Manually control the automated 1-minute polling of the Odds API.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => setIsPollingModalOpen(true)}>Manage API Polling</Button>
+            </CardContent>
+          </Card>
+        </div>
       </main>
 
       <footer className="border-t border-border mt-16 py-8">
@@ -344,6 +360,8 @@ export default function AdminPage() {
           </p>
         </div>
       </footer>
+
+      <PollingControlModal isOpen={isPollingModalOpen} onOpenChange={setIsPollingModalOpen} />
     </div>
   );
 }

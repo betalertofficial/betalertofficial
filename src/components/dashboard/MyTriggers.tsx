@@ -36,8 +36,17 @@ export function MyTriggers() {
   };
 
   useEffect(() => {
-    loadTriggers();
-  }, [user]);
+    // Only reload triggers when the user's ID changes (on login/logout),
+    // not when the session token is refreshed in the background.
+    if (user?.id) {
+      loadTriggers();
+    } else if (!authLoading) {
+      // If auth has loaded and there's no user, clear the state.
+      setTriggers([]);
+      setStats({ active: 0, completed: 0, paused: 0, total: 0 });
+      setLoading(false);
+    }
+  }, [user?.id, authLoading]);
 
   const handlePause = async (triggerId: string) => {
     try {
