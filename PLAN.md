@@ -1,52 +1,64 @@
-# Project Plan: Manual Odds Polling &amp; Trigger Check
 
-This document outlines the plan to implement a manual polling button on the admin page.
+# Manual Polling Feature - Refactoring Plan
 
-## 1. Goal
+Based on user feedback and a provided blueprint of a working system, the `evaluate-triggers` Edge Function will be refactored to improve clarity, debugging, and reliability.
 
-Create a button on the `/admin` page that allows an administrator to manually trigger the odds polling and trigger evaluation process. The result of the poll (number of triggers checked, number of triggers that hit) should be displayed in a toast notification.
+The current monolithic function will be broken down into a multi-step process orchestrated by a main function.
 
-## 2. Implementation Phases
+## 1. New Structure for `evaluate-triggers/index.ts`
 
-### Phase 1: Enhance Supabase Edge Function
+The function will be decomposed into three internal helper functions, mirroring the user's provided blueprint.
 
-- **File to Modify:** `supabase/functions/evaluate-triggers/index.ts`
-- **Objective:** Update the function to return a count of total triggers evaluated and triggers that "hit".
-- **Steps:**
-  1. Initialize two counters: `checkedCount` and `hitCount`.
-  2. Increment `checkedCount` for each trigger processed.
-  3. Increment `hitCount` for each trigger that meets its condition (a "hit").
-  4. Modify the function's final return statement to send a JSON object containing the counts: `{ "checked": checkedCount, "hit": hitCount }`.
+### `determinePollingNeeds()`
+- **Responsibility**: Identify which games require odds polling.
+- **Steps**:
+  1. Fetch all triggers with `status = 'active'`.
+  2. Group triggers by sport.
+  3. For each unique sport, call The Odds API `/scores` endpoint.
+  4. Filter the live games to find ones that match teams in the active triggers.
+  5. **Return**: A list of `pollingTargets` (games to be checked).
 
-### Phase 2: Create a Dedicated API Endpoint
+### `fetchAndStoreOdds()`
+- **Responsibility**: Fetch detailed odds for the identified targets and store them.
+- **Steps**:
+  1. Take the list of `pollingTargets`.
+  2. Construct and call The Odds API `/odds` endpoint with the relevant event IDs.
+  3. For each game's odds data returned, create a single `odds_snapshots` record in the database containing the full event data.
+  4. **Return**: The complete `oddsData` fetched from the API.
 
-- **File to Create:** `src/pages/api/admin/manual-poll.ts`
-- **Objective:** Create a secure endpoint that frontend can call to initiate the manual poll.
-- **Steps:**
-  1. Create a new API route that only accepts `POST` requests.
-  2. Implement admin-only security. The request must come from a logged-in administrator.
-  3. Use the Supabase Admin client to invoke the `evaluate-triggers` Edge Function.
-  4. Receive the result from the Edge Function and forward it as the API response.
+### `evaluateTriggersAndAlert()`
+- **Responsibility**: Compare odds against trigger conditions and generate alerts.
+- **Steps**:
+  1. Take the active triggers and the fetched `oddsData`.
+  2. For each trigger, find the corresponding odds in `oddsData`.
+  3. **Filter Bookmakers**: Only consider odds from "FanDuel" and "DraftKings".
+  4. Evaluate the trigger condition (e.g., `price > odds_value`).
+  5. If the condition is met:
+     - Create an `alerts` record.
+     - **Update Trigger Status**: Mark "once" triggers as "expired".
+  6. **Return**: A summary of triggers checked and hit.
 
-### Phase 3: Implement Frontend Logic
+## 2. Main Orchestrator `evaluateTriggers()`
 
-- **File to Modify:** `src/services/adminService.ts`
-  - **Objective:** Add a service function to communicate with the new API endpoint.
-  - **Steps:**
-    1. Create a new async function, `manualPollAndCheckTriggers()`.
-    2. This function will make a `POST` call to `/api/admin/manual-poll`.
-    3. It will return the JSON response from the API.
+This function will now be a clean wrapper that calls the helper functions in sequence and provides clear logging at each step's boundary. This is critical for debugging.
 
-- **File to Modify:** `src/pages/admin.tsx`
-  - **Objective:** Add the UI button and wire up the functionality.
-  - **Steps:**
-    1. Add a state variable `isPolling` to manage the button's loading state.
-    2. Import `useToast` and the new `manualPollAndCheckTriggers` service function.
-    3. Add a new `Button` component labeled "Run Manual Poll".
-    4. Disable the button and show a loading indicator when `isPolling` is `true`.
-    5. In the button's `onClick` handler:
-       - Set `isPolling` to `true`.
-       - Call the service function within a `try/catch/finally` block.
-       - On success, use the `toast` function to display the results: `Checked ${data.checked} triggers, and ${data.hit} hit.`
-       - On error, display an error toast.
-       - In the `finally` block, set `isPolling` to `false`.
+```javascript
+// Pseudocode
+async function evaluateTriggers() {
+  log("Step 1: Determining polling needs...");
+  const targets = await determinePollingNeeds();
+  log("Step 1 Complete.");
+
+  log("Step 2: Fetching odds...");
+  const odds = await fetchAndStoreOdds(targets);
+  log("Step 2 Complete.");
+
+  log("Step 3: Evaluating triggers...");
+  const results = await evaluateTriggersAndAlert(triggers, odds);
+  log("Step 3 Complete.");
+
+  return results;
+}
+```
+
+This structured approach will allow us to pinpoint exactly where the process is failing and ensure the logic aligns with a proven, working model.
