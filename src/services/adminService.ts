@@ -161,15 +161,22 @@ export const adminService = {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Failed to run manual poll");
+      let errorMessage = "Failed to run manual poll";
+      try {
+        const error = await response.json();
+        errorMessage = error.error || error.details || errorMessage;
+      } catch (e) {
+        const text = await response.text();
+        errorMessage = text || `HTTP ${response.status}: ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
     return {
-      checked: data.checked,
-      hit: data.hit,
-      message: data.message
+      checked: data.checked || 0,
+      hit: data.hit || 0,
+      message: data.message || "Manual poll completed"
     };
   }
 };
