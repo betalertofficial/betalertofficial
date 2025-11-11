@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Database } from "../../../src/types/database.ts";
@@ -20,6 +21,8 @@ async function evaluateTriggers() {
 
   let triggersChecked = 0;
   let triggersHit = 0;
+  let oddsSnapshotsCreated = 0;
+  let totalApiCalls = 0;
 
   const { data: runLog, error: runLogError } = await supabase
     .from("evaluation_runs")
@@ -56,7 +59,9 @@ async function evaluateTriggers() {
       return { 
         message: "Polling is disabled. Operation stopped.",
         checked: 0,
-        hit: 0
+        hit: 0,
+        totalApiCalls: 0,
+        oddsSnapshotsCreated: 0
       };
     }
     console.log("✅ Polling is ENABLED. Proceeding...");
@@ -86,7 +91,9 @@ async function evaluateTriggers() {
       return { 
         message: "No active triggers found. Operation stopped.",
         checked: 0,
-        hit: 0
+        hit: 0,
+        totalApiCalls: 0,
+        oddsSnapshotsCreated: 0
       };
     }
 
@@ -114,9 +121,6 @@ async function evaluateTriggers() {
     const activeSports = [...new Set(activeTriggers.map((t) => t.sport))] as string[];
     console.log(`\n--- Step 4: Processing ${activeSports.length} sports ---`);
     console.log("Active sports:", activeSports);
-
-    let oddsSnapshotsCreated = 0;
-    let totalApiCalls = 0;
 
     for (const sport of activeSports) {
       console.log(`\n>>> Processing sport: ${sport}`);
@@ -184,85 +188,91 @@ async function evaluateTriggers() {
       console.log(`✅ Received odds data for ${oddsData.length} events`);
       console.log("Odds data:", JSON.stringify(oddsData, null, 2));
 
-      for (const trigger of relevantTriggers) {
-        triggersChecked++;
-        console.log(`\n🔍 Evaluating trigger ${trigger.id} for ${trigger.team}`);
+      // Process each event/game individually
+      for (const eventData of oddsData) {
+        console.log(`\n📊 Processing event: ${eventData.home_team} vs ${eventData.away_team}`);
         
-        const relevantEvent = oddsData.find((event: any) => 
-          event.home_team === trigger.team || event.away_team === trigger.team
-        );
-
-        if (!relevantEvent || !relevantEvent.bookmakers || relevantEvent.bookmakers.length === 0) {
-          console.log(`⚠️ No odds data found for trigger ${trigger.id}`);
-          continue;
-        }
-
-        const bookmaker = relevantEvent.bookmakers[0];
-        const h2hMarket = bookmaker.markets.find((m: any) => m.key === "h2h");
-        
-        if (!h2hMarket) {
-          console.log(`⚠️ No h2h market found for trigger ${trigger.id}`);
-          continue;
-        }
-
-        const teamOutcome = h2hMarket.outcomes.find((o: any) => o.name === trigger.team);
-        
-        if (!teamOutcome) {
-          console.log(`⚠️ No outcome found for ${trigger.team}`);
-          continue;
-        }
-
-        const currentOdds = teamOutcome.price;
-        console.log(`Current odds for ${trigger.team}: ${currentOdds}, Target: ${trigger.target_odds}`);
-
-        let conditionMet = false;
-        if (trigger.condition === "greater_than" && currentOdds > trigger.target_odds) {
-          conditionMet = true;
-        } else if (trigger.condition === "less_than" && currentOdds < trigger.target_odds) {
-          conditionMet = true;
-        }
-
-        if (conditionMet) {
-          triggersHit++;
-          console.log(`🎯 TRIGGER HIT! Creating alert for trigger ${trigger.id}`);
-          
-          const { error: alertError } = await supabase
-            .from("alerts")
-            .insert({
-              user_id: trigger.user_id,
-              trigger_id: trigger.id,
-              message: `${trigger.team} odds are now ${currentOdds} (${trigger.condition === "greater_than" ? "above" : "below"} ${trigger.target_odds})`,
-              current_odds: currentOdds,
-              triggered_at: new Date().toISOString()
-            });
-
-          if (alertError) {
-            console.error(`❌ Failed to create alert:`, alertError);
-          } else {
-            console.log(`✅ Alert created successfully`);
-          }
-        } else {
-          console.log(`❌ Condition not met for trigger ${trigger.id}`);
-        }
-      }
-
-      if (oddsData && oddsData.length > 0) {
-        console.log(`💾 Saving odds snapshot to database...`);
+        // Save snapshot for this specific game
+        console.log(`💾 Saving odds snapshot for event ${eventData.id}...`);
         const { error: snapshotError } = await supabase
           .from("odds_snapshots")
           .insert({
             sport: sport,
-            raw_data: oddsData,
+            event_id: eventData.id,
+            event_data: eventData,
           });
 
         if (snapshotError) {
           console.error("❌ Error inserting odds snapshot:", snapshotError);
         } else {
           oddsSnapshotsCreated++;
-          console.log(`✅ Successfully saved odds snapshot for ${sport}`);
+          console.log(`✅ Snapshot saved for ${eventData.home_team} vs ${eventData.away_team}`);
         }
-      } else {
-        console.log("⚠️ No odds data to save");
+
+        // Find triggers for this specific event
+        const eventTriggers = relevantTriggers.filter((trigger) =>
+          eventData.home_team === trigger.team || eventData.away_team === trigger.team
+        );
+
+        console.log(`Found ${eventTriggers.length} triggers for this event`);
+
+        for (const trigger of eventTriggers) {
+          triggersChecked++;
+          console.log(`\n🔍 Evaluating trigger ${trigger.id} for ${trigger.team}`);
+          
+          if (!eventData.bookmakers || eventData.bookmakers.length === 0) {
+            console.log(`⚠️ No bookmaker data for trigger ${trigger.id}`);
+            continue;
+          }
+
+          const bookmaker = eventData.bookmakers[0];
+          const h2hMarket = bookmaker.markets.find((m: any) => m.key === "h2h");
+          
+          if (!h2hMarket) {
+            console.log(`⚠️ No h2h market found for trigger ${trigger.id}`);
+            continue;
+          }
+
+          const teamOutcome = h2hMarket.outcomes.find((o: any) => o.name === trigger.team);
+          
+          if (!teamOutcome) {
+            console.log(`⚠️ No outcome found for ${trigger.team}`);
+            continue;
+          }
+
+          const currentOdds = teamOutcome.price;
+          console.log(`Current odds for ${trigger.team}: ${currentOdds}, Target: ${trigger.target_odds}`);
+
+          let conditionMet = false;
+          if (trigger.condition === "greater_than" && currentOdds > trigger.target_odds) {
+            conditionMet = true;
+          } else if (trigger.condition === "less_than" && currentOdds < trigger.target_odds) {
+            conditionMet = true;
+          }
+
+          if (conditionMet) {
+            triggersHit++;
+            console.log(`🎯 TRIGGER HIT! Creating alert for trigger ${trigger.id}`);
+            
+            const { error: alertError } = await supabase
+              .from("alerts")
+              .insert({
+                user_id: trigger.user_id,
+                trigger_id: trigger.id,
+                message: `${trigger.team} odds are now ${currentOdds} (${trigger.condition === "greater_than" ? "above" : "below"} ${trigger.target_odds})`,
+                current_odds: currentOdds,
+                triggered_at: new Date().toISOString()
+              });
+
+            if (alertError) {
+              console.error(`❌ Failed to create alert:`, alertError);
+            } else {
+              console.log(`✅ Alert created successfully`);
+            }
+          } else {
+            console.log(`❌ Condition not met for trigger ${trigger.id}`);
+          }
+        }
       }
     }
 
