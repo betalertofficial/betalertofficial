@@ -1,10 +1,21 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Database } from "../../../src/types/database.ts";
 
-type Trigger = Database["public"]["Tables"]["triggers"]["Row"];
-type SupabaseClient = ReturnType<typeof createClient<Database>>;
+// Define types inline since we can't import from local files in Deno
+interface Trigger {
+  id: string;
+  sport: string;
+  team_or_player: string;
+  bet_type: string;
+  odds_comparator: string;
+  odds_value: number;
+  frequency: string;
+  status: string;
+  vendor_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 interface PollingTarget {
   eventId: string;
@@ -46,7 +57,7 @@ const corsHeaders = {
  * Step 1: Determine which games need polling based on active triggers
  */
 async function determinePollingNeeds(
-  supabase: SupabaseClient,
+  supabase: any,
   apiKey: string,
   baseUrl: string
 ): Promise<{ targets: PollingTarget[]; triggers: Trigger[] }> {
@@ -57,7 +68,7 @@ async function determinePollingNeeds(
   const { data: activeTriggers, error: triggersError } = await supabase
     .from("triggers")
     .select("*")
-    .eq("status", "active") as { data: Trigger[]; error: any };
+    .eq("status", "active");
 
   if (triggersError) {
     console.error("❌ Failed to fetch active triggers:", triggersError);
@@ -73,8 +84,8 @@ async function determinePollingNeeds(
 
   // Group by sport
   const sportGroups = new Map<string, Trigger[]>();
-  activeTriggers.forEach(trigger => {
-    const sport = trigger.sport as string;
+  activeTriggers.forEach((trigger: Trigger) => {
+    const sport = trigger.sport;
     if (!sportGroups.has(sport)) {
       sportGroups.set(sport, []);
     }
@@ -133,7 +144,7 @@ async function determinePollingNeeds(
  * Step 2: Fetch odds for the identified targets and store snapshots
  */
 async function fetchAndStoreOdds(
-  supabase: SupabaseClient,
+  supabase: any,
   targets: PollingTarget[],
   apiKey: string,
   baseUrl: string
@@ -157,6 +168,9 @@ async function fetchAndStoreOdds(
   const allOddsData: OddsData[] = [];
   let snapshotsCreated = 0;
 
+  // Only process FanDuel and DraftKings bookmakers
+  const ALLOWED_BOOKMAKERS = ["fanduel", "draftkings"];
+
   for (const [sport, sportTargets] of sportGroups) {
     console.log(`\n>>> Fetching odds for ${sport}`);
     
@@ -176,26 +190,69 @@ async function fetchAndStoreOdds(
     const oddsData: OddsData[] = await oddsResponse.json();
     console.log(`✅ Received odds for ${oddsData.length} events`);
 
-    // Store each event's odds as a snapshot
-    for (const event of oddsData) {
-      console.log(`💾 Storing snapshot for: ${event.home_team} vs ${event.away_team}`);
-      
-      const { error: snapshotError } = await supabase
-        .from("odds_snapshots")
-        .insert({
-          sport: sport,
-          event_id: event.id,
-          team_or_player: `${event.home_team} vs ${event.away_team}`,
-          commence_time: event.commence_time,
-          event_data: event,
-        });
+    // First create the feed event
+    const { data: feedEvent, error: feedEventError } = await supabase
+      .from("odds_feed_events")
+      .insert({
+        vendor_id: null, // Will be populated if vendor tracking is needed
+        raw_payload: { events: oddsData },
+        event_count: oddsData.length
+      })
+      .select()
+      .single();
 
-      if (snapshotError) {
-        console.error("❌ Error storing snapshot:", snapshotError);
-      } else {
-        snapshotsCreated++;
-        console.log(`✅ Snapshot stored`);
+    if (feedEventError) {
+      console.error("❌ Error creating feed event:", feedEventError);
+      continue;
+    }
+
+    console.log(`✅ Feed event created with ID: ${feedEvent.id}`);
+
+    // Store snapshots for each event
+    for (const event of oddsData) {
+      console.log(`💾 Storing snapshots for: ${event.home_team} vs ${event.away_team}`);
+      
+      // Filter to only allowed bookmakers
+      const allowedBookmakers = event.bookmakers.filter(
+        bm => ALLOWED_BOOKMAKERS.includes(bm.key.toLowerCase())
+      );
+
+      if (allowedBookmakers.length === 0) {
+        console.log(`⚠️ No FanDuel/DraftKings data for this event, skipping`);
+        continue;
       }
+
+      // Create snapshots for each team and bookmaker combination
+      for (const bookmaker of allowedBookmakers) {
+        for (const market of bookmaker.markets) {
+          for (const outcome of market.outcomes) {
+            const snapshot = {
+              feed_event_id: feedEvent.id,
+              sport: sport,
+              event_id: event.id,
+              team_or_player: outcome.name,
+              bookmaker: bookmaker.title,
+              bet_type: market.key,
+              odds_value: outcome.price,
+              deep_link_url: null,
+              commence_time: event.commence_time,
+              event_data: event
+            };
+
+            const { error: snapshotError } = await supabase
+              .from("odds_snapshots")
+              .insert(snapshot);
+
+            if (snapshotError) {
+              console.error("❌ Error storing snapshot:", snapshotError);
+            } else {
+              snapshotsCreated++;
+            }
+          }
+        }
+      }
+      
+      console.log(`✅ Snapshots stored for event`);
     }
 
     allOddsData.push(...oddsData);
@@ -209,9 +266,8 @@ async function fetchAndStoreOdds(
  * Step 3: Evaluate triggers against fetched odds and create alerts
  */
 async function evaluateTriggersAndAlert(
-  supabase: SupabaseClient,
-  triggers: Trigger[],
-  oddsData: OddsData[]
+  supabase: any,
+  triggers: Trigger[]
 ): Promise<{ checked: number; hit: number }> {
   console.log("\n=== STEP 3: EVALUATING TRIGGERS AND CREATING ALERTS ===");
 
@@ -225,107 +281,109 @@ async function evaluateTriggersAndAlert(
     triggersChecked++;
     console.log(`\n🔍 Evaluating trigger ${trigger.id} for ${trigger.team_or_player}`);
 
-    // Find the odds data for this trigger's team
-    const relevantEvent = oddsData.find(event =>
-      event.home_team === trigger.team_or_player || 
-      event.away_team === trigger.team_or_player
-    );
+    // Find the latest matching odds snapshot for this trigger
+    const { data: snapshots, error: snapshotsError } = await supabase
+      .from("odds_snapshots")
+      .select("*")
+      .eq("sport", trigger.sport)
+      .eq("team_or_player", trigger.team_or_player)
+      .eq("bet_type", trigger.bet_type === "moneyline" ? "h2h" : trigger.bet_type)
+      .in("bookmaker", ALLOWED_BOOKMAKERS)
+      .order("snapshot_at", { ascending: false })
+      .limit(1);
 
-    if (!relevantEvent) {
-      console.log(`⚠️ No odds data found for ${trigger.team_or_player}`);
+    if (snapshotsError || !snapshots || snapshots.length === 0) {
+      console.log(`⚠️ No recent odds snapshot found for ${trigger.team_or_player}`);
       continue;
     }
 
-    // Filter to only allowed bookmakers
-    const allowedBookmakers = relevantEvent.bookmakers.filter(
-      bm => ALLOWED_BOOKMAKERS.includes(bm.title)
-    );
+    const snapshot = snapshots[0];
+    const currentOdds = snapshot.odds_value;
+    const bookmaker = snapshot.bookmaker;
 
-    if (allowedBookmakers.length === 0) {
-      console.log(`⚠️ No FanDuel/DraftKings data for this event`);
-      continue;
-    }
-
-    // Determine target market
-    let targetMarketKey = "h2h"; // moneyline
-    if (trigger.bet_type === "spread") {
-      targetMarketKey = "spreads";
-    } else if (trigger.bet_type === "total") {
-      targetMarketKey = "totals";
-    }
-
-    // Find best odds across allowed bookmakers
-    let bestOdds: number | null = null;
-    let foundBookmaker: string | null = null;
-
-    for (const bookmaker of allowedBookmakers) {
-      const market = bookmaker.markets.find(m => m.key === targetMarketKey);
-      if (!market) continue;
-
-      const teamOutcome = market.outcomes.find(o => 
-        o.name === trigger.team_or_player || 
-        o.name.includes(trigger.team_or_player as string)
-      );
-      
-      if (!teamOutcome) continue;
-
-      const currentOdds = teamOutcome.price;
-      if (bestOdds === null || currentOdds > bestOdds) {
-        bestOdds = currentOdds;
-        foundBookmaker = bookmaker.title;
-      }
-    }
-
-    if (bestOdds === null) {
-      console.log(`⚠️ No odds found for ${trigger.team_or_player} in ${targetMarketKey} market`);
-      continue;
-    }
-
-    console.log(`Current odds: ${bestOdds} at ${foundBookmaker}, Target: ${trigger.odds_value}`);
+    console.log(`Current odds: ${currentOdds} at ${bookmaker}, Target: ${trigger.odds_value}`);
 
     // Check if condition is met
     let conditionMet = false;
-    if (trigger.odds_comparator === "greater_than" && bestOdds > trigger.odds_value) {
+    if (trigger.odds_comparator === "greater_than" && currentOdds > trigger.odds_value) {
       conditionMet = true;
-    } else if (trigger.odds_comparator === "less_than" && bestOdds < trigger.odds_value) {
+    } else if (trigger.odds_comparator === "less_than" && currentOdds < trigger.odds_value) {
       conditionMet = true;
-    } else if (trigger.odds_comparator === "equal_to" && bestOdds === trigger.odds_value) {
+    } else if (trigger.odds_comparator === "equal_to" && currentOdds === trigger.odds_value) {
+      conditionMet = true;
+    } else if (trigger.odds_comparator === ">=" && currentOdds >= trigger.odds_value) {
+      conditionMet = true;
+    } else if (trigger.odds_comparator === "<=" && currentOdds <= trigger.odds_value) {
       conditionMet = true;
     }
 
     if (conditionMet) {
       triggersHit++;
-      console.log(`🎯 TRIGGER HIT! Creating alert...`);
+      console.log(`🎯 TRIGGER HIT! Creating trigger match and alerts...`);
       
-      // Create alert
-      const { error: alertError } = await supabase
-        .from("alerts")
+      // Create trigger match
+      const { data: triggerMatch, error: matchError } = await supabase
+        .from("trigger_matches")
         .insert({
-          user_id: trigger.user_id,
           trigger_id: trigger.id,
-          message: `${trigger.team_or_player} odds are now ${bestOdds} at ${foundBookmaker} (${trigger.odds_comparator.replace('_', ' ')} ${trigger.odds_value})`,
-          current_odds: bestOdds,
-          triggered_at: new Date().toISOString()
-        });
+          odds_snapshot_id: snapshot.id,
+          matched_value: currentOdds
+        })
+        .select()
+        .single();
 
-      if (alertError) {
-        console.error(`❌ Failed to create alert:`, alertError);
-      } else {
-        console.log(`✅ Alert created successfully`);
+      if (matchError) {
+        console.error(`❌ Failed to create trigger match:`, matchError);
+        continue;
+      }
+
+      console.log(`✅ Trigger match created`);
+
+      // Get all profiles associated with this trigger
+      const { data: profileTriggers, error: profileError } = await supabase
+        .from("profile_triggers")
+        .select("profile_id")
+        .eq("trigger_id", trigger.id);
+
+      if (profileError || !profileTriggers || profileTriggers.length === 0) {
+        console.log(`⚠️ No profiles found for trigger ${trigger.id}`);
+        continue;
+      }
+
+      console.log(`Found ${profileTriggers.length} profiles to alert`);
+
+      // Create alert for each profile
+      for (const pt of profileTriggers) {
+        const message = `${trigger.team_or_player} odds are now ${currentOdds} at ${bookmaker} (${trigger.odds_comparator.replace('_', ' ')} ${trigger.odds_value})`;
         
-        // Update trigger status if it's a "once" trigger
-        if (trigger.frequency === "once") {
-          console.log(`Marking "once" trigger as expired...`);
-          const { error: updateError } = await supabase
-            .from("triggers")
-            .update({ status: "expired" })
-            .eq("id", trigger.id);
+        const { error: alertError } = await supabase
+          .from("alerts")
+          .insert({
+            trigger_match_id: triggerMatch.id,
+            profile_id: pt.profile_id,
+            message: message,
+            delivery_status: "pending"
+          });
 
-          if (updateError) {
-            console.error(`❌ Failed to update trigger status:`, updateError);
-          } else {
-            console.log(`✅ Trigger marked as expired`);
-          }
+        if (alertError) {
+          console.error(`❌ Failed to create alert for profile ${pt.profile_id}:`, alertError);
+        } else {
+          console.log(`✅ Alert created for profile ${pt.profile_id}`);
+        }
+      }
+      
+      // Update trigger status if it's a "once" trigger
+      if (trigger.frequency === "once") {
+        console.log(`Marking "once" trigger as expired...`);
+        const { error: updateError } = await supabase
+          .from("triggers")
+          .update({ status: "expired" })
+          .eq("id", trigger.id);
+
+        if (updateError) {
+          console.error(`❌ Failed to update trigger status:`, updateError);
+        } else {
+          console.log(`✅ Trigger marked as expired`);
         }
       }
     } else {
@@ -342,7 +400,7 @@ async function evaluateTriggersAndAlert(
  */
 async function evaluateTriggers() {
   console.log("\n=== NEW EVALUATION RUN STARTED ===");
-  const supabase = createClient<Database>(
+  const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
@@ -363,23 +421,27 @@ async function evaluateTriggers() {
   console.log(`✅ Evaluation run created with ID: ${runLog.id}`);
 
   try {
-    // Check if polling is enabled
-    console.log("\n--- Checking system settings ---");
+    // Check if polling is enabled via admin_settings
+    console.log("\n--- Checking admin settings ---");
     const { data: settings, error: settingsError } = await supabase
-      .from("system_settings")
-      .select("is_polling_enabled")
+      .from("admin_settings")
+      .select("setting_value")
+      .eq("setting_key", "polling_enabled")
       .single();
 
-    if (settingsError) {
-      console.error("❌ Failed to fetch system settings:", settingsError);
-      throw new Error(`Failed to fetch system settings: ${settingsError.message}`);
+    if (settingsError && settingsError.code !== "PGRST116") {
+      console.error("❌ Failed to fetch admin settings:", settingsError);
+      throw new Error(`Failed to fetch admin settings: ${settingsError.message}`);
     }
 
-    if (!settings?.is_polling_enabled) {
+    // If setting doesn't exist or is false, exit
+    if (!settings || settings.setting_value?.enabled === false) {
       console.log("⚠️ Polling is DISABLED. Exiting.");
       await supabase.from("evaluation_runs").update({
         status: "completed",
-        summary: "Polling is disabled.",
+        triggers_evaluated: 0,
+        matches_found: 0,
+        alerts_sent: 0
       }).eq("id", runLog.id);
       return { 
         message: "Polling is disabled.",
@@ -389,6 +451,8 @@ async function evaluateTriggers() {
         oddsSnapshotsCreated: 0
       };
     }
+
+    console.log("✅ Polling is ENABLED");
 
     // Get API credentials
     console.log("\n--- Fetching API credentials ---");
@@ -408,18 +472,22 @@ async function evaluateTriggers() {
       throw new Error("The Odds API key is missing.");
     }
 
+    console.log("✅ API credentials retrieved");
+
     // STEP 1: Determine polling needs
     const { targets, triggers } = await determinePollingNeeds(supabase, apiKey, baseUrl);
     totalApiCalls += targets.length > 0 ? sportCount(targets) : 0; // Count scores API calls
 
     if (targets.length === 0) {
-      const summary = "No active triggers or relevant games found.";
+      const message = "No active triggers or relevant games found.";
       await supabase.from("evaluation_runs").update({
         status: "completed",
-        summary: summary,
+        triggers_evaluated: 0,
+        matches_found: 0,
+        alerts_sent: 0
       }).eq("id", runLog.id);
       return { 
-        message: summary,
+        message,
         checked: 0,
         hit: 0,
         totalApiCalls,
@@ -439,21 +507,23 @@ async function evaluateTriggers() {
     // STEP 3: Evaluate triggers and create alerts
     const { checked, hit } = await evaluateTriggersAndAlert(
       supabase,
-      triggers,
-      oddsData
+      triggers
     );
 
-    const summary = `Checked ${checked} triggers, ${hit} hit. Made ${totalApiCalls} API calls, created ${snapshotsCreated} snapshots.`;
+    const message = `Checked ${checked} triggers, ${hit} hit`;
     console.log(`\n=== EVALUATION COMPLETE ===`);
-    console.log(summary);
+    console.log(message);
+    console.log(`Made ${totalApiCalls} API calls, created ${snapshotsCreated} snapshots.`);
     
     await supabase.from("evaluation_runs").update({
       status: "completed",
-      summary: summary,
+      triggers_evaluated: checked,
+      matches_found: hit,
+      alerts_sent: hit
     }).eq("id", runLog.id);
     
     return { 
-      message: summary,
+      message,
       checked,
       hit,
       totalApiCalls,
@@ -468,7 +538,7 @@ async function evaluateTriggers() {
     if (runLog) {
       await supabase.from("evaluation_runs").update({
         status: "failed",
-        summary: error.message,
+        error_message: error.message
       }).eq("id", runLog.id);
     }
     throw error;
