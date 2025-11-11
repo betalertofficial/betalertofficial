@@ -1,6 +1,36 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
 
+interface OddsApiEvent {
+  id: string;
+  sport_key: string;
+  commence_time: string;
+  home_team: string;
+  away_team: string;
+  bookmakers: Array<{
+    key: string;
+    title: string;
+    markets: Array<{
+      key: string;
+      outcomes: Array<{
+        name: string;
+        price: number;
+      }>;
+    }>;
+  }>;
+}
+
+interface Trigger {
+  id: string;
+  sport: string;
+  event_name: string;
+  bet_type: string;
+  team_player: string;
+  condition: string;
+  threshold: number;
+  is_active: boolean;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -10,6 +40,7 @@ export default async function handler(
   }
 
   try {
+    // Authentication
     const authHeader = req.headers.authorization;
     if (!authHeader) {
       return res.status(401).json({ error: "Unauthorized - No auth header" });
@@ -33,7 +64,7 @@ export default async function handler(
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return res.status(401).json({ error: "Unauthorized - Invalid token", details: userError?.message });
+      return res.status(401).json({ error: "Unauthorized - Invalid token" });
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -43,67 +74,159 @@ export default async function handler(
       .single();
 
     if (profileError || !profile) {
-      return res.status(403).json({ error: "Access denied - No profile", details: profileError?.message });
+      return res.status(403).json({ error: "Access denied - No profile" });
     }
 
     if (profile.role !== "admin" && profile.role !== "super_admin") {
       return res.status(403).json({ error: "Admin access required" });
     }
-    
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error("❌ SUPABASE_SERVICE_ROLE_KEY not found in environment");
-      return res.status(500).json({ error: "Server configuration error" });
-    }
-    
+
+    // Use service role for database operations
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    console.log("🔍 Attempting to invoke Edge Function 'evaluate-triggers'...");
-    console.log("📍 Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-    
-    const { data, error } = await supabaseAdmin.functions.invoke(
-      "evaluate-triggers",
-      { body: {} }
-    );
+    console.log("🎯 Starting manual poll and trigger evaluation...");
 
-    // Log the FULL error object structure
-    if (error) {
-      console.error("❌ Edge Function invocation error:");
-      console.error("  - error object:", JSON.stringify(error, null, 2));
-      console.error("  - error.message:", error.message);
-      console.error("  - error.context:", error.context);
-      console.error("  - error keys:", Object.keys(error));
-      
-      return res.status(500).json({
-        error: "Edge Function invocation failed",
-        errorObject: error,
-        errorMessage: error.message,
-        errorContext: error.context,
-        errorKeys: Object.keys(error),
+    // Fetch all active triggers
+    const { data: triggers, error: triggersError } = await supabaseAdmin
+      .from("triggers")
+      .select("*")
+      .eq("is_active", true);
+
+    if (triggersError) {
+      console.error("❌ Error fetching triggers:", triggersError);
+      return res.status(500).json({ error: "Failed to fetch triggers", details: triggersError.message });
+    }
+
+    if (!triggers || triggers.length === 0) {
+      console.log("ℹ️ No active triggers found");
+      return res.status(200).json({
+        success: true,
+        checked: 0,
+        hit: 0,
+        message: "No active triggers to check"
       });
     }
 
-    console.log("✅ Edge Function SUCCESS! Response:", JSON.stringify(data, null, 2));
+    console.log(`📊 Found ${triggers.length} active triggers`);
+
+    // Group triggers by sport for efficient API calls
+    const triggersBySport = triggers.reduce((acc: { [key: string]: Trigger[] }, trigger: any) => {
+      if (!acc[trigger.sport]) {
+        acc[trigger.sport] = [];
+      }
+      acc[trigger.sport].push(trigger as Trigger);
+      return acc;
+    }, {});
+
+    let totalChecked = 0;
+    let totalHit = 0;
+
+    // Process each sport
+    for (const [sport, sportTriggers] of Object.entries(triggersBySport)) {
+      console.log(`🏈 Processing ${sportTriggers.length} triggers for ${sport}`);
+
+      try {
+        // Fetch odds from API
+        const oddsResponse = await fetch(
+          `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${process.env.ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`
+        );
+
+        if (!oddsResponse.ok) {
+          console.error(`❌ Odds API error for ${sport}:`, oddsResponse.status);
+          continue;
+        }
+
+        const events: OddsApiEvent[] = await oddsResponse.json();
+        console.log(`📥 Received ${events.length} events for ${sport}`);
+
+        // Check each trigger against the events
+        for (const trigger of sportTriggers) {
+          totalChecked++;
+
+          // Find matching event
+          const matchingEvent = events.find(event => 
+            event.home_team === trigger.event_name || 
+            event.away_team === trigger.event_name ||
+            `${event.away_team} @ ${event.home_team}` === trigger.event_name
+          );
+
+          if (!matchingEvent) {
+            console.log(`⚠️ No matching event found for trigger: ${trigger.event_name}`);
+            continue;
+          }
+
+          // Extract odds based on bet type
+          let currentOdds: number | null = null;
+
+          for (const bookmaker of matchingEvent.bookmakers) {
+            const market = bookmaker.markets.find(m => {
+              if (trigger.bet_type === "moneyline") return m.key === "h2h";
+              if (trigger.bet_type === "spread") return m.key === "spreads";
+              if (trigger.bet_type === "total") return m.key === "totals";
+              return false;
+            });
+
+            if (market) {
+              const outcome = market.outcomes.find(o => 
+                o.name === trigger.team_player ||
+                o.name.includes(trigger.team_player)
+              );
+
+              if (outcome) {
+                currentOdds = outcome.price;
+                break;
+              }
+            }
+          }
+
+          if (currentOdds === null) {
+            console.log(`⚠️ No odds found for trigger: ${trigger.event_name} - ${trigger.team_player}`);
+            continue;
+          }
+
+          // Check if trigger condition is met
+          let conditionMet = false;
+          if (trigger.condition === "greater_than" && currentOdds > trigger.threshold) {
+            conditionMet = true;
+          } else if (trigger.condition === "less_than" && currentOdds < trigger.threshold) {
+            conditionMet = true;
+          }
+
+          if (conditionMet) {
+            totalHit++;
+            console.log(`🎯 TRIGGER HIT! ${trigger.event_name} - ${trigger.team_player}: ${currentOdds} ${trigger.condition} ${trigger.threshold}`);
+
+            // Store in alerts table
+            await supabaseAdmin.from("alerts").insert({
+              trigger_id: trigger.id,
+              user_id: trigger.user_id,
+              message: `${trigger.event_name} - ${trigger.team_player} odds are now ${currentOdds} (threshold: ${trigger.threshold})`,
+              odds_value: currentOdds,
+            });
+          }
+        }
+      } catch (error: any) {
+        console.error(`❌ Error processing ${sport}:`, error.message);
+      }
+    }
+
+    console.log(`✅ Manual poll complete: Checked ${totalChecked} triggers, ${totalHit} hit`);
+
     return res.status(200).json({
       success: true,
-      checked: data?.checked || 0,
-      hit: data?.hit || 0,
-      message: data?.message || "Manual poll completed",
-      rawData: data,
+      checked: totalChecked,
+      hit: totalHit,
+      message: `Checked ${totalChecked} triggers, ${totalHit} hit`
     });
 
   } catch (error: any) {
-    console.error("❌❌❌ CRITICAL API ERROR in manual-poll:", error);
-    console.error("  - Error name:", error.name);
-    console.error("  - Error message:", error.message);
-    console.error("  - Error stack:", error.stack);
-    
+    console.error("❌ CRITICAL ERROR in manual-poll:", error);
     return res.status(500).json({ 
-      error: "Internal Server Error in /api/admin/manual-poll",
+      error: "Internal Server Error",
       details: error.message,
-      errorName: error.name,
       stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }

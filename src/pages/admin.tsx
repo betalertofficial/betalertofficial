@@ -93,17 +93,28 @@ export default function AdminPage() {
       
       toast({
         title: "Manual Poll Complete",
-        description: `Checked ${result.checked} triggers, ${result.hit} hit`,
+        description: `Checked ${result.checked} triggers, ${result.hit} hit. Message: ${result.message}`,
         variant: result.hit > 0 ? "default" : "default",
       });
       
       await loadAdminData();
     } catch (error: any) {
       console.error("Error running manual poll:", error);
+      
+      const errorData = error.response?.data || { message: error.message, details: "No response data from API." };
+
       toast({
         title: "Manual Poll Failed",
-        description: error.message || "Failed to run manual poll",
+        description: (
+          <div className="mt-2 w-[340px] md:w-[500px] overflow-auto">
+            <p className="text-sm font-medium mb-2">The API returned the following error:</p>
+            <pre className="rounded-md bg-slate-950 p-4">
+              <code className="text-white text-xs">{JSON.stringify(errorData, null, 2)}</code>
+            </pre>
+          </div>
+        ),
         variant: "destructive",
+        duration: 30000, // Keep open for 30 seconds
       });
     } finally {
       setIsManualPolling(false);
