@@ -16,19 +16,23 @@ import {
   Settings as SettingsIcon,
   ArrowLeft,
   Database,
-  TrendingUp
+  TrendingUp,
+  PlayCircle
 } from "lucide-react";
 import { PollingControlModal } from "@/components/admin/PollingControlModal";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AdminPage() {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [pollingEnabled, setPollingEnabled] = useState(true);
   const [updatingPolling, setUpdatingPolling] = useState(false);
   const [isPollingModalOpen, setIsPollingModalOpen] = useState(false);
+  const [isManualPolling, setIsManualPolling] = useState(false);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -79,6 +83,30 @@ export default function AdminPage() {
       alert("Failed to update polling setting");
     } finally {
       setUpdatingPolling(false);
+    }
+  };
+
+  const handleManualPoll = async () => {
+    setIsManualPolling(true);
+    try {
+      const result = await adminService.manualPollAndCheckTriggers();
+      
+      toast({
+        title: "Manual Poll Complete",
+        description: `Checked ${result.checked} triggers, ${result.hit} hit`,
+        variant: result.hit > 0 ? "default" : "default",
+      });
+      
+      await loadAdminData();
+    } catch (error: any) {
+      console.error("Error running manual poll:", error);
+      toast({
+        title: "Manual Poll Failed",
+        description: error.message || "Failed to run manual poll",
+        variant: "destructive",
+      });
+    } finally {
+      setIsManualPolling(false);
     }
   };
 
@@ -276,6 +304,27 @@ export default function AdminPage() {
                   <CardDescription>Common administrative tasks</CardDescription>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Button 
+                    variant="outline" 
+                    className="h-auto flex-col items-start p-4"
+                    onClick={handleManualPoll}
+                    disabled={isManualPolling}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      {isManualPolling ? (
+                        <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                      ) : (
+                        <PlayCircle className="h-5 w-5 text-primary" />
+                      )}
+                      <span className="font-semibold">
+                        {isManualPolling ? "Running Poll..." : "Run Manual Poll"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground text-left">
+                      Manually check all active triggers now
+                    </p>
+                  </Button>
+
                   <Button variant="outline" className="h-auto flex-col items-start p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <TrendingUp className="h-5 w-5 text-primary" />
@@ -283,16 +332,6 @@ export default function AdminPage() {
                     </div>
                     <p className="text-xs text-muted-foreground text-left">
                       Detailed system performance metrics
-                    </p>
-                  </Button>
-
-                  <Button variant="outline" className="h-auto flex-col items-start p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Database className="h-5 w-5 text-primary" />
-                      <span className="font-semibold">Database Health</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground text-left">
-                      Check connections and storage
                     </p>
                   </Button>
                 </CardContent>

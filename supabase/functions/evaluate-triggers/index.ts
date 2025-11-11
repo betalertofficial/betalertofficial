@@ -18,6 +18,9 @@ async function evaluateTriggers() {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  let triggersChecked = 0;
+  let triggersHit = 0;
+
   const { data: runLog, error: runLogError } = await supabase
     .from("evaluation_runs")
     .insert({ status: "running" })
@@ -50,7 +53,11 @@ async function evaluateTriggers() {
         status: "completed",
         summary: "Polling is disabled.",
       }).eq("id", runLog.id);
-      return { message: "Polling is disabled. Operation stopped." };
+      return { 
+        message: "Polling is disabled. Operation stopped.",
+        checked: 0,
+        hit: 0
+      };
     }
     console.log("✅ Polling is ENABLED. Proceeding...");
 
@@ -76,7 +83,11 @@ async function evaluateTriggers() {
         status: "completed",
         summary: "No active triggers found.",
       }).eq("id", runLog.id);
-      return { message: "No active triggers found. Operation stopped." };
+      return { 
+        message: "No active triggers found. Operation stopped.",
+        checked: 0,
+        hit: 0
+      };
     }
 
     console.log("\n--- Step 3: Fetching API credentials ---");
@@ -173,6 +184,68 @@ async function evaluateTriggers() {
       console.log(`✅ Received odds data for ${oddsData.length} events`);
       console.log("Odds data:", JSON.stringify(oddsData, null, 2));
 
+      for (const trigger of relevantTriggers) {
+        triggersChecked++;
+        console.log(`\n🔍 Evaluating trigger ${trigger.id} for ${trigger.team}`);
+        
+        const relevantEvent = oddsData.find((event: any) => 
+          event.home_team === trigger.team || event.away_team === trigger.team
+        );
+
+        if (!relevantEvent || !relevantEvent.bookmakers || relevantEvent.bookmakers.length === 0) {
+          console.log(`⚠️ No odds data found for trigger ${trigger.id}`);
+          continue;
+        }
+
+        const bookmaker = relevantEvent.bookmakers[0];
+        const h2hMarket = bookmaker.markets.find((m: any) => m.key === "h2h");
+        
+        if (!h2hMarket) {
+          console.log(`⚠️ No h2h market found for trigger ${trigger.id}`);
+          continue;
+        }
+
+        const teamOutcome = h2hMarket.outcomes.find((o: any) => o.name === trigger.team);
+        
+        if (!teamOutcome) {
+          console.log(`⚠️ No outcome found for ${trigger.team}`);
+          continue;
+        }
+
+        const currentOdds = teamOutcome.price;
+        console.log(`Current odds for ${trigger.team}: ${currentOdds}, Target: ${trigger.target_odds}`);
+
+        let conditionMet = false;
+        if (trigger.condition === "greater_than" && currentOdds > trigger.target_odds) {
+          conditionMet = true;
+        } else if (trigger.condition === "less_than" && currentOdds < trigger.target_odds) {
+          conditionMet = true;
+        }
+
+        if (conditionMet) {
+          triggersHit++;
+          console.log(`🎯 TRIGGER HIT! Creating alert for trigger ${trigger.id}`);
+          
+          const { error: alertError } = await supabase
+            .from("alerts")
+            .insert({
+              user_id: trigger.user_id,
+              trigger_id: trigger.id,
+              message: `${trigger.team} odds are now ${currentOdds} (${trigger.condition === "greater_than" ? "above" : "below"} ${trigger.target_odds})`,
+              current_odds: currentOdds,
+              triggered_at: new Date().toISOString()
+            });
+
+          if (alertError) {
+            console.error(`❌ Failed to create alert:`, alertError);
+          } else {
+            console.log(`✅ Alert created successfully`);
+          }
+        } else {
+          console.log(`❌ Condition not met for trigger ${trigger.id}`);
+        }
+      }
+
       if (oddsData && oddsData.length > 0) {
         console.log(`💾 Saving odds snapshot to database...`);
         const { error: snapshotError } = await supabase
@@ -193,7 +266,7 @@ async function evaluateTriggers() {
       }
     }
 
-    const summary = `Evaluation complete. Processed ${activeSports.length} sports, made ${totalApiCalls} API calls, created ${oddsSnapshotsCreated} odds snapshots.`;
+    const summary = `Checked ${triggersChecked} triggers, ${triggersHit} hit. Processed ${activeSports.length} sports, made ${totalApiCalls} API calls, created ${oddsSnapshotsCreated} odds snapshots.`;
     console.log(`\n=== ${summary} ===`);
     
     await supabase.from("evaluation_runs").update({
@@ -201,7 +274,13 @@ async function evaluateTriggers() {
       summary: summary,
     }).eq("id", runLog.id);
     
-    return { message: summary, totalApiCalls, oddsSnapshotsCreated };
+    return { 
+      message: summary, 
+      totalApiCalls, 
+      oddsSnapshotsCreated,
+      checked: triggersChecked,
+      hit: triggersHit
+    };
     
   } catch (error) {
     console.error("\n❌❌❌ FATAL ERROR ❌❌❌");

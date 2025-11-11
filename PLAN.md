@@ -1,39 +1,52 @@
-# Odds Polling Process Overview
+# Project Plan: Manual Odds Polling &amp; Trigger Check
 
-This document outlines the automated, step-by-step process that runs every minute when odds polling is active.
+This document outlines the plan to implement a manual polling button on the admin page.
 
-1.  **Scheduled Invocation**:
-    *   The `evaluate-triggers` function is automatically triggered by a cron job every minute.
+## 1. Goal
 
-2.  **Log Cron Invocation**:
-    *   The function's *very first action* is to create a new record in the `evaluation_runs` table with a `running` status. This serves as a definitive log that the cron job has successfully triggered the function.
+Create a button on the `/admin` page that allows an administrator to manually trigger the odds polling and trigger evaluation process. The result of the poll (number of triggers checked, number of triggers that hit) should be displayed in a toast notification.
 
-3.  **Polling Status Check**:
-    *   The function then checks the `system_settings` table to see if the main polling switch is "On". If it's "Off", the process updates the log and stops.
+## 2. Implementation Phases
 
-4.  **Fetch Active Triggers**:
-    *   The system queries the database for all user triggers that are currently `active`. If none are found, the process ends.
+### Phase 1: Enhance Supabase Edge Function
 
-5.  **Fetch Live Games**:
-    *   It identifies the unique sports from the active triggers (e.g., NBA, NFL).
-    *   It then calls "The Odds API" to get a list of all games for those sports that are currently live (i.e., started but not finished).
+- **File to Modify:** `supabase/functions/evaluate-triggers/index.ts`
+- **Objective:** Update the function to return a count of total triggers evaluated and triggers that "hit".
+- **Steps:**
+  1. Initialize two counters: `checkedCount` and `hitCount`.
+  2. Increment `checkedCount` for each trigger processed.
+  3. Increment `hitCount` for each trigger that meets its condition (a "hit").
+  4. Modify the function's final return statement to send a JSON object containing the counts: `{ "checked": checkedCount, "hit": hitCount }`.
 
-6.  **Fetch Live Odds for Each Game**:
-    *   For each live game that has at least one active trigger associated with it, the system makes another API call to get the latest betting odds from all available bookmakers.
+### Phase 2: Create a Dedicated API Endpoint
 
-7.  **Create an Odds Snapshot**:
-    *   The raw odds data received from the API is immediately saved into the `odds_snapshots` table. This provides a historical record of market odds at that specific moment in time.
+- **File to Create:** `src/pages/api/admin/manual-poll.ts`
+- **Objective:** Create a secure endpoint that frontend can call to initiate the manual poll.
+- **Steps:**
+  1. Create a new API route that only accepts `POST` requests.
+  2. Implement admin-only security. The request must come from a logged-in administrator.
+  3. Use the Supabase Admin client to invoke the `evaluate-triggers` Edge Function.
+  4. Receive the result from the Edge Function and forward it as the API response.
 
-8.  **Evaluate Triggers Against Live Odds**:
-    *   The system compares the live odds for each outcome (e.g., team to win) against the conditions set in the user's trigger (e.g., `odds > +150`).
+### Phase 3: Implement Frontend Logic
 
-9.  **Generate Alerts &amp; Notifications**:
-    *   **If a condition is met:**
-        *   A `trigger_matches` record is created to prevent duplicate alerts for the same event.
-        *   An `alerts` record is created in the database with the user's notification message.
-        *   If the user has configured a webhook, the alert data is sent to their specified URL.
+- **File to Modify:** `src/services/adminService.ts`
+  - **Objective:** Add a service function to communicate with the new API endpoint.
+  - **Steps:**
+    1. Create a new async function, `manualPollAndCheckTriggers()`.
+    2. This function will make a `POST` call to `/api/admin/manual-poll`.
+    3. It will return the JSON response from the API.
 
-10. **Finalize the Run**:
-    *   After checking all live games, the `evaluation_runs` log is updated to `completed` with a summary of actions taken (e.g., "Checked 15 triggers, created 2 alerts.").
-
-This cycle repeats every minute, ensuring timely evaluation of all active betting triggers against real-time market data.
+- **File to Modify:** `src/pages/admin.tsx`
+  - **Objective:** Add the UI button and wire up the functionality.
+  - **Steps:**
+    1. Add a state variable `isPolling` to manage the button's loading state.
+    2. Import `useToast` and the new `manualPollAndCheckTriggers` service function.
+    3. Add a new `Button` component labeled "Run Manual Poll".
+    4. Disable the button and show a loading indicator when `isPolling` is `true`.
+    5. In the button's `onClick` handler:
+       - Set `isPolling` to `true`.
+       - Call the service function within a `try/catch/finally` block.
+       - On success, use the `toast` function to display the results: `Checked ${data.checked} triggers, and ${data.hit} hit.`
+       - On error, display an error toast.
+       - In the `finally` block, set `isPolling` to `false`.

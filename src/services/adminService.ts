@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import type { Profile, Trigger, Alert, VendorLog, EvaluationRun } from "@/types/database";
 
@@ -144,5 +143,33 @@ export const adminService = {
       .eq("id", userId);
 
     if (error) throw error;
+  },
+
+  async manualPollAndCheckTriggers(): Promise<{ checked: number; hit: number; message: string }> {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      throw new Error("No active session");
+    }
+
+    const response = await fetch("/api/admin/manual-poll", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${session.access_token}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to run manual poll");
+    }
+
+    const data = await response.json();
+    return {
+      checked: data.checked,
+      hit: data.hit,
+      message: data.message
+    };
   }
 };
