@@ -90,7 +90,7 @@ export default async function handler(
     console.log("🎯 Starting manual poll and trigger evaluation...");
 
     // Fetch all active triggers
-    const { data: triggers, error: triggersError } = await supabaseAdmin
+    const { data: triggersData, error: triggersError } = await supabaseAdmin
       .from("triggers")
       .select("*")
       .eq("is_active", true);
@@ -100,7 +100,9 @@ export default async function handler(
       return res.status(500).json({ error: "Failed to fetch triggers", details: triggersError.message });
     }
 
-    if (!triggers || triggers.length === 0) {
+    const triggers: Trigger[] = triggersData || [];
+
+    if (triggers.length === 0) {
       console.log("ℹ️ No active triggers found");
       return res.status(200).json({
         success: true,
@@ -113,11 +115,11 @@ export default async function handler(
     console.log(`📊 Found ${triggers.length} active triggers`);
 
     // Group triggers by sport for efficient API calls
-    const triggersBySport = triggers.reduce((acc: { [key: string]: Trigger[] }, trigger: any) => {
+    const triggersBySport = triggers.reduce((acc: { [key: string]: Trigger[] }, trigger) => {
       if (!acc[trigger.sport]) {
         acc[trigger.sport] = [];
       }
-      acc[trigger.sport].push(trigger as Trigger);
+      acc[trigger.sport].push(trigger);
       return acc;
     }, {});
 
@@ -135,11 +137,18 @@ export default async function handler(
         );
 
         if (!oddsResponse.ok) {
-          console.error(`❌ Odds API error for ${sport}:`, oddsResponse.status);
+          console.error(`❌ Odds API error for ${sport}:`, await oddsResponse.text());
           continue;
         }
 
-        const events: OddsApiEvent[] = await oddsResponse.json();
+        const eventsData: unknown = await oddsResponse.json();
+        
+        if (!Array.isArray(eventsData)) {
+          console.error(`❌ Odds API for ${sport} did not return an array.`);
+          continue;
+        }
+
+        const events: OddsApiEvent[] = eventsData;
         console.log(`📥 Received ${events.length} events for ${sport}`);
 
         // Check each trigger against the events
