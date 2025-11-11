@@ -90,6 +90,24 @@ export default async function handler(
 
     console.log("🎯 Starting manual poll and trigger evaluation...");
 
+    // Fetch the Odds API key from vendors table
+    const { data: vendorData, error: vendorError } = await supabaseAdmin
+      .from("vendors")
+      .select("api_key")
+      .eq("is_active", true)
+      .single();
+
+    if (vendorError || !vendorData || !vendorData.api_key) {
+      console.error("❌ Error fetching Odds API key from vendors table:", vendorError);
+      return res.status(500).json({ 
+        error: "Failed to fetch Odds API key from vendors table", 
+        details: vendorError?.message || "No active vendor found" 
+      });
+    }
+
+    const oddsApiKey = vendorData.api_key;
+    console.log("✅ Successfully fetched Odds API key from vendors table");
+
     // Fetch all active triggers
     const { data: triggersData, error: triggersError } = await supabaseAdmin
       .from("triggers")
@@ -134,7 +152,7 @@ export default async function handler(
       try {
         // Fetch odds from API
         const oddsResponse = await fetch(
-          `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${process.env.ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`
+          `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${oddsApiKey}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`
         );
 
         if (!oddsResponse.ok) {
