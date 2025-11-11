@@ -1,4 +1,3 @@
-
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
 
@@ -61,35 +60,50 @@ export default async function handler(
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    console.log("Invoking evaluate-triggers Edge Function...");
+    console.log("🔍 Attempting to invoke Edge Function 'evaluate-triggers'...");
+    console.log("📍 Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+    
     const { data, error } = await supabaseAdmin.functions.invoke(
       "evaluate-triggers",
       { body: {} }
     );
 
+    // Log the FULL error object structure
     if (error) {
-      console.error("❌ Error invoking 'evaluate-triggers':", error);
-      // IMPORTANT: Forward the DETAILED error from the function invocation
+      console.error("❌ Edge Function invocation error:");
+      console.error("  - error object:", JSON.stringify(error, null, 2));
+      console.error("  - error.message:", error.message);
+      console.error("  - error.context:", error.context);
+      console.error("  - error keys:", Object.keys(error));
+      
       return res.status(500).json({
-        error: "Edge Function 'evaluate-triggers' failed.",
-        details: error.message, // e.g., "Relay Error"
-        context: error.context, // The original error from the Edge Function runtime
+        error: "Edge Function invocation failed",
+        errorObject: error,
+        errorMessage: error.message,
+        errorContext: error.context,
+        errorKeys: Object.keys(error),
       });
     }
 
-    console.log("✅ Edge Function response:", data);
+    console.log("✅ Edge Function SUCCESS! Response:", JSON.stringify(data, null, 2));
     return res.status(200).json({
       success: true,
       checked: data?.checked || 0,
       hit: data?.hit || 0,
       message: data?.message || "Manual poll completed",
+      rawData: data,
     });
 
   } catch (error: any) {
     console.error("❌❌❌ CRITICAL API ERROR in manual-poll:", error);
+    console.error("  - Error name:", error.name);
+    console.error("  - Error message:", error.message);
+    console.error("  - Error stack:", error.stack);
+    
     return res.status(500).json({ 
       error: "Internal Server Error in /api/admin/manual-poll",
       details: error.message,
+      errorName: error.name,
       stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
