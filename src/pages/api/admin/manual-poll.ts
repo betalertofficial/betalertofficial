@@ -22,6 +22,7 @@ interface OddsApiEvent {
 
 interface Trigger {
   id: string;
+  user_id: string;
   sport: string;
   event_name: string;
   bet_type: string;
