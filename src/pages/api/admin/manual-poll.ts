@@ -47,15 +47,6 @@ export default async function handler(
       return res.status(401).json({ error: "Unauthorized - No auth header" });
     }
 
-    // Check for required environment variables
-    if (!process.env.ODDS_API_KEY) {
-      console.error("❌ ODDS_API_KEY is not configured");
-      return res.status(500).json({ 
-        error: "Configuration error", 
-        details: "ODDS_API_KEY is not configured. Please add it to your environment variables." 
-      });
-    }
-
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
