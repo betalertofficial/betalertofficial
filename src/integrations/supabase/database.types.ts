@@ -158,6 +158,7 @@ export type Database = {
           bookmaker: string
           commence_time: string | null
           deep_link_url: string | null
+          event_data: Json | null
           event_id: string
           feed_event_id: string | null
           id: string
@@ -171,6 +172,7 @@ export type Database = {
           bookmaker: string
           commence_time?: string | null
           deep_link_url?: string | null
+          event_data?: Json | null
           event_id: string
           feed_event_id?: string | null
           id?: string
@@ -184,6 +186,7 @@ export type Database = {
           bookmaker?: string
           commence_time?: string | null
           deep_link_url?: string | null
+          event_data?: Json | null
           event_id?: string
           feed_event_id?: string | null
           id?: string

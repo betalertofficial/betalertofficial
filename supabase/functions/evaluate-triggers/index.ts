@@ -153,7 +153,7 @@ async function evaluateTriggers() {
       
       const relevantGames = liveGames.filter((game: any) =>
         relevantTriggers.some((trigger) =>
-          game.home_team === trigger.team || game.away_team === trigger.team
+          game.home_team === trigger.team_or_player || game.away_team === trigger.team_or_player
         )
       );
       
@@ -168,7 +168,7 @@ async function evaluateTriggers() {
       }
 
       const eventIds = relevantGames.map((g: any) => g.id).join(",");
-      const oddsUrl = `${baseUrl}/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=h2h&eventIds=${eventIds}`;
+      const oddsUrl = `${baseUrl}/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=h2h,spreads&eventIds=${eventIds}`;
       
       console.log(`📡 API CALL 2: Fetching odds for ${relevantGames.length} events`);
       console.log(`URL: ${oddsUrl.replace(apiKey, "***")}`);
@@ -192,14 +192,18 @@ async function evaluateTriggers() {
       for (const eventData of oddsData) {
         console.log(`\n📊 Processing event: ${eventData.home_team} vs ${eventData.away_team}`);
         
-        // Save snapshot for this specific game
+        // Save ONE snapshot per game with complete event data
         console.log(`💾 Saving odds snapshot for event ${eventData.id}...`);
         const { error: snapshotError } = await supabase
           .from("odds_snapshots")
           .insert({
             sport: sport,
             event_id: eventData.id,
-            event_data: eventData,
+            team_or_player: `${eventData.home_team} vs ${eventData.away_team}`,
+            commence_time: eventData.commence_time,
+            event_data: eventData, // Store complete JSON
+            // Note: Other fields like bookmaker, bet_type, odds_value, deep_link_url are optional
+            // They could be populated for specific bookmaker/market combinations if needed
           });
 
         if (snapshotError) {
@@ -211,42 +215,63 @@ async function evaluateTriggers() {
 
         // Find triggers for this specific event
         const eventTriggers = relevantTriggers.filter((trigger) =>
-          eventData.home_team === trigger.team || eventData.away_team === trigger.team
+          eventData.home_team === trigger.team_or_player || eventData.away_team === trigger.team_or_player
         );
 
         console.log(`Found ${eventTriggers.length} triggers for this event`);
 
         for (const trigger of eventTriggers) {
           triggersChecked++;
-          console.log(`\n🔍 Evaluating trigger ${trigger.id} for ${trigger.team}`);
+          console.log(`\n🔍 Evaluating trigger ${trigger.id} for ${trigger.team_or_player}`);
           
           if (!eventData.bookmakers || eventData.bookmakers.length === 0) {
             console.log(`⚠️ No bookmaker data for trigger ${trigger.id}`);
             continue;
           }
 
-          const bookmaker = eventData.bookmakers[0];
-          const h2hMarket = bookmaker.markets.find((m: any) => m.key === "h2h");
-          
-          if (!h2hMarket) {
-            console.log(`⚠️ No h2h market found for trigger ${trigger.id}`);
+          // Find the market based on bet_type
+          let targetMarketKey = "h2h"; // default to moneyline
+          if (trigger.bet_type === "spread") {
+            targetMarketKey = "spreads";
+          } else if (trigger.bet_type === "total") {
+            targetMarketKey = "totals";
+          }
+
+          // Check each bookmaker for the best/relevant odds
+          let bestOdds: number | null = null;
+          let foundBookmaker: string | null = null;
+
+          for (const bookmaker of eventData.bookmakers) {
+            const market = bookmaker.markets.find((m: any) => m.key === targetMarketKey);
+            if (!market) continue;
+
+            const teamOutcome = market.outcomes.find((o: any) => 
+              o.name === trigger.team_or_player || 
+              o.name.includes(trigger.team_or_player)
+            );
+            
+            if (!teamOutcome) continue;
+
+            const currentOdds = teamOutcome.price;
+            if (bestOdds === null || currentOdds > bestOdds) {
+              bestOdds = currentOdds;
+              foundBookmaker = bookmaker.title;
+            }
+          }
+
+          if (bestOdds === null) {
+            console.log(`⚠️ No odds found for ${trigger.team_or_player} in ${targetMarketKey} market`);
             continue;
           }
 
-          const teamOutcome = h2hMarket.outcomes.find((o: any) => o.name === trigger.team);
-          
-          if (!teamOutcome) {
-            console.log(`⚠️ No outcome found for ${trigger.team}`);
-            continue;
-          }
-
-          const currentOdds = teamOutcome.price;
-          console.log(`Current odds for ${trigger.team}: ${currentOdds}, Target: ${trigger.target_odds}`);
+          console.log(`Current odds for ${trigger.team_or_player}: ${bestOdds} at ${foundBookmaker}, Target: ${trigger.odds_value}`);
 
           let conditionMet = false;
-          if (trigger.condition === "greater_than" && currentOdds > trigger.target_odds) {
+          if (trigger.odds_comparator === "greater_than" && bestOdds > trigger.odds_value) {
             conditionMet = true;
-          } else if (trigger.condition === "less_than" && currentOdds < trigger.target_odds) {
+          } else if (trigger.odds_comparator === "less_than" && bestOdds < trigger.odds_value) {
+            conditionMet = true;
+          } else if (trigger.odds_comparator === "equal_to" && bestOdds === trigger.odds_value) {
             conditionMet = true;
           }
 
@@ -257,10 +282,10 @@ async function evaluateTriggers() {
             const { error: alertError } = await supabase
               .from("alerts")
               .insert({
-                user_id: trigger.user_id,
+                user_id: trigger.vendor_id, // Using vendor_id as user_id based on schema
                 trigger_id: trigger.id,
-                message: `${trigger.team} odds are now ${currentOdds} (${trigger.condition === "greater_than" ? "above" : "below"} ${trigger.target_odds})`,
-                current_odds: currentOdds,
+                message: `${trigger.team_or_player} odds are now ${bestOdds} at ${foundBookmaker} (${trigger.odds_comparator.replace('_', ' ')} ${trigger.odds_value})`,
+                current_odds: bestOdds,
                 triggered_at: new Date().toISOString()
               });
 
@@ -276,7 +301,7 @@ async function evaluateTriggers() {
       }
     }
 
-    const summary = `Checked ${triggersChecked} triggers, ${triggersHit} hit. Processed ${activeSports.length} sports, made ${totalApiCalls} API calls, created ${oddsSnapshotsCreated} odds snapshots.`;
+    const summary = `Checked ${triggersChecked} triggers, ${triggersHit} hit. Processed ${activeSports.length} sports, made ${totalApiCalls} API calls, created ${oddsSnapshotsCreated} odds snapshots (one per game).`;
     console.log(`\n=== ${summary} ===`);
     
     await supabase.from("evaluation_runs").update({
