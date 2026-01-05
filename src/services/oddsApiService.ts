@@ -1,5 +1,6 @@
 const BASE_URL = "https://api.the-odds-api.com/v4";
 const BOOKMAKERS = ["fanduel", "draftkings"];
+const DEFAULT_API_KEY = "8fd23ab732557e3db9238fc571eddbbe";
 
 export interface OddsApiEvent {
   id: string;
@@ -32,7 +33,7 @@ export interface OddsApiOutcome {
 }
 
 export const oddsApiService = {
-  async getSports(apiKey: string) {
+  async getSports(apiKey: string = DEFAULT_API_KEY) {
     const url = `${BASE_URL}/sports?apiKey=${apiKey}`;
     const response = await fetch(url);
     
@@ -43,7 +44,7 @@ export const oddsApiService = {
     return response.json();
   },
 
-  async getOddsForSport(sportKey: string, apiKey: string): Promise<OddsApiEvent[]> {
+  async getOddsForSport(sportKey: string, apiKey: string = DEFAULT_API_KEY): Promise<OddsApiEvent[]> {
     const bookmakerParams = BOOKMAKERS.join(",");
     const url = `${BASE_URL}/sports/${sportKey}/odds?apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=${bookmakerParams}&oddsFormat=american`;
     
@@ -56,7 +57,7 @@ export const oddsApiService = {
     return response.json();
   },
 
-  async getEventOdds(sportKey: string, eventId: string, apiKey: string): Promise<OddsApiEvent> {
+  async getEventOdds(sportKey: string, eventId: string, apiKey: string = DEFAULT_API_KEY): Promise<OddsApiEvent> {
     const bookmakerParams = BOOKMAKERS.join(",");
     const url = `${BASE_URL}/sports/${sportKey}/events/${eventId}/odds?apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=${bookmakerParams}&oddsFormat=american`;
     
