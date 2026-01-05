@@ -17,7 +17,6 @@ export interface OddsApiBookmaker {
   title: string;
   last_update: string;
   markets: OddsApiMarket[];
-  deep_link_url?: string;
 }
 
 export interface OddsApiMarket {
