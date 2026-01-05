@@ -159,27 +159,10 @@ export default async function handler(
 
         const sportKey = sportKeyMap[sport.toUpperCase()] || sport.toLowerCase();
         
-        // Construct Odds API URL
-        const apiUrl = `https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${oddsApiKey}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
-        
-        console.log(`📡 Fetching odds for ${sport} (${sportKey})`);
-        const oddsResponse = await fetch(apiUrl);
-
-        if (!oddsResponse.ok) {
-          const errorText = await oddsResponse.text();
-          console.error(`❌ Odds API error for ${sport} (${oddsResponse.status}):`, errorText);
-          continue;
-        }
-
-        const eventsData: unknown = await oddsResponse.json();
-        
-        if (!Array.isArray(eventsData)) {
-          console.error(`❌ Odds API for ${sport} did not return an array`);
-          continue;
-        }
-
-        const events: OddsApiEvent[] = eventsData;
-        console.log(`✅ Retrieved ${events.length} events for ${sport}`);
+        // Fetch odds for this sport
+        console.log(`Fetching odds for sport: ${sportKey}`);
+        const events = await oddsApiService.getOddsForSport(sportKey, oddsApiKey);
+        console.log(`Found ${events.length} events for ${sportKey}`);
         
         // 8. Check Each Trigger Against Events
         for (const trigger of sportTriggers) {

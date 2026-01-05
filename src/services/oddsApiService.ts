@@ -1,5 +1,3 @@
-
-const ODDS_API_KEY = "8fd23ab732557e3db9238fc571eddbbe";
 const BASE_URL = "https://api.the-odds-api.com/v4";
 const BOOKMAKERS = ["fanduel", "draftkings"];
 
@@ -34,8 +32,8 @@ export interface OddsApiOutcome {
 }
 
 export const oddsApiService = {
-  async getSports() {
-    const url = `${BASE_URL}/sports?apiKey=${ODDS_API_KEY}`;
+  async getSports(apiKey: string) {
+    const url = `${BASE_URL}/sports?apiKey=${apiKey}`;
     const response = await fetch(url);
     
     if (!response.ok) {
@@ -45,9 +43,9 @@ export const oddsApiService = {
     return response.json();
   },
 
-  async getOddsForSport(sportKey: string): Promise<OddsApiEvent[]> {
+  async getOddsForSport(sportKey: string, apiKey: string): Promise<OddsApiEvent[]> {
     const bookmakerParams = BOOKMAKERS.join(",");
-    const url = `${BASE_URL}/sports/${sportKey}/odds?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads&bookmakers=${bookmakerParams}&oddsFormat=american`;
+    const url = `${BASE_URL}/sports/${sportKey}/odds?apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=${bookmakerParams}&oddsFormat=american`;
     
     const response = await fetch(url);
     
@@ -58,9 +56,9 @@ export const oddsApiService = {
     return response.json();
   },
 
-  async getEventOdds(sportKey: string, eventId: string): Promise<OddsApiEvent> {
+  async getEventOdds(sportKey: string, eventId: string, apiKey: string): Promise<OddsApiEvent> {
     const bookmakerParams = BOOKMAKERS.join(",");
-    const url = `${BASE_URL}/sports/${sportKey}/events/${eventId}/odds?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads&bookmakers=${bookmakerParams}&oddsFormat=american`;
+    const url = `${BASE_URL}/sports/${sportKey}/events/${eventId}/odds?apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=${bookmakerParams}&oddsFormat=american`;
     
     const response = await fetch(url);
     
@@ -125,6 +123,35 @@ export const oddsApiService = {
 
       const outcome = spreadMarket.outcomes.find(
         o => o.name.toLowerCase().includes(teamName.toLowerCase())
+      );
+
+      if (outcome && outcome.point !== undefined) {
+        results.push({
+          bookmaker: bookmaker.title,
+          point: outcome.point,
+          odds: outcome.price,
+          deepLink: undefined
+        });
+      }
+    }
+
+    return results;
+  },
+
+  extractTotalsOdds(event: OddsApiEvent, overUnder: "over" | "under") {
+    const results: Array<{
+      bookmaker: string;
+      point: number;
+      odds: number;
+      deepLink?: string;
+    }> = [];
+
+    for (const bookmaker of event.bookmakers) {
+      const totalsMarket = bookmaker.markets.find(m => m.key === "totals");
+      if (!totalsMarket) continue;
+
+      const outcome = totalsMarket.outcomes.find(
+        o => o.name.toLowerCase() === overUnder.toLowerCase()
       );
 
       if (outcome && outcome.point !== undefined) {
