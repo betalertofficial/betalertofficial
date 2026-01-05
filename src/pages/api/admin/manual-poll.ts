@@ -50,7 +50,6 @@ export default async function handler(
     // 1. Validate Required Environment Variables
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const oddsApiKey = process.env.ODDS_API_KEY;
 
     if (!supabaseUrl || !supabaseServiceKey) {
       console.error("❌ Missing Supabase configuration");
@@ -59,16 +58,6 @@ export default async function handler(
         details: "Supabase credentials not configured" 
       });
     }
-
-    if (!oddsApiKey) {
-      console.error("❌ Missing Odds API key");
-      return res.status(500).json({ 
-        error: "Configuration Error", 
-        details: "Odds API key not configured in environment variables" 
-      });
-    }
-
-    console.log("✅ Retrieved Odds API key from environment variables");
 
     // 2. Create Supabase Admin Client (Service Role)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
@@ -97,7 +86,25 @@ export default async function handler(
 
     console.log("✅ Authentication successful, starting trigger evaluation");
 
-    // 4. Fetch Active Triggers
+    // 4. Fetch Odds API Key from vendors table
+    const { data: vendorData, error: vendorError } = await supabaseAdmin
+      .from("vendors")
+      .select("api_key")
+      .eq("name", "The Odds API")
+      .single();
+
+    if (vendorError || !vendorData?.api_key) {
+      console.error("❌ Failed to fetch Odds API key:", vendorError);
+      return res.status(500).json({ 
+        error: "Configuration Error", 
+        details: "Odds API key not found in vendors table" 
+      });
+    }
+
+    const oddsApiKey = vendorData.api_key;
+    console.log("✅ Retrieved Odds API key from vendors table");
+
+    // 5. Fetch Active Triggers
     const { data: triggersData, error: triggersError } = await supabaseAdmin
       .from("triggers")
       .select("id, profile_id, sport, team_or_player, bet_type, odds_comparator, odds_value, frequency, status, vendor_id")
@@ -123,7 +130,7 @@ export default async function handler(
       });
     }
 
-    // 5. Group Triggers by Sport
+    // 6. Group Triggers by Sport
     const triggersBySport = triggers.reduce((acc: { [key: string]: Trigger[] }, trigger) => {
       const sport = trigger.sport || 'upcoming';
       if (!acc[sport]) {
@@ -136,10 +143,10 @@ export default async function handler(
     let totalChecked = 0;
     let totalHit = 0;
 
-    // 6. Process Each Sport
+    // 7. Process Each Sport
     for (const [sport, sportTriggers] of Object.entries(triggersBySport)) {
       console.log(`🏈 Processing ${sportTriggers.length} triggers for sport: ${sport}`);
-      
+
       try {
         // Map sport name to Odds API sport key
         const sportKeyMap: { [key: string]: string } = {
@@ -158,7 +165,7 @@ export default async function handler(
         const events = await oddsApiService.getOddsForSport(sportKey, oddsApiKey);
         console.log(`Found ${events.length} events for ${sportKey}`);
 
-        // 7. Check Each Trigger Against Events
+        // 8. Check Each Trigger Against Events
         for (const trigger of sportTriggers) {
           totalChecked++;
           console.log(`🔍 Checking trigger: ${trigger.team_or_player} (${trigger.bet_type}) ${trigger.odds_comparator} ${trigger.odds_value}`);
@@ -209,7 +216,7 @@ export default async function handler(
               continue;
             }
 
-            // 8. Check Condition
+            // 9. Check Condition
             const thresholdValue = parseFloat(trigger.odds_value);
             let conditionMet = false;
 
@@ -225,7 +232,7 @@ export default async function handler(
               conditionMet = true;
             }
 
-            // 9. Create Alert if Condition Met
+            // 10. Create Alert if Condition Met
             if (conditionMet) {
               totalHit++;
               const eventName = `${matchingEvent.away_team} @ ${matchingEvent.home_team}`;
