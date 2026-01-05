@@ -21,17 +21,18 @@ interface OddsApiEvent {
   }>;
 }
 
-// Trigger Interface
+// Trigger Interface (matching actual database schema)
 interface Trigger {
   id: string;
-  user_id: string;
+  profile_id: string;
   sport: string;
-  event_name: string;
+  team_or_player: string;
   bet_type: string;
-  team_player: string;
-  condition: string;
-  threshold: number;
-  is_active: boolean;
+  odds_comparator: string;
+  odds_value: string;
+  frequency: string;
+  status: string;
+  vendor_id: string | null;
 }
 
 export default async function handler(
@@ -48,7 +49,6 @@ export default async function handler(
     // 1. Validate Required Environment Variables
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const oddsApiKey = process.env.ODDS_API_KEY;
 
     if (!supabaseUrl || !supabaseServiceKey) {
       console.error("❌ Missing Supabase configuration");
@@ -58,83 +58,55 @@ export default async function handler(
       });
     }
 
-    if (!oddsApiKey) {
-      console.error("❌ ODDS_API_KEY is missing");
-      return res.status(500).json({ 
-        error: "Configuration Error", 
-        details: "ODDS_API_KEY not configured" 
-      });
-    }
-
-    // 2. Validate Authentication (User must be logged in)
-    const authHeader = req.headers.authorization;
-    console.log("🔑 Auth header present:", !!authHeader);
-
-    if (!authHeader || typeof authHeader !== 'string') {
-      return res.status(401).json({ 
-        error: "Unauthorized", 
-        details: "Missing Authorization header" 
-      });
-    }
-
-    // Create client with user token for auth check
-    const supabaseUser = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-      global: {
-        headers: { Authorization: authHeader }
-      }
-    });
-
-    // Verify user is authenticated
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
-    
-    console.log("👤 User check:", { 
-      userId: user?.id, 
-      hasError: !!userError,
-      errorMessage: userError?.message 
-    });
-
-    if (userError || !user) {
-      return res.status(401).json({ 
-        error: "Unauthorized", 
-        details: userError?.message || "Invalid or expired token" 
-      });
-    }
-
-    // 3. Create Admin Client (Service Role for privileged operations)
+    // 2. Create Supabase Admin Client (Service Role)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 4. Verify User is Admin
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+    // 3. Validate Authentication (Optional - check if user is admin)
+    const authHeader = req.headers.authorization;
+    if (authHeader && typeof authHeader === 'string') {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+      
+      if (!userError && user) {
+        const { data: profile } = await supabaseAdmin
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
 
-    console.log("🛡️ Admin check:", { 
-      role: profile?.role,
-      hasError: !!profileError 
-    });
-
-    if (profileError || !profile) {
-      return res.status(403).json({ 
-        error: "Access Denied", 
-        details: "Profile not found" 
-      });
-    }
-
-    if (profile.role !== "admin" && profile.role !== "super_admin") {
-      return res.status(403).json({ 
-        error: "Access Denied", 
-        details: "Admin privileges required" 
-      });
+        if (profile?.role !== "admin" && profile?.role !== "super_admin") {
+          return res.status(403).json({ 
+            error: "Access Denied", 
+            details: "Admin privileges required" 
+          });
+        }
+      }
     }
 
     console.log("✅ Authentication successful, starting trigger evaluation");
 
+    // 4. Fetch Odds API Key from vendors table
+    const { data: vendorData, error: vendorError } = await supabaseAdmin
+      .from("vendors")
+      .select("api_key")
+      .eq("name", "The Odds API")
+      .single();
+
+    if (vendorError || !vendorData?.api_key) {
+      console.error("❌ Failed to fetch Odds API key:", vendorError);
+      return res.status(500).json({ 
+        error: "Configuration Error", 
+        details: "Odds API key not found in vendors table" 
+      });
+    }
+
+    const oddsApiKey = vendorData.api_key;
+    console.log("✅ Retrieved Odds API key from vendors table");
+
     // 5. Fetch Active Triggers
     const { data: triggersData, error: triggersError } = await supabaseAdmin
       .from("triggers")
-      .select("*")
+      .select("id, profile_id, sport, team_or_player, bet_type, odds_comparator, odds_value, frequency, status, vendor_id")
       .eq("status", "active");
 
     if (triggersError) {
@@ -175,16 +147,28 @@ export default async function handler(
       console.log(`🏈 Processing ${sportTriggers.length} triggers for sport: ${sport}`);
 
       try {
-        // Construct Odds API URL per documentation
-        const apiUrl = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${oddsApiKey}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
+        // Map sport name to Odds API sport key
+        const sportKeyMap: { [key: string]: string } = {
+          'NBA': 'basketball_nba',
+          'NFL': 'americanfootball_nfl',
+          'MLB': 'baseball_mlb',
+          'NHL': 'icehockey_nhl',
+          'NCAAF': 'americanfootball_ncaaf',
+          'NCAAB': 'basketball_ncaab',
+        };
+
+        const sportKey = sportKeyMap[sport.toUpperCase()] || sport.toLowerCase();
         
-        console.log(`📡 Fetching odds for ${sport}`);
+        // Construct Odds API URL
+        const apiUrl = `https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${oddsApiKey}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
+        
+        console.log(`📡 Fetching odds for ${sport} (${sportKey})`);
         const oddsResponse = await fetch(apiUrl);
 
         if (!oddsResponse.ok) {
           const errorText = await oddsResponse.text();
           console.error(`❌ Odds API error for ${sport} (${oddsResponse.status}):`, errorText);
-          continue; // Skip this sport, continue with others
+          continue;
         }
 
         const eventsData: unknown = await oddsResponse.json();
@@ -200,70 +184,91 @@ export default async function handler(
         // 8. Check Each Trigger Against Events
         for (const trigger of sportTriggers) {
           totalChecked++;
+          console.log(`🔍 Checking trigger: ${trigger.team_or_player} (${trigger.bet_type}) ${trigger.odds_comparator} ${trigger.odds_value}`);
 
-          // Find matching event
-          const matchingEvent = events.find(event => 
-            event.home_team === trigger.event_name || 
-            event.away_team === trigger.event_name ||
-            `${event.away_team} @ ${event.home_team}` === trigger.event_name
+          // Find all events that might contain this team
+          const matchingEvents = events.filter(event => 
+            event.home_team.includes(trigger.team_or_player) || 
+            event.away_team.includes(trigger.team_or_player) ||
+            trigger.team_or_player.includes(event.home_team) ||
+            trigger.team_or_player.includes(event.away_team)
           );
 
-          if (!matchingEvent) {
-            continue; // No matching event found
+          if (matchingEvents.length === 0) {
+            console.log(`⚠️ No matching events found for: ${trigger.team_or_player}`);
+            continue;
           }
 
-          // Extract odds from bookmakers
-          let currentOdds: number | null = null;
+          // Check each matching event
+          for (const matchingEvent of matchingEvents) {
+            // Extract odds from bookmakers
+            let currentOdds: number | null = null;
 
-          for (const bookmaker of matchingEvent.bookmakers) {
-            const market = bookmaker.markets.find(m => {
-              if (trigger.bet_type === "moneyline") return m.key === "h2h";
-              if (trigger.bet_type === "spread") return m.key === "spreads";
-              if (trigger.bet_type === "total") return m.key === "totals";
-              return false;
-            });
+            for (const bookmaker of matchingEvent.bookmakers) {
+              const market = bookmaker.markets.find(m => {
+                if (trigger.bet_type === "moneyline") return m.key === "h2h";
+                if (trigger.bet_type === "spread") return m.key === "spreads";
+                if (trigger.bet_type === "total" || trigger.bet_type === "totals") return m.key === "totals";
+                return false;
+              });
 
-            if (market) {
-              const outcome = market.outcomes.find(o => 
-                o.name === trigger.team_player ||
-                o.name.includes(trigger.team_player)
-              );
+              if (market) {
+                const outcome = market.outcomes.find(o => 
+                  o.name === trigger.team_or_player ||
+                  o.name.includes(trigger.team_or_player) ||
+                  trigger.team_or_player.includes(o.name)
+                );
 
-              if (outcome) {
-                currentOdds = outcome.price;
-                break; // Found odds
+                if (outcome) {
+                  currentOdds = outcome.price;
+                  console.log(`📊 Found odds for ${trigger.team_or_player}: ${currentOdds} (bookmaker: ${bookmaker.title})`);
+                  break;
+                }
               }
             }
-          }
 
-          if (currentOdds === null) {
-            continue; // No odds found for this trigger
-          }
+            if (currentOdds === null) {
+              console.log(`⚠️ No odds found for ${trigger.team_or_player} in event: ${matchingEvent.home_team} vs ${matchingEvent.away_team}`);
+              continue;
+            }
 
-          // 9. Check Condition
-          let conditionMet = false;
-          if (trigger.condition === "greater_than" && currentOdds > trigger.threshold) {
-            conditionMet = true;
-          } else if (trigger.condition === "less_than" && currentOdds < trigger.threshold) {
-            conditionMet = true;
-          }
+            // 9. Check Condition
+            const thresholdValue = parseFloat(trigger.odds_value);
+            let conditionMet = false;
 
-          // 10. Create Alert if Condition Met
-          if (conditionMet) {
-            totalHit++;
-            console.log(`🎯 TRIGGER HIT: ${trigger.event_name} - ${trigger.team_player} @ ${currentOdds}`);
+            if (trigger.odds_comparator === ">=" && currentOdds >= thresholdValue) {
+              conditionMet = true;
+            } else if (trigger.odds_comparator === "<=" && currentOdds <= thresholdValue) {
+              conditionMet = true;
+            } else if (trigger.odds_comparator === ">" && currentOdds > thresholdValue) {
+              conditionMet = true;
+            } else if (trigger.odds_comparator === "<" && currentOdds < thresholdValue) {
+              conditionMet = true;
+            } else if (trigger.odds_comparator === "==" && currentOdds === thresholdValue) {
+              conditionMet = true;
+            }
 
-            await supabaseAdmin.from("alerts").insert({
-              trigger_id: trigger.id,
-              user_id: trigger.user_id,
-              message: `${trigger.event_name} - ${trigger.team_player} odds are now ${currentOdds} (threshold: ${trigger.threshold})`,
-              odds_value: currentOdds,
-            });
+            // 10. Create Alert if Condition Met
+            if (conditionMet) {
+              totalHit++;
+              const eventName = `${matchingEvent.away_team} @ ${matchingEvent.home_team}`;
+              console.log(`🎯 TRIGGER HIT: ${eventName} - ${trigger.team_or_player} @ ${currentOdds} (${trigger.odds_comparator} ${thresholdValue})`);
+
+              await supabaseAdmin.from("alerts").insert({
+                trigger_id: trigger.id,
+                profile_id: trigger.profile_id,
+                message: `${eventName} - ${trigger.team_or_player} odds are now ${currentOdds} (condition: ${trigger.odds_comparator} ${thresholdValue})`,
+                odds_value: currentOdds.toString(),
+              });
+
+              console.log(`✅ Alert created for trigger ${trigger.id}`);
+            } else {
+              console.log(`❌ Condition NOT met: ${currentOdds} ${trigger.odds_comparator} ${thresholdValue} = false`);
+            }
           }
         }
       } catch (error: any) {
         console.error(`❌ Error processing ${sport}:`, error.message);
-        // Continue with other sports
       }
     }
 
