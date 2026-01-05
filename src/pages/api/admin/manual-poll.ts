@@ -135,7 +135,7 @@ export default async function handler(
     const { data: triggersData, error: triggersError } = await supabaseAdmin
       .from("triggers")
       .select("*")
-      .eq("is_active", true);
+      .eq("status", "active");
 
     if (triggersError) {
       console.error("❌ Error fetching triggers:", triggersError);
