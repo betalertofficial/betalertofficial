@@ -146,10 +146,11 @@ export const adminService = {
   },
 
   async manualPollAndCheckTriggers(): Promise<{ checked: number; hit: number; message: string }> {
-    const { data: { session } } = await supabase.auth.getSession();
+    // Get fresh session
+    const { data: { session }, error } = await supabase.auth.getSession();
     
-    if (!session) {
-      throw new Error("No active session");
+    if (error || !session) {
+      throw new Error("No active session - please log in again");
     }
 
     const response = await fetch("/api/admin/manual-poll", {
@@ -163,10 +164,12 @@ export const adminService = {
     if (!response.ok) {
       let errorMessage = "Failed to run manual poll";
       try {
-        const error = await response.json();
-        errorMessage = error.error || error.details || errorMessage;
+        const errorData = await response.json();
+        console.error("Manual poll failed details:", errorData);
+        errorMessage = errorData.error || errorData.details || errorMessage;
       } catch (e) {
         const text = await response.text();
+        console.error("Manual poll failed text:", text);
         errorMessage = text || `HTTP ${response.status}: ${response.statusText}`;
       }
       throw new Error(errorMessage);
