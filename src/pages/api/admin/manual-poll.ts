@@ -2,6 +2,9 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
 import { oddsApiService } from "@/services/oddsApiService";
 
+// Hardcoded API key for now
+const ODDS_API_KEY = "8fd23ab732557e3db9238fc571eddbbe";
+
 // Odds API Event Interface
 interface OddsApiEvent {
   id: string;
@@ -36,6 +39,16 @@ interface Trigger {
   vendor_id: string | null;
 }
 
+// Sport mapping
+const SPORT_KEY_MAP: Record<string, string> = {
+  NBA: "basketball_nba",
+  NFL: "americanfootball_nfl",
+  MLB: "baseball_mlb",
+  NHL: "icehockey_nhl",
+  NCAAB: "basketball_ncaab",
+  NCAAF: "americanfootball_ncaaf"
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -45,100 +58,69 @@ export default async function handler(
   }
 
   try {
-    console.log("🔍 Manual poll request received");
-
-    // 1. Validate Required Environment Variables
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("❌ Missing Supabase configuration");
-      return res.status(500).json({ 
-        error: "Configuration Error", 
-        details: "Supabase credentials not configured" 
-      });
-    }
-
-    // 2. Create Supabase Admin Client (Service Role)
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-    // 3. Validate Authentication (Optional - check if user is admin)
     const authHeader = req.headers.authorization;
-    if (authHeader && typeof authHeader === 'string') {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-      
-      if (!userError && user) {
-        const { data: profile } = await supabaseAdmin
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .single();
-
-        if (profile?.role !== "admin" && profile?.role !== "super_admin") {
-          return res.status(403).json({ 
-            error: "Access Denied", 
-            details: "Admin privileges required" 
-          });
-        }
-      }
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Missing authorization token" });
     }
 
-    console.log("✅ Authentication successful, starting trigger evaluation");
+    const token = authHeader.substring(7);
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-    // 4. Fetch Odds API Key from vendors table
-    const { data: vendorData, error: vendorError } = await supabaseAdmin
-      .from("vendors")
-      .select("api_key")
-      .eq("name", "The Odds API")
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Verify the user is an admin
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
       .single();
 
-    if (vendorError || !vendorData?.api_key) {
-      console.error("❌ Failed to fetch Odds API key:", vendorError);
-      return res.status(500).json({ 
-        error: "Configuration Error", 
-        details: "Odds API key not found in vendors table" 
-      });
+    if (profileError || !profile || (profile.role !== "admin" && profile.role !== "super_admin")) {
+      return res.status(403).json({ error: "Unauthorized - Admin access required" });
     }
 
-    const oddsApiKey = vendorData.api_key;
-    console.log("✅ Retrieved Odds API key from vendors table");
+    console.log("Starting manual poll and trigger check...");
 
-    // 5. Fetch Active Triggers
-    const { data: triggersData, error: triggersError } = await supabaseAdmin
+    // Fetch all active triggers
+    const { data: triggers, error: triggersError } = await supabase
       .from("triggers")
-      .select("id, profile_id, sport, team_or_player, bet_type, odds_comparator, odds_value, frequency, status, vendor_id")
+      .select("*")
       .eq("status", "active");
 
     if (triggersError) {
-      console.error("❌ Error fetching triggers:", triggersError);
-      return res.status(500).json({ 
-        error: "Database Error", 
-        details: triggersError.message 
-      });
+      console.error("Error fetching triggers:", triggersError);
+      throw new Error(`Database Error: ${triggersError.message}`);
     }
 
-    const triggers: Trigger[] = triggersData || [];
-    console.log(`📊 Found ${triggers.length} active triggers`);
+    console.log(`Found ${triggers?.length || 0} active triggers to check`);
 
-    if (triggers.length === 0) {
+    if (!triggers || triggers.length === 0) {
       return res.status(200).json({
-        success: true,
         checked: 0,
         hit: 0,
         message: "No active triggers to check"
       });
     }
 
+    // Type assertion for triggers
+    const typedTriggers = triggers as Trigger[];
+
     // 6. Group Triggers by Sport
-    const triggersBySport = triggers.reduce((acc: { [key: string]: Trigger[] }, trigger) => {
+    const triggersBySport: Record<string, Trigger[]> = {};
+    
+    for (const trigger of typedTriggers) {
       const sport = trigger.sport || 'upcoming';
-      if (!acc[sport]) {
-        acc[sport] = [];
+      if (!triggersBySport[sport]) {
+        triggersBySport[sport] = [];
       }
-      acc[sport].push(trigger);
-      return acc;
-    }, {});
+      triggersBySport[sport].push(trigger);
+    }
 
     let totalChecked = 0;
     let totalHit = 0;
@@ -162,7 +144,7 @@ export default async function handler(
         
         // Fetch odds for this sport
         console.log(`Fetching odds for sport: ${sportKey}`);
-        const events = await oddsApiService.getOddsForSport(sportKey, oddsApiKey);
+        const events = await oddsApiService.getOddsForSport(sportKey, ODDS_API_KEY) as OddsApiEvent[];
         console.log(`Found ${events.length} events for ${sportKey}`);
         
         // 8. Check Each Trigger Against Events
@@ -171,7 +153,7 @@ export default async function handler(
           console.log(`🔍 Checking trigger: ${trigger.team_or_player} (${trigger.bet_type}) ${trigger.odds_comparator} ${trigger.odds_value}`);
 
           // Find all events that might contain this team
-          const matchingEvents = events.filter(event => 
+          const matchingEvents = events.filter((event: OddsApiEvent) => 
             event.home_team.includes(trigger.team_or_player) || 
             event.away_team.includes(trigger.team_or_player) ||
             trigger.team_or_player.includes(event.home_team) ||
@@ -238,7 +220,7 @@ export default async function handler(
               const eventName = `${matchingEvent.away_team} @ ${matchingEvent.home_team}`;
               console.log(`🎯 TRIGGER HIT: ${eventName} - ${trigger.team_or_player} @ ${currentOdds} (${trigger.odds_comparator} ${thresholdValue})`);
 
-              await supabaseAdmin.from("alerts").insert({
+              await supabase.from("alerts").insert({
                 trigger_id: trigger.id,
                 profile_id: trigger.profile_id,
                 message: `${eventName} - ${trigger.team_or_player} odds are now ${currentOdds} (condition: ${trigger.odds_comparator} ${thresholdValue})`,
