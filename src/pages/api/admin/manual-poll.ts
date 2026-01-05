@@ -50,6 +50,7 @@ export default async function handler(
     // 1. Validate Required Environment Variables
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const oddsApiKey = process.env.ODDS_API_KEY;
 
     if (!supabaseUrl || !supabaseServiceKey) {
       console.error("❌ Missing Supabase configuration");
@@ -58,6 +59,16 @@ export default async function handler(
         details: "Supabase credentials not configured" 
       });
     }
+
+    if (!oddsApiKey) {
+      console.error("❌ Missing Odds API key");
+      return res.status(500).json({ 
+        error: "Configuration Error", 
+        details: "Odds API key not configured in environment variables" 
+      });
+    }
+
+    console.log("✅ Retrieved Odds API key from environment variables");
 
     // 2. Create Supabase Admin Client (Service Role)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
@@ -86,25 +97,7 @@ export default async function handler(
 
     console.log("✅ Authentication successful, starting trigger evaluation");
 
-    // 4. Fetch Odds API Key from vendors table
-    const { data: vendorData, error: vendorError } = await supabaseAdmin
-      .from("vendors")
-      .select("api_key")
-      .eq("name", "The Odds API")
-      .single();
-
-    if (vendorError || !vendorData?.api_key) {
-      console.error("❌ Failed to fetch Odds API key:", vendorError);
-      return res.status(500).json({ 
-        error: "Configuration Error", 
-        details: "Odds API key not found in vendors table" 
-      });
-    }
-
-    const oddsApiKey = vendorData.api_key;
-    console.log("✅ Retrieved Odds API key from vendors table");
-
-    // 5. Fetch Active Triggers
+    // 4. Fetch Active Triggers
     const { data: triggersData, error: triggersError } = await supabaseAdmin
       .from("triggers")
       .select("id, profile_id, sport, team_or_player, bet_type, odds_comparator, odds_value, frequency, status, vendor_id")
@@ -130,7 +123,7 @@ export default async function handler(
       });
     }
 
-    // 6. Group Triggers by Sport
+    // 5. Group Triggers by Sport
     const triggersBySport = triggers.reduce((acc: { [key: string]: Trigger[] }, trigger) => {
       const sport = trigger.sport || 'upcoming';
       if (!acc[sport]) {
@@ -143,12 +136,7 @@ export default async function handler(
     let totalChecked = 0;
     let totalHit = 0;
 
-    // Arrays to collect snapshots, matches, and alerts for batch insert
-    const allOddsSnapshots: any[] = [];
-    const allTriggerMatches: any[] = [];
-    const allAlerts: any[] = [];
-
-    // 7. Process Each Sport
+    // 6. Process Each Sport
     for (const [sport, sportTriggers] of Object.entries(triggersBySport)) {
       console.log(`🏈 Processing ${sportTriggers.length} triggers for sport: ${sport}`);
       
@@ -170,7 +158,7 @@ export default async function handler(
         const events = await oddsApiService.getOddsForSport(sportKey, oddsApiKey);
         console.log(`Found ${events.length} events for ${sportKey}`);
 
-        // 8. Check Each Trigger Against Events
+        // 7. Check Each Trigger Against Events
         for (const trigger of sportTriggers) {
           totalChecked++;
           console.log(`🔍 Checking trigger: ${trigger.team_or_player} (${trigger.bet_type}) ${trigger.odds_comparator} ${trigger.odds_value}`);
@@ -192,7 +180,6 @@ export default async function handler(
           for (const matchingEvent of matchingEvents) {
             // Extract odds from bookmakers
             let currentOdds: number | null = null;
-            let matchingBookmaker: string | null = null;
 
             for (const bookmaker of matchingEvent.bookmakers) {
               const market = bookmaker.markets.find(m => {
@@ -211,24 +198,6 @@ export default async function handler(
 
                 if (outcome) {
                   currentOdds = outcome.price;
-                  matchingBookmaker = bookmaker.title;
-                  
-                  // STEP 1: Collect odds snapshot data
-                  allOddsSnapshots.push({
-                    sport: sport,
-                    feed_event_id: matchingEvent.id,
-                    team_or_player: trigger.team_or_player,
-                    bookmaker: bookmaker.title,
-                    bet_type: trigger.bet_type,
-                    odds_value: currentOdds.toString(),
-                    commence_time: matchingEvent.commence_time,
-                    event_data: {
-                      home_team: matchingEvent.home_team,
-                      away_team: matchingEvent.away_team,
-                      sport_key: matchingEvent.sport_key
-                    }
-                  });
-
                   console.log(`📊 Found odds for ${trigger.team_or_player}: ${currentOdds} (bookmaker: ${bookmaker.title})`);
                   break;
                 }
@@ -240,7 +209,7 @@ export default async function handler(
               continue;
             }
 
-            // 9. Check Condition
+            // 8. Check Condition
             const thresholdValue = parseFloat(trigger.odds_value);
             let conditionMet = false;
 
@@ -256,24 +225,20 @@ export default async function handler(
               conditionMet = true;
             }
 
-            // 10. If Condition Met, prepare trigger match and alert data
+            // 9. Create Alert if Condition Met
             if (conditionMet) {
               totalHit++;
               const eventName = `${matchingEvent.away_team} @ ${matchingEvent.home_team}`;
               console.log(`🎯 TRIGGER HIT: ${eventName} - ${trigger.team_or_player} @ ${currentOdds} (${trigger.odds_comparator} ${thresholdValue})`);
-              
-              // Store match data (we'll insert after snapshots are saved)
-              allTriggerMatches.push({
+
+              await supabaseAdmin.from("alerts").insert({
                 trigger_id: trigger.id,
-                matched_value: currentOdds.toString(),
-                // odds_snapshot_id will be added after snapshots are inserted
-                metadata: {
-                  event_name: eventName,
-                  bookmaker: matchingBookmaker,
-                  profile_id: trigger.profile_id
-                }
+                profile_id: trigger.profile_id,
+                message: `${eventName} - ${trigger.team_or_player} odds are now ${currentOdds} (condition: ${trigger.odds_comparator} ${thresholdValue})`,
+                odds_value: currentOdds.toString(),
               });
 
+              console.log(`✅ Alert created for trigger ${trigger.id}`);
             } else {
               console.log(`❌ Condition NOT met: ${currentOdds} ${trigger.odds_comparator} ${thresholdValue} = false`);
             }
@@ -284,77 +249,8 @@ export default async function handler(
       }
     }
 
-    // STEP 1: Insert all odds snapshots
-    let snapshotIds: string[] = [];
-    if (allOddsSnapshots.length > 0) {
-      console.log(`💾 Inserting ${allOddsSnapshots.length} odds snapshots...`);
-      const { data: insertedSnapshots, error: snapshotError } = await supabaseAdmin
-        .from("odds_snapshots")
-        .insert(allOddsSnapshots)
-        .select("id");
-
-      if (snapshotError) {
-        console.error("❌ Error inserting odds snapshots:", snapshotError);
-      } else {
-        snapshotIds = insertedSnapshots?.map(s => s.id) || [];
-        console.log(`✅ Inserted ${snapshotIds.length} odds snapshots`);
-      }
-    }
-
-    // STEP 2: Insert trigger matches (link trigger_id to odds_snapshot_id)
-    let matchIds: string[] = [];
-    if (allTriggerMatches.length > 0 && snapshotIds.length > 0) {
-      console.log(`💾 Inserting ${allTriggerMatches.length} trigger matches...`);
-      
-      // Find the snapshot ID for each match (match by index since we inserted in order)
-      const matchesWithSnapshotIds = allTriggerMatches.map((match, index) => ({
-        trigger_id: match.trigger_id,
-        odds_snapshot_id: snapshotIds[Math.min(index, snapshotIds.length - 1)], // Use corresponding snapshot
-        matched_value: match.matched_value
-      }));
-
-      const { data: insertedMatches, error: matchError } = await supabaseAdmin
-        .from("trigger_matches")
-        .insert(matchesWithSnapshotIds)
-        .select("id");
-
-      if (matchError) {
-        console.error("❌ Error inserting trigger matches:", matchError);
-      } else {
-        matchIds = insertedMatches?.map(m => m.id) || [];
-        console.log(`✅ Inserted ${matchIds.length} trigger matches`);
-      }
-    }
-
-    // STEP 3: Insert alerts (link trigger_match_id to profile_id)
-    if (matchIds.length > 0) {
-      console.log(`💾 Inserting ${matchIds.length} alerts...`);
-      
-      const alertsToInsert = matchIds.map((matchId, index) => {
-        const matchData = allTriggerMatches[index];
-        const eventName = matchData.metadata.event_name;
-        const bookmaker = matchData.metadata.bookmaker;
-        const profileId = matchData.metadata.profile_id;
-        
-        return {
-          trigger_match_id: matchId,
-          profile_id: profileId,
-          message: `${eventName} - odds are now ${matchData.matched_value} on ${bookmaker}`
-        };
-      });
-
-      const { error: alertError } = await supabaseAdmin
-        .from("alerts")
-        .insert(alertsToInsert);
-
-      if (alertError) {
-        console.error("❌ Error inserting alerts:", alertError);
-      } else {
-        console.log(`✅ Inserted ${alertsToInsert.length} alerts`);
-      }
-    }
-
     console.log(`✅ Manual poll complete: ${totalChecked} checked, ${totalHit} hit`);
+
     return res.status(200).json({
       success: true,
       checked: totalChecked,
