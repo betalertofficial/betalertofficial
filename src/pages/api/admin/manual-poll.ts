@@ -39,6 +39,23 @@ interface DatabaseTrigger {
   status: string;
 }
 
+interface OddsSnapshotInsert {
+  sport: string;
+  event_id: string;
+  team_or_player: string;
+  bookmaker: string;
+  bet_type: string;
+  odds_value: number;
+  deep_link_url: string | null;
+  commence_time: string;
+  event_data: any;
+}
+
+interface TriggerMatchInsert {
+  trigger_id: string;
+  odds_snapshot_id: string;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -120,8 +137,9 @@ export default async function handler(
 
     let totalChecked = 0;
     let totalHit = 0;
-    const snapshotsToInsert: any[] = [];
+    const snapshotsToInsert: OddsSnapshotInsert[] = [];
     const alertsToInsert: any[] = [];
+    const triggerHits: Array<{ triggerId: string; snapshotData: OddsSnapshotInsert }> = [];
 
     // Map our sport names to Odds API sport keys
     const sportKeyMap: Record<string, string> = {
@@ -186,8 +204,8 @@ export default async function handler(
 
               const currentOdds = outcome.price;
 
-              // Save odds snapshot
-              snapshotsToInsert.push({
+              // Prepare odds snapshot data
+              const snapshotData: OddsSnapshotInsert = {
                 sport: trigger.sport,
                 event_id: event.id,
                 team_or_player: trigger.team_or_player,
@@ -197,7 +215,10 @@ export default async function handler(
                 deep_link_url: null,
                 commence_time: event.commence_time,
                 event_data: event
-              });
+              };
+
+              // Save odds snapshot
+              snapshotsToInsert.push(snapshotData);
 
               // Check if trigger condition is met
               let conditionMet = false;
@@ -223,6 +244,12 @@ export default async function handler(
                 console.log(`🎯 TRIGGER HIT! ${trigger.team_or_player} ${trigger.bet_type} ${trigger.odds_comparator} ${trigger.odds_value} (current: ${currentOdds})`);
                 totalHit++;
 
+                // Store trigger hit data (we'll link it to snapshot after insertion)
+                triggerHits.push({
+                  triggerId: trigger.id,
+                  snapshotData
+                });
+
                 // Create alert message
                 const message = `${trigger.team_or_player} ${trigger.bet_type} odds are ${currentOdds} (${trigger.odds_comparator} ${trigger.odds_value}) on ${bookmaker.title}`;
 
@@ -247,17 +274,53 @@ export default async function handler(
       }
     }
 
-    // Batch insert odds snapshots
+    // Batch insert odds snapshots and get their IDs
+    const triggerMatchesToInsert: TriggerMatchInsert[] = [];
+    
     if (snapshotsToInsert.length > 0) {
       console.log(`Inserting ${snapshotsToInsert.length} odds snapshots`);
-      const { error: snapshotError } = await supabase
+      const { data: insertedSnapshots, error: snapshotError } = await supabase
         .from("odds_snapshots")
-        .insert(snapshotsToInsert);
+        .insert(snapshotsToInsert)
+        .select("id, sport, event_id, team_or_player, bookmaker, bet_type, odds_value");
 
       if (snapshotError) {
         console.error("Error inserting odds snapshots:", snapshotError);
+      } else if (insertedSnapshots) {
+        console.log(`✅ Successfully saved ${insertedSnapshots.length} odds snapshots`);
+
+        // Match trigger hits with their corresponding snapshot IDs
+        for (const hit of triggerHits) {
+          const matchingSnapshot = insertedSnapshots.find(snapshot =>
+            snapshot.sport === hit.snapshotData.sport &&
+            snapshot.event_id === hit.snapshotData.event_id &&
+            snapshot.team_or_player === hit.snapshotData.team_or_player &&
+            snapshot.bookmaker === hit.snapshotData.bookmaker &&
+            snapshot.bet_type === hit.snapshotData.bet_type &&
+            snapshot.odds_value === hit.snapshotData.odds_value
+          );
+
+          if (matchingSnapshot) {
+            triggerMatchesToInsert.push({
+              trigger_id: hit.triggerId,
+              odds_snapshot_id: matchingSnapshot.id
+            });
+          }
+        }
+      }
+    }
+
+    // Insert trigger matches
+    if (triggerMatchesToInsert.length > 0) {
+      console.log(`Inserting ${triggerMatchesToInsert.length} trigger matches`);
+      const { error: matchError } = await supabase
+        .from("trigger_matches")
+        .insert(triggerMatchesToInsert);
+
+      if (matchError) {
+        console.error("Error inserting trigger matches:", matchError);
       } else {
-        console.log(`✅ Successfully saved ${snapshotsToInsert.length} odds snapshots`);
+        console.log(`✅ Successfully created ${triggerMatchesToInsert.length} trigger matches`);
       }
     }
 
@@ -281,7 +344,8 @@ export default async function handler(
     return res.status(200).json({
       checked: totalChecked,
       hit: totalHit,
-      message: `Checked ${totalChecked} triggers, ${alertsToInsert.length} alerts created`
+      matches: triggerMatchesToInsert.length,
+      message: `Checked ${totalChecked} triggers, ${alertsToInsert.length} alerts created, ${triggerMatchesToInsert.length} matches recorded`
     });
 
   } catch (error: any) {
