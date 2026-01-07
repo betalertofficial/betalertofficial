@@ -11,7 +11,7 @@ export interface AdminStats {
 
 export interface AdminSettings {
   oddsPollingEnabled: boolean;
-  pollingIntervalMinutes: number;
+  pollingIntervalSeconds: number;
   maxApiCallsPerHour: number;
 }
 
@@ -110,7 +110,7 @@ export const adminService = {
 
     return {
       oddsPollingEnabled: settings.odds_polling_status === "true",
-      pollingIntervalMinutes: Math.floor(parseInt(settings.polling_interval_seconds || "30") / 60),
+      pollingIntervalSeconds: parseInt(settings.polling_interval_seconds || "30"),
       maxApiCallsPerHour: parseInt(settings.max_polling_api_per_hour || "120")
     };
   },

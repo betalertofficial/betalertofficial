@@ -99,8 +99,8 @@ export default function AdminPage() {
       
       setStats(statsData);
       setPollingEnabled(settingsData.oddsPollingEnabled);
-      setPollingInterval(settingsData.pollingIntervalMinutes * 60); // Convert minutes to seconds
-      setTempInterval(String(settingsData.pollingIntervalMinutes * 60));
+      setPollingInterval(settingsData.pollingIntervalSeconds);
+      setTempInterval(String(settingsData.pollingIntervalSeconds));
     } catch (error) {
       console.error("Error loading admin data:", error);
     }
