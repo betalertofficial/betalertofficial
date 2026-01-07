@@ -268,13 +268,12 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       });
 
       const trigger = await triggerService.createTrigger({
-        sport: selectedSport,
+        sport: "NBA", // Hardcode to NBA for now, will align with API keys later
         team_or_player: selectedTeam,
-        team_id: selectedTeamId,
         bet_type: betType,
         odds_comparator: oddsComparator,
-        odds_value: finalOddsValue,
-        frequency,
+        odds_value: parseFloat(oddsValue),
+        frequency: frequency,
         status: "active",
         vendor_id: oddsApiVendor.id,
         bookmaker: sportsbook
