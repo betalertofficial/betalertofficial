@@ -313,14 +313,18 @@ export default async function handler(
     // Insert trigger matches
     if (triggerMatchesToInsert.length > 0) {
       console.log(`Inserting ${triggerMatchesToInsert.length} trigger matches`);
-      const { error: matchError } = await supabase
+      const { data: insertedMatches, error: matchError } = await supabase
         .from("trigger_matches")
-        .insert(triggerMatchesToInsert);
+        .insert(triggerMatchesToInsert)
+        .select();
 
       if (matchError) {
         console.error("Error inserting trigger matches:", matchError);
+        console.error("Match error details:", JSON.stringify(matchError, null, 2));
+        throw new Error(`Failed to insert trigger matches: ${matchError.message}`);
       } else {
-        console.log(`✅ Successfully created ${triggerMatchesToInsert.length} trigger matches`);
+        console.log(`✅ Successfully created ${insertedMatches?.length || 0} trigger matches`);
+        console.log("Inserted matches:", JSON.stringify(insertedMatches, null, 2));
       }
     }
 
