@@ -33,6 +33,7 @@ export default function AdminPage() {
   const [updatingPolling, setUpdatingPolling] = useState(false);
   const [isPollingModalOpen, setIsPollingModalOpen] = useState(false);
   const [isManualPolling, setIsManualPolling] = useState(false);
+  const [isMappingTeams, setIsMappingTeams] = useState(false);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -119,6 +120,40 @@ export default function AdminPage() {
       });
     } finally {
       setIsManualPolling(false);
+    }
+  };
+
+  const handleMapNBATeams = async () => {
+    setIsMappingTeams(true);
+    try {
+      const response = await fetch("/api/admin/map-nba-teams", {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to map NBA teams");
+      }
+
+      toast({
+        title: "NBA Teams Mapped Successfully",
+        description: `Mapped ${data.mapped} teams. ${data.unmapped > 0 ? `${data.unmapped} teams could not be automatically mapped.` : ""}`,
+        duration: 5000,
+      });
+
+      if (data.unmappedTeams && data.unmappedTeams.length > 0) {
+        console.log("Unmapped teams:", data.unmappedTeams);
+      }
+    } catch (error) {
+      toast({
+        title: "Mapping Failed",
+        description: error instanceof Error ? error.message : "Failed to map NBA teams",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setIsMappingTeams(false);
     }
   };
 
@@ -401,6 +436,24 @@ export default function AdminPage() {
               <Button onClick={() => setIsPollingModalOpen(true)}>Manage API Polling</Button>
             </CardContent>
           </Card>
+        </div>
+
+        <div className="glass-panel p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">NBA Team Mapping</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Map Odds API team names to canonical teams
+              </p>
+            </div>
+            <Button
+              onClick={handleMapNBATeams}
+              disabled={isMappingTeams}
+              variant="outline"
+            >
+              {isMappingTeams ? "Mapping..." : "Map NBA Teams"}
+            </Button>
+          </div>
         </div>
       </main>
 
