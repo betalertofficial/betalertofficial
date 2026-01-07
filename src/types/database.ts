@@ -37,7 +37,8 @@ export interface Trigger {
   odds_value: number;
   frequency: TriggerFrequency;
   status: TriggerStatus;
-  vendor_id?: string;
+  vendor_id: string;
+  bookmaker?: string | null;
   created_at: string;
   updated_at: string;
 }

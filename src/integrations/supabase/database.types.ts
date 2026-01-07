@@ -373,6 +373,7 @@ export type Database = {
       triggers: {
         Row: {
           bet_type: string
+          bookmaker: string | null
           created_at: string | null
           frequency: string
           id: string
@@ -386,6 +387,7 @@ export type Database = {
         }
         Insert: {
           bet_type: string
+          bookmaker?: string | null
           created_at?: string | null
           frequency: string
           id?: string
@@ -399,6 +401,7 @@ export type Database = {
         }
         Update: {
           bet_type?: string
+          bookmaker?: string | null
           created_at?: string | null
           frequency?: string
           id?: string

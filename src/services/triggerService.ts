@@ -36,14 +36,19 @@ export const triggerService = {
     userId: string,
     triggerData: Omit<Trigger, "id" | "created_at" | "updated_at">
   ): Promise<ProfileTrigger> {
+    // Insert trigger with all fields including bookmaker
     const { data: trigger, error: triggerError } = await supabase
       .from("triggers")
       .insert([triggerData])
       .select()
       .single();
 
-    if (triggerError) throw triggerError;
+    if (triggerError) {
+      console.error("Error creating trigger:", triggerError);
+      throw triggerError;
+    }
 
+    // Link trigger to user profile
     const { data: profileTrigger, error: ptError } = await supabase
       .from("profile_triggers")
       .insert([
@@ -61,7 +66,11 @@ export const triggerService = {
       `)
       .single();
 
-    if (ptError) throw ptError;
+    if (ptError) {
+      console.error("Error creating profile_trigger:", ptError);
+      throw ptError;
+    }
+    
     return profileTrigger as ProfileTrigger;
   },
 

@@ -216,7 +216,8 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
         odds_value: finalOddsValue,
         frequency,
         status: "active",
-        vendor_id: oddsApiVendor.id
+        vendor_id: oddsApiVendor.id,
+        bookmaker: sportsbook
       });
 
       onSuccess();
