@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "@/integrations/supabase/client";
+import { createClient } from "@supabase/supabase-js";
 import { oddsApiService } from "@/services/oddsApiService";
 
 export default async function handler(
@@ -11,15 +12,27 @@ export default async function handler(
   }
 
   try {
+    // Use service role client for admin operations (bypasses RLS)
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
+
     // 1. Get theOddsAPI vendor ID
-    const { data: vendor, error: vendorError } = await supabase
+    const { data: vendor, error: vendorError } = await supabaseAdmin
       .from("vendors")
       .select("id")
-      .eq("name", "theOddsAPI")
+      .eq("name", "the_odds_api")
       .single();
 
     if (vendorError || !vendor) {
-      return res.status(404).json({ error: "theOddsAPI vendor not found" });
+      return res.status(404).json({ error: "the_odds_api vendor not found" });
     }
 
     // 2. Fetch NBA odds from the Odds API
@@ -36,7 +49,7 @@ export default async function handler(
     console.log(`Found ${oddsApiTeams.size} unique teams in Odds API`);
 
     // 4. Get all NBA teams from our database
-    const { data: canonicalTeams, error: teamsError } = await supabase
+    const { data: canonicalTeams, error: teamsError } = await supabaseAdmin
       .from("teams")
       .select("id, name, abbrev")
       .eq("league", "nba");
@@ -45,7 +58,7 @@ export default async function handler(
       return res.status(500).json({ error: "Failed to fetch canonical teams" });
     }
 
-    // 5. Create mappings
+    // 5. Create mappings (only for teams that don't already have mappings)
     const mappings = [];
     const unmapped: string[] = [];
 
@@ -81,19 +94,48 @@ export default async function handler(
       }
     }
 
-    // 6. Insert mappings (ignore conflicts for existing mappings)
     if (mappings.length > 0) {
-      const { error: insertError } = await supabase
+      // First, check which mappings already exist
+      const { data: existingMappings } = await supabaseAdmin
         .from("vendor_team_map")
-        .upsert(mappings, {
-          onConflict: "vendor_id,vendor_team_key",
-          ignoreDuplicates: false
-        });
+        .select("vendor_team_key")
+        .eq("vendor_id", vendor.id);
 
-      if (insertError) {
-        console.error("Error inserting mappings:", insertError);
-        return res.status(500).json({ error: "Failed to create mappings", details: insertError });
+      const existingKeys = new Set(
+        existingMappings?.map(m => m.vendor_team_key) || []
+      );
+
+      // Filter out mappings that already exist
+      const newMappings = mappings.filter(
+        m => !existingKeys.has(m.vendor_team_key)
+      );
+
+      const alreadyMapped = mappings.length - newMappings.length;
+
+      if (newMappings.length > 0) {
+        const { error: mapError } = await supabaseAdmin
+          .from("vendor_team_map")
+          .insert(newMappings);
+
+        if (mapError) {
+          return res.status(500).json({
+            error: "Failed to create mappings",
+            details: mapError
+          });
+        }
       }
+
+      return res.status(200).json({
+        success: true,
+        message: `NBA team mapping complete`,
+        stats: {
+          totalTeamsFromAPI: oddsApiTeams.size,
+          newlyMapped: newMappings.length,
+          alreadyMapped: alreadyMapped,
+          unmapped: unmapped.length,
+          unmappedTeams: unmapped
+        }
+      });
     }
 
     return res.status(200).json({
