@@ -103,8 +103,8 @@ export function Settings() {
 
             <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
               <div>
-                <p className="text-sm text-muted-foreground">Trigger Limit</p>
-                <p className="text-lg font-bold">{profile?.trigger_limit || 3}</p>
+                <p className="text-sm text-muted-foreground">Triggers Remaining</p>
+                <p className="text-lg font-bold">{profile?.trigger_limit || 0}</p>
               </div>
             </div>
 
