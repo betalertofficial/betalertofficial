@@ -148,6 +148,7 @@ export default async function handler(
       snapshotData: OddsSnapshotInsert;
       trigger: DatabaseTrigger;
     }> = [];
+    const triggersToComplete: string[] = []; // Track one-time triggers that hit
 
     // Map our sport names to Odds API sport keys
     const sportKeyMap: Record<string, string> = {
@@ -259,6 +260,13 @@ export default async function handler(
                   snapshotData,
                   trigger
                 });
+
+                // If this is a one-time trigger, mark it for completion
+                if ((trigger as any).frequency === 'once') {
+                  if (!triggersToComplete.includes(trigger.id)) {
+                    triggersToComplete.push(trigger.id);
+                  }
+                }
               }
             }
           }
@@ -393,6 +401,21 @@ export default async function handler(
           await Promise.allSettled(webhookPromises);
           console.log(`✅ All webhook notifications processed`);
         }
+      }
+    }
+
+    // Update one-time triggers to completed status
+    if (triggersToComplete.length > 0) {
+      console.log(`Marking ${triggersToComplete.length} one-time triggers as completed`);
+      const { error: updateError } = await supabase
+        .from("triggers")
+        .update({ status: 'completed' })
+        .in('id', triggersToComplete);
+
+      if (updateError) {
+        console.error("Error updating trigger status:", updateError);
+      } else {
+        console.log(`✅ Successfully marked ${triggersToComplete.length} triggers as completed`);
       }
     }
 
