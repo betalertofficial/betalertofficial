@@ -17,7 +17,8 @@ import {
   ArrowLeft,
   Database,
   TrendingUp,
-  PlayCircle
+  PlayCircle,
+  Edit
 } from "lucide-react";
 import { PollingControlModal } from "@/components/admin/PollingControlModal";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +32,8 @@ export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [pollingEnabled, setPollingEnabled] = useState(false);
   const [pollingInterval, setPollingInterval] = useState(30);
+  const [isEditingInterval, setIsEditingInterval] = useState(false);
+  const [tempInterval, setTempInterval] = useState("30");
   const [isManualPolling, setIsManualPolling] = useState(false);
   const [showPollingModal, setShowPollingModal] = useState(false);
   const [isMappingTeams, setIsMappingTeams] = useState(false);
@@ -96,6 +99,8 @@ export default function AdminPage() {
       
       setStats(statsData);
       setPollingEnabled(settingsData.oddsPollingEnabled);
+      setPollingInterval(settingsData.pollingIntervalMinutes * 60); // Convert minutes to seconds
+      setTempInterval(String(settingsData.pollingIntervalMinutes * 60));
     } catch (error) {
       console.error("Error loading admin data:", error);
     }
@@ -151,6 +156,67 @@ export default function AdminPage() {
       toast({
         title: "Error",
         description: "Failed to update polling settings",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleUpdateInterval = async () => {
+    const newInterval = parseInt(tempInterval);
+    
+    if (isNaN(newInterval) || newInterval < 10) {
+      toast({
+        title: "Invalid Interval",
+        description: "Polling interval must be at least 10 seconds",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/polling", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          polling_enabled: pollingEnabled,
+          polling_interval_seconds: newInterval 
+        }),
+        credentials: "include"
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update polling interval");
+      }
+
+      setPollingInterval(newInterval);
+      setIsEditingInterval(false);
+
+      // Restart polling with new interval if enabled
+      if (pollingEnabled) {
+        // Clear existing interval
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+        }
+
+        // Start new interval
+        pollingIntervalRef.current = setInterval(async () => {
+          try {
+            await handleManualPoll();
+          } catch (error) {
+            console.error("Automated poll error:", error);
+          }
+        }, newInterval * 1000);
+      }
+
+      toast({
+        title: "Interval Updated",
+        description: `Polling interval set to ${newInterval} seconds`,
+      });
+    } catch (error) {
+      console.error("Error updating interval:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update polling interval",
         variant: "destructive"
       });
     }
@@ -419,7 +485,40 @@ export default function AdminPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="p-4 bg-muted/30 rounded-lg">
                       <p className="text-sm text-muted-foreground mb-1">Polling Interval</p>
-                      <p className="text-2xl font-bold">30 sec</p>
+                      {isEditingInterval ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={tempInterval}
+                            onChange={(e) => setTempInterval(e.target.value)}
+                            className="w-20 px-2 py-1 rounded border bg-background text-lg font-bold"
+                            min="10"
+                          />
+                          <span className="text-sm">sec</span>
+                          <Button size="sm" onClick={handleUpdateInterval}>Save</Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => {
+                              setIsEditingInterval(false);
+                              setTempInterval(String(pollingInterval));
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <p className="text-2xl font-bold">{pollingInterval} sec</p>
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => setIsEditingInterval(true)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     <div className="p-4 bg-muted/30 rounded-lg">
                       <p className="text-sm text-muted-foreground mb-1">Max API Calls/Hour</p>
