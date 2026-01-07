@@ -99,7 +99,7 @@ export const adminService = {
     const { data, error } = await supabase
       .from("admin_settings")
       .select("*")
-      .in("setting_key", ["odds_polling_enabled", "polling_interval_minutes", "max_api_calls_per_hour"]);
+      .in("setting_key", ["odds_polling_status", "polling_interval_seconds", "max_polling_api_per_hour"]);
 
     if (error) throw error;
 
@@ -109,9 +109,9 @@ export const adminService = {
     });
 
     return {
-      oddsPollingEnabled: settings.odds_polling_enabled === "true",
-      pollingIntervalMinutes: parseInt(settings.polling_interval_minutes || "2"),
-      maxApiCallsPerHour: parseInt(settings.max_api_calls_per_hour || "60")
+      oddsPollingEnabled: settings.odds_polling_status === "true",
+      pollingIntervalMinutes: Math.floor(parseInt(settings.polling_interval_seconds || "30") / 60),
+      maxApiCallsPerHour: parseInt(settings.max_polling_api_per_hour || "120")
     };
   },
 

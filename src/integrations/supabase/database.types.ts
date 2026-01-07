@@ -19,19 +19,19 @@ export type Database = {
         Row: {
           id: string
           setting_key: string
-          setting_value: Json
+          setting_value: string
           updated_at: string | null
         }
         Insert: {
           id?: string
           setting_key: string
-          setting_value: Json
+          setting_value: string
           updated_at?: string | null
         }
         Update: {
           id?: string
           setting_key?: string
-          setting_value?: Json
+          setting_value?: string
           updated_at?: string | null
         }
         Relationships: []
