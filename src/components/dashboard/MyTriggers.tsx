@@ -79,11 +79,11 @@ export function MyTriggers() {
   };
 
   // Filter triggers based on active tab
-  const activeTriggers = triggers.filter(t => t.triggers?.status === "active" || t.triggers?.status === "paused");
-  const completedTriggers = triggers.filter(t => t.triggers?.status === "completed");
+  const activeTriggers = triggers.filter(t => t.trigger?.status === "active" || t.trigger?.status === "paused");
+  const completedTriggers = triggers.filter(t => t.trigger?.status === "completed");
 
   // Calculate active triggers count for the limit check
-  const activeCount = triggers.filter(t => t.triggers?.status === "active").length;
+  const activeCount = triggers.filter(t => t.trigger?.status === "active").length;
   const remaining = profile?.trigger_limit ? profile.trigger_limit - activeCount : 0;
 
   if (loading || authLoading) {

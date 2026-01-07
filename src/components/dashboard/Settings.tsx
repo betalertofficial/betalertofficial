@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { profileService } from "@/services/profileService";
+import { triggerService } from "@/services/triggerService";
 import { LogOut, Save } from "lucide-react";
 
 export function Settings() {
@@ -14,6 +14,22 @@ export function Settings() {
   const [name, setName] = useState(profile?.name || "");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [activeCount, setActiveCount] = useState(0);
+
+  useEffect(() => {
+    const loadTriggerCount = async () => {
+      if (profile?.id) {
+        try {
+          const triggers = await triggerService.getUserTriggers(profile.id);
+          const active = triggers.filter(t => t.trigger?.status === "active").length;
+          setActiveCount(active);
+        } catch (error) {
+          console.error("Error loading trigger count:", error);
+        }
+      }
+    };
+    loadTriggerCount();
+  }, [profile?.id]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,7 +120,9 @@ export function Settings() {
             <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
               <div>
                 <p className="text-sm text-muted-foreground">Triggers Remaining</p>
-                <p className="text-lg font-bold">{profile?.trigger_limit || 0}</p>
+                <p className="text-lg font-bold">
+                  {profile?.trigger_limit ? Math.max(0, profile.trigger_limit - activeCount) : 0}
+                </p>
               </div>
             </div>
 
