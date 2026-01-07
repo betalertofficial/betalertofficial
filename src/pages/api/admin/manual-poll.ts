@@ -40,6 +40,8 @@ interface DatabaseTrigger {
   odds_comparator: string;
   odds_value: number;
   status: string;
+  bookmaker?: string;
+  vendor_id?: string;
 }
 
 interface OddsSnapshotInsert {
@@ -108,11 +110,26 @@ export default async function handler(
 
     console.log("=== Starting Manual Poll ===");
 
-    // Fetch all active triggers
+    // 1. Fetch all active triggers with their profile info
     const { data: triggers, error: triggersError } = await supabase
-      .from("triggers")
-      .select("*")
-      .eq("status", "active");
+      .from("profile_triggers")
+      .select(`
+        id,
+        user_id,
+        sport,
+        team_or_player,
+        bet_type,
+        threshold_odds,
+        comparison_type,
+        frequency,
+        bookmaker,
+        vendor_id,
+        is_active,
+        profiles!profile_triggers_user_id_fkey (
+          phone_number
+        )
+      `)
+      .eq("is_active", true);
 
     if (triggersError) {
       console.error("Error fetching triggers:", triggersError);
@@ -193,17 +210,31 @@ export default async function handler(
 
           // Process each matching event
           for (const event of matchingEvents) {
-            // Extract odds for this bet type from all bookmakers
-            for (const bookmaker of event.bookmakers) {
-              const market = bookmaker.markets.find(m => {
-                if (trigger.bet_type === "moneyline") return m.key === "h2h";
-                if (trigger.bet_type === "spread") return m.key === "spreads";
-                if (trigger.bet_type === "totals") return m.key === "totals";
-                return false;
+            // Filter markets by trigger's bet type
+            const relevantMarkets = event.bookmakers
+              .flatMap((bookmaker) => {
+                // If trigger has a specific bookmaker, only use that one
+                if (trigger.bookmaker && bookmaker.key !== trigger.bookmaker) {
+                  return [];
+                }
+
+                return bookmaker.markets
+                  .filter((market) => {
+                    // Map bet types
+                    if (trigger.bet_type === "moneyline" && market.key === "h2h") return true;
+                    if (trigger.bet_type === "spread" && market.key === "spreads") return true;
+                    if (trigger.bet_type === "total" && market.key === "totals") return true;
+                    return false;
+                  })
+                  .map((market) => ({
+                    ...market,
+                    bookmaker_key: bookmaker.key,
+                    bookmaker_title: bookmaker.title
+                  }));
               });
 
-              if (!market) continue;
-
+            // Process each relevant market
+            for (const market of relevantMarkets) {
               // Find the outcome for this team/player
               const outcome = market.outcomes.find(o =>
                 o.name.toLowerCase().includes(trigger.team_or_player.toLowerCase())
@@ -218,7 +249,7 @@ export default async function handler(
                 sport: trigger.sport,
                 event_id: event.id,
                 team_or_player: trigger.team_or_player,
-                bookmaker: bookmaker.title,
+                bookmaker: market.bookmaker_title,
                 bet_type: trigger.bet_type,
                 odds_value: currentOdds,
                 deep_link_url: null,
