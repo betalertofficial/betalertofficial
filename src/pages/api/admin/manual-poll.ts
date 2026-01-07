@@ -5,6 +5,9 @@ import { oddsApiService } from "@/services/oddsApiService";
 // Use local API key
 const ODDS_API_KEY = "8fd23ab732557e3db9238fc571eddbbe";
 
+// Zapier webhook URL for alert notifications
+const ZAPIER_WEBHOOK_URL = "https://hooks.zapier.com/hooks/catch/7723146/u140xkd/";
+
 // Odds API Event Interface
 interface OddsApiEvent {
   id: string;
@@ -358,6 +361,37 @@ export default async function handler(
           throw new Error(`Failed to create alerts: ${alertError.message}`);
         } else {
           console.log(`✅ Successfully created ${alertsToInsert.length} alerts`);
+          
+          // Send webhook notifications for each alert
+          console.log(`Sending ${alertsToInsert.length} webhook notifications to Zapier`);
+          const webhookPromises = alertsToInsert.map(async (alert) => {
+            try {
+              const response = await fetch(ZAPIER_WEBHOOK_URL, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  profile_id: alert.profile_id,
+                  message: alert.message,
+                  trigger_match_id: alert.trigger_match_id,
+                  timestamp: new Date().toISOString()
+                }),
+              });
+
+              if (!response.ok) {
+                console.error(`Failed to send webhook for profile ${alert.profile_id}:`, response.statusText);
+              } else {
+                console.log(`✅ Webhook sent successfully for profile ${alert.profile_id}`);
+              }
+            } catch (error) {
+              console.error(`Error sending webhook for profile ${alert.profile_id}:`, error);
+            }
+          });
+
+          // Wait for all webhooks to complete (but don't block on failures)
+          await Promise.allSettled(webhookPromises);
+          console.log(`✅ All webhook notifications processed`);
         }
       }
     }
