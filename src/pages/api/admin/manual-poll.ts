@@ -112,20 +112,37 @@ export default async function handler(
 
     console.log("=== Starting Manual Poll ===");
 
-    // 1. Fetch all active triggers for NBA
-    const { data: triggers, error: triggersError } = await supabase
-      .from("triggers")
-      .select("*")
-      .eq("status", "active")
-      .eq("sport", "NBA");
+    // 1. Fetch all active triggers with their profile info
+    const { data: profileTriggers, error: triggersError } = await supabase
+      .from("profile_triggers")
+      .select(`
+        id,
+        profile_id,
+        trigger_id,
+        triggers!profile_triggers_trigger_id_fkey (
+          id,
+          sport,
+          team_or_player,
+          bet_type,
+          odds_comparator,
+          odds_value,
+          frequency,
+          status,
+          bookmaker,
+          vendor_id
+        ),
+        profiles!profile_triggers_profile_id_fkey (
+          phone_e164
+        )
+      `)
+      .eq("triggers.status", "active");
 
-    if (triggersError) {
-      console.error("Error fetching triggers:", triggersError);
-      return res.status(500).json({ error: `Failed to fetch triggers: ${triggersError.message}` });
+    if (triggersError || !profileTriggers) {
+      throw new Error(`Failed to fetch triggers: ${triggersError?.message}`);
     }
 
     // Transform the nested structure into flat triggers array
-    const triggersArray: DatabaseTrigger[] = triggers
+    const triggers: DatabaseTrigger[] = profileTriggers
       .map((pt: any): DatabaseTrigger | null => {
         // Handle potential array wrapping from Supabase joins
         const trigger = Array.isArray(pt.triggers) ? pt.triggers[0] : pt.triggers;
@@ -150,7 +167,7 @@ export default async function handler(
       })
       .filter((t): t is DatabaseTrigger => t !== null);
 
-    if (triggersArray.length === 0) {
+    if (triggers.length === 0) {
       return res.status(200).json({
         success: true,
         message: "No active triggers found",
@@ -162,10 +179,10 @@ export default async function handler(
       });
     }
 
-    console.log(`Found ${triggersArray.length} active triggers`);
+    console.log(`Found ${triggers.length} active triggers`);
 
     // Group triggers by sport for efficient API calls
-    const triggersBySport = (triggersArray as any[]).reduce<Record<string, DatabaseTrigger[]>>((acc, trigger) => {
+    const triggersBySport = (triggers as any[]).reduce<Record<string, DatabaseTrigger[]>>((acc, trigger) => {
       const sport = trigger.sport || "Unknown";
       if (!acc[sport]) {
         acc[sport] = [];
