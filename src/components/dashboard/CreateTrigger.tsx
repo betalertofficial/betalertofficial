@@ -10,6 +10,7 @@ import { Loader2, Search, Bell, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
+import { teamsService, type Team } from "@/services/teamsService";
 import type { BetType, TriggerFrequency } from "@/types/database";
 
 interface CreateTriggerProps {
@@ -77,6 +78,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
   const [selectedSport, setSelectedSport] = useState("");
   const [selectedSportTitle, setSelectedSportTitle] = useState("");
   
+  const [teams, setTeams] = useState<Team[]>([]);
   const [sportsbook, setSportsbook] = useState<"fanduel" | "draftkings">("fanduel");
   const [searchQuery, setSearchQuery] = useState("");
   const [events, setEvents] = useState<OddsApiEvent[]>([]);
@@ -101,6 +103,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
 
   useEffect(() => {
     if (selectedSport) {
+      loadTeamsForLeague();
       loadOddsForSport();
       setGameTimeContext("anytime");
     }
@@ -125,6 +128,34 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       }
     } catch (error) {
       console.error("Error loading sports:", error);
+    }
+  };
+
+  const loadTeamsForLeague = async () => {
+    try {
+      setLoading(true);
+      // Map sport key to league name
+      const leagueMap: Record<string, string> = {
+        "basketball_nba": "NBA",
+        "americanfootball_nfl": "NFL",
+        "icehockey_nhl": "NHL",
+        "baseball_mlb": "MLB"
+      };
+      
+      const league = leagueMap[selectedSport];
+      if (league) {
+        const teamsData = await teamsService.getTeamsByLeague(league);
+        setTeams(teamsData);
+      }
+    } catch (error) {
+      console.error("Error loading teams:", error);
+      toast({
+        title: "Error Loading Teams",
+        description: "Failed to load teams from database",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -263,19 +294,9 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
     }
   };
 
-  const filteredTeams = events.reduce((acc, event) => {
-    const homeTeam = event.home_team;
-    const awayTeam = event.away_team;
-    
-    if (homeTeam.toLowerCase().includes(searchQuery.toLowerCase()) && !acc.includes(homeTeam)) {
-      acc.push(homeTeam);
-    }
-    if (awayTeam.toLowerCase().includes(searchQuery.toLowerCase()) && !acc.includes(awayTeam)) {
-      acc.push(awayTeam);
-    }
-    
-    return acc;
-  }, [] as string[]);
+  const filteredTeams = teams.filter(team => 
+    team.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const formatOdds = (odds: number) => {
     return odds > 0 ? `+${odds}` : odds.toString();
@@ -320,14 +341,16 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm font-medium text-muted-foreground">Sport</Label>
+            <Label className="text-sm font-medium text-muted-foreground">League</Label>
             <Select value={selectedSport} onValueChange={(v) => {
               setSelectedSport(v);
               const sport = sports.find(s => s.key === v);
               setSelectedSportTitle(sport?.title || v);
+              setSelectedTeam("");
+              setSearchQuery("");
             }}>
               <SelectTrigger className="bg-[#242B33] border-border">
-                <SelectValue placeholder="Select sport" />
+                <SelectValue placeholder="Select league" />
               </SelectTrigger>
               <SelectContent>
                 {sports.map((sport) => (
@@ -375,17 +398,20 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
             </div>
             {searchQuery && filteredTeams.length > 0 && !selectedTeam && (
               <div className="mt-2 max-h-40 overflow-y-auto bg-[#242B33] border border-border rounded-lg">
-                {filteredTeams.slice(0, 5).map((team) => (
+                {filteredTeams.slice(0, 10).map((team) => (
                   <button
-                    key={team}
+                    key={team.id}
                     type="button"
                     className="w-full text-left px-4 py-2 hover:bg-[#2A3139] transition-colors text-sm"
                     onClick={() => {
-                      setSelectedTeam(team);
-                      setSearchQuery(team);
+                      setSelectedTeam(team.name);
+                      setSearchQuery(team.name);
                     }}
                   >
-                    {team}
+                    {team.name}
+                    {team.abbrev && (
+                      <span className="text-muted-foreground ml-2">({team.abbrev})</span>
+                    )}
                   </button>
                 ))}
               </div>
