@@ -101,7 +101,8 @@ export default function AdminPage() {
     } catch (error: any) {
       console.error("Error running manual poll:", error);
       
-      const errorData = error.response?.data || { message: error.message, details: "No response data from API." };
+      const errorMessage = error.message || "Unknown error occurred";
+      const errorDetails = error.response?.data || { message: errorMessage };
 
       toast({
         title: "Manual Poll Failed",
@@ -109,12 +110,12 @@ export default function AdminPage() {
           <div className="mt-2 w-[340px] md:w-[500px] overflow-auto">
             <p className="text-sm font-medium mb-2">The API returned the following error:</p>
             <pre className="rounded-md bg-slate-950 p-4">
-              <code className="text-white text-xs">{JSON.stringify(errorData, null, 2)}</code>
+              <code className="text-white text-xs">{JSON.stringify(errorDetails, null, 2)}</code>
             </pre>
           </div>
         ),
         variant: "destructive",
-        duration: 30000, // Keep open for 30 seconds
+        duration: 10000,
       });
     } finally {
       setIsManualPolling(false);
