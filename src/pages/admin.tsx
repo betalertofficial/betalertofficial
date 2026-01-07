@@ -113,7 +113,7 @@ export default function AdminPage() {
       const response = await fetch("/api/admin/polling", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled, interval: pollingInterval }),
+        body: JSON.stringify({ polling_enabled: enabled }),
         credentials: "include"
       });
 
