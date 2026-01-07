@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -8,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, Bell, TrendingUp } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
 import type { BetType, TriggerFrequency } from "@/types/database";
@@ -69,6 +69,7 @@ const GAME_TIME_CONTEXTS = {
 
 export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerProps) {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   
   const [subjectType, setSubjectType] = useState<"team" | "player">("team");
@@ -185,7 +186,11 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
 
   const handleCreateTrigger = async () => {
     if (!user || !selectedTeam || !oddsValue) {
-      alert("Please fill in all required fields");
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -208,6 +213,18 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       const finalOddsValue = oddsSign === "-" ? -numericValue : numericValue;
       const oddsComparator = oddsDirection === "higher" ? ">=" : "<=";
 
+      console.log("Creating trigger with data:", {
+        sport: selectedSportTitle,
+        team_or_player: selectedTeam,
+        bet_type: betType,
+        odds_comparator: oddsComparator,
+        odds_value: finalOddsValue,
+        frequency,
+        status: "active",
+        vendor_id: oddsApiVendor.id,
+        bookmaker: sportsbook
+      });
+
       await triggerService.createTrigger(user.id, {
         sport: selectedSportTitle,
         team_or_player: selectedTeam,
@@ -218,6 +235,11 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
         status: "active",
         vendor_id: oddsApiVendor.id,
         bookmaker: sportsbook
+      });
+
+      toast({
+        title: "Success!",
+        description: "Trigger created successfully",
       });
 
       onSuccess();
@@ -231,7 +253,11 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       setGameTimeContext("anytime");
     } catch (error: any) {
       console.error("Error creating trigger:", error);
-      alert(error.message || "Failed to create trigger");
+      toast({
+        title: "Error Creating Trigger",
+        description: error.message || "Failed to create trigger. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
