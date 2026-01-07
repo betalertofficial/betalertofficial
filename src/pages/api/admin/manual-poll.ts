@@ -139,8 +139,12 @@ export default async function handler(
     let totalChecked = 0;
     let totalHit = 0;
     const snapshotsToInsert: OddsSnapshotInsert[] = [];
-    const alertsToInsert: any[] = [];
-    const triggerHits: Array<{ triggerId: string; snapshotData: OddsSnapshotInsert }> = [];
+    const triggerHits: Array<{ 
+      triggerId: string; 
+      profileId: string;
+      snapshotData: OddsSnapshotInsert;
+      trigger: DatabaseTrigger;
+    }> = [];
 
     // Map our sport names to Odds API sport keys
     const sportKeyMap: Record<string, string> = {
@@ -248,22 +252,9 @@ export default async function handler(
                 // Store trigger hit data (we'll link it to snapshot after insertion)
                 triggerHits.push({
                   triggerId: trigger.id,
-                  snapshotData
-                });
-
-                // Create alert message
-                const message = `${trigger.team_or_player} ${trigger.bet_type} odds are ${currentOdds} (${trigger.odds_comparator} ${trigger.odds_value}) on ${bookmaker.title}`;
-
-                alertsToInsert.push({
-                  trigger_id: trigger.id,
-                  profile_id: trigger.profile_id,
-                  message,
-                  odds_value: currentOdds,
-                  bookmaker: bookmaker.title,
-                  event_id: event.id,
-                  sport: trigger.sport,
-                  team_or_player: trigger.team_or_player,
-                  bet_type: trigger.bet_type
+                  profileId: trigger.profile_id,
+                  snapshotData,
+                  trigger
                 });
               }
             }
@@ -313,9 +304,10 @@ export default async function handler(
     }
 
     // Insert trigger matches
+    let insertedMatches: any[] = [];
     if (triggerMatchesToInsert.length > 0) {
       console.log(`Inserting ${triggerMatchesToInsert.length} trigger matches`);
-      const { data: insertedMatches, error: matchError } = await supabase
+      const { data, error: matchError } = await supabase
         .from("trigger_matches")
         .insert(triggerMatchesToInsert)
         .select();
@@ -325,22 +317,48 @@ export default async function handler(
         console.error("Match error details:", JSON.stringify(matchError, null, 2));
         throw new Error(`Failed to insert trigger matches: ${matchError.message}`);
       } else {
-        console.log(`✅ Successfully created ${insertedMatches?.length || 0} trigger matches`);
+        insertedMatches = data || [];
+        console.log(`✅ Successfully created ${insertedMatches.length} trigger matches`);
         console.log("Inserted matches:", JSON.stringify(insertedMatches, null, 2));
       }
     }
 
-    // Batch insert alerts
-    if (alertsToInsert.length > 0) {
-      console.log(`Creating ${alertsToInsert.length} alerts`);
-      const { error: alertError } = await supabase
-        .from("alerts")
-        .insert(alertsToInsert);
+    // Create alerts for each trigger match
+    const alertsToInsert: any[] = [];
+    if (insertedMatches.length > 0) {
+      for (let i = 0; i < insertedMatches.length; i++) {
+        const match = insertedMatches[i];
+        const hit = triggerHits[i]; // Same order as insertion
 
-      if (alertError) {
-        console.error("Error creating alerts:", alertError);
-      } else {
-        console.log(`✅ Successfully created ${alertsToInsert.length} alerts`);
+        if (hit) {
+          const { trigger, snapshotData } = hit;
+          
+          // Generate descriptive alert message
+          const message = `🎯 ${trigger.team_or_player} ${trigger.bet_type} ${trigger.odds_comparator} ${trigger.odds_value} HIT! Current odds: ${snapshotData.odds_value} on ${snapshotData.bookmaker}`;
+
+          alertsToInsert.push({
+            trigger_match_id: match.id,
+            profile_id: trigger.profile_id,
+            message,
+            delivery_status: 'pending'
+          });
+        }
+      }
+
+      // Batch insert alerts
+      if (alertsToInsert.length > 0) {
+        console.log(`Creating ${alertsToInsert.length} alerts`);
+        const { error: alertError } = await supabase
+          .from("alerts")
+          .insert(alertsToInsert);
+
+        if (alertError) {
+          console.error("Error creating alerts:", alertError);
+          console.error("Alert error details:", JSON.stringify(alertError, null, 2));
+          throw new Error(`Failed to create alerts: ${alertError.message}`);
+        } else {
+          console.log(`✅ Successfully created ${alertsToInsert.length} alerts`);
+        }
       }
     }
 
@@ -351,7 +369,8 @@ export default async function handler(
       checked: totalChecked,
       hit: totalHit,
       matches: triggerMatchesToInsert.length,
-      message: `Checked ${totalChecked} triggers, ${alertsToInsert.length} alerts created, ${triggerMatchesToInsert.length} matches recorded`
+      alerts: alertsToInsert.length,
+      message: `Checked ${totalChecked} triggers, ${totalHit} hits detected, ${triggerMatchesToInsert.length} matches recorded, ${alertsToInsert.length} alerts created`
     });
 
   } catch (error: any) {
