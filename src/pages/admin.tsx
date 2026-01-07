@@ -31,9 +31,8 @@ export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [pollingEnabled, setPollingEnabled] = useState(false);
   const [pollingInterval, setPollingInterval] = useState(30);
-  const [manualPollLoading, setManualPollLoading] = useState(false);
-  const [showPollingModal, setShowPollingModal] = useState(false);
   const [isManualPolling, setIsManualPolling] = useState(false);
+  const [showPollingModal, setShowPollingModal] = useState(false);
   const [isMappingTeams, setIsMappingTeams] = useState(false);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -158,6 +157,11 @@ export default function AdminPage() {
   };
 
   const handleManualPoll = async () => {
+    // Prevent multiple simultaneous polls
+    if (isManualPolling) {
+      return;
+    }
+
     setIsManualPolling(true);
     try {
       const result = await adminService.manualPollAndCheckTriggers();
@@ -189,6 +193,7 @@ export default function AdminPage() {
         duration: 10000,
       });
     } finally {
+      // Always reset loading state
       setIsManualPolling(false);
     }
   };
@@ -348,7 +353,7 @@ export default function AdminPage() {
                     <Switch
                       checked={pollingEnabled}
                       onCheckedChange={handlePollingToggle}
-                      disabled={manualPollLoading}
+                      disabled={isManualPolling}
                     />
                     <Badge className={pollingEnabled ? "bg-primary" : "bg-muted"}>
                       {pollingEnabled ? "ON" : "OFF"}
@@ -394,7 +399,7 @@ export default function AdminPage() {
                       id="polling-switch"
                       checked={pollingEnabled}
                       onCheckedChange={handlePollingToggle}
-                      disabled={manualPollLoading}
+                      disabled={isManualPolling}
                     />
                   </div>
 
