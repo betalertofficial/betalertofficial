@@ -159,12 +159,24 @@ export default function AdminPage() {
   const handleManualPoll = async () => {
     // Prevent multiple simultaneous polls
     if (isManualPolling) {
+      console.log("Poll already in progress, skipping");
       return;
     }
 
+    console.log("Starting manual poll...");
     setIsManualPolling(true);
+    
     try {
-      const result = await adminService.manualPollAndCheckTriggers();
+      // Add a timeout to prevent hanging forever
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Request timed out after 60 seconds")), 60000)
+      );
+
+      const pollPromise = adminService.manualPollAndCheckTriggers();
+
+      const result = await Promise.race([pollPromise, timeoutPromise]) as { checked: number; hit: number; message: string };
+      
+      console.log("Manual poll result:", result);
       
       toast({
         title: "Manual Poll Complete",
@@ -193,7 +205,8 @@ export default function AdminPage() {
         duration: 10000,
       });
     } finally {
-      // Always reset loading state
+      // ALWAYS reset loading state, no matter what
+      console.log("Resetting manual poll loading state");
       setIsManualPolling(false);
     }
   };

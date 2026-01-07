@@ -153,33 +153,39 @@ export const adminService = {
       throw new Error("No active session - please log in again");
     }
 
-    const response = await fetch("/api/admin/manual-poll", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${session.access_token}`,
-        "Content-Type": "application/json"
-      }
-    });
+    try {
+      const response = await fetch("/api/admin/manual-poll", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json"
+        }
+      });
 
-    if (!response.ok) {
-      let errorMessage = "Failed to run manual poll";
-      try {
-        const errorData = await response.json();
-        console.error("Manual poll failed details:", errorData);
-        errorMessage = errorData.error || errorData.details || errorMessage;
-      } catch (e) {
-        const text = await response.text();
-        console.error("Manual poll failed text:", text);
-        errorMessage = text || `HTTP ${response.status}: ${response.statusText}`;
+      if (!response.ok) {
+        let errorMessage = "Failed to run manual poll";
+        try {
+          const errorData = await response.json();
+          console.error("Manual poll failed details:", errorData);
+          errorMessage = errorData.error || errorData.details || errorMessage;
+        } catch (e) {
+          const text = await response.text();
+          console.error("Manual poll failed text:", text);
+          errorMessage = text || `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
-      throw new Error(errorMessage);
+
+      const data = await response.json();
+      return {
+        checked: data.checked || 0,
+        hit: data.hit || 0,
+        message: data.message || "Manual poll completed"
+      };
+    } catch (error: any) {
+      // Ensure we always throw a proper error
+      console.error("Manual poll error in service:", error);
+      throw new Error(error.message || "Failed to run manual poll");
     }
-
-    const data = await response.json();
-    return {
-      checked: data.checked || 0,
-      hit: data.hit || 0,
-      message: data.message || "Manual poll completed"
-    };
   }
 };
