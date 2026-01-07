@@ -39,9 +39,11 @@ interface DatabaseTrigger {
   bet_type: string;
   odds_comparator: string;
   odds_value: number;
+  frequency: string;
   status: string;
-  bookmaker?: string;
-  vendor_id?: string;
+  bookmaker?: string | null;
+  vendor_id?: string | null;
+  phone_e164: string;
 }
 
 interface OddsSnapshotInsert {
@@ -111,36 +113,69 @@ export default async function handler(
     console.log("=== Starting Manual Poll ===");
 
     // 1. Fetch all active triggers with their profile info
-    const { data: triggers, error: triggersError } = await supabase
+    const { data: profileTriggers, error: triggersError } = await supabase
       .from("profile_triggers")
       .select(`
         id,
-        user_id,
-        sport,
-        team_or_player,
-        bet_type,
-        threshold_odds,
-        comparison_type,
-        frequency,
-        bookmaker,
-        vendor_id,
-        is_active,
-        profiles!profile_triggers_user_id_fkey (
-          phone_number
+        profile_id,
+        trigger_id,
+        triggers!profile_triggers_trigger_id_fkey (
+          id,
+          sport,
+          team_or_player,
+          bet_type,
+          odds_comparator,
+          odds_value,
+          frequency,
+          status,
+          bookmaker,
+          vendor_id
+        ),
+        profiles!profile_triggers_profile_id_fkey (
+          phone_e164
         )
       `)
-      .eq("is_active", true);
+      .eq("triggers.status", "active");
 
-    if (triggersError) {
-      console.error("Error fetching triggers:", triggersError);
-      throw new Error(`Failed to fetch triggers: ${triggersError.message}`);
+    if (triggersError || !profileTriggers) {
+      throw new Error(`Failed to fetch triggers: ${triggersError?.message}`);
     }
 
-    if (!triggers || triggers.length === 0) {
+    // Transform the nested structure into flat triggers array
+    const triggers: DatabaseTrigger[] = profileTriggers
+      .map((pt: any): DatabaseTrigger | null => {
+        // Handle potential array wrapping from Supabase joins
+        const trigger = Array.isArray(pt.triggers) ? pt.triggers[0] : pt.triggers;
+        const profile = Array.isArray(pt.profiles) ? pt.profiles[0] : pt.profiles;
+
+        if (!trigger || !profile) return null;
+
+        return {
+          id: trigger.id,
+          profile_id: pt.profile_id,
+          sport: trigger.sport,
+          team_or_player: trigger.team_or_player,
+          bet_type: trigger.bet_type,
+          odds_comparator: trigger.odds_comparator,
+          odds_value: trigger.odds_value,
+          frequency: trigger.frequency,
+          status: trigger.status,
+          bookmaker: trigger.bookmaker,
+          vendor_id: trigger.vendor_id,
+          phone_e164: profile.phone_e164
+        };
+      })
+      .filter((t): t is DatabaseTrigger => t !== null);
+
+    if (triggers.length === 0) {
       return res.status(200).json({
-        checked: 0,
-        hit: 0,
-        message: "No active triggers to check"
+        success: true,
+        message: "No active triggers found",
+        triggersEvaluated: 0,
+        hits: 0,
+        snapshotsCreated: 0,
+        matchesRecorded: 0,
+        alertsSent: 0
       });
     }
 
