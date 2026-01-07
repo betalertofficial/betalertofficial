@@ -30,7 +30,7 @@ export default function AdminPage() {
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [pollingEnabled, setPollingEnabled] = useState(false);
-  const [pollingInterval, setPollingInterval] = useState(2);
+  const [pollingInterval, setPollingInterval] = useState(30);
   const [manualPollLoading, setManualPollLoading] = useState(false);
   const [showPollingModal, setShowPollingModal] = useState(false);
   const [isManualPolling, setIsManualPolling] = useState(false);
@@ -77,14 +77,14 @@ export default function AdminPage() {
       // Clear existing interval
       clearInterval(pollingIntervalRef.current);
 
-      // Start new interval with updated time
+      // Start new interval with updated time (in seconds now)
       pollingIntervalRef.current = setInterval(async () => {
         try {
           await handleManualPoll();
         } catch (error) {
           console.error("Automated poll error:", error);
         }
-      }, pollingInterval * 60 * 1000);
+      }, pollingInterval * 1000);
     }
   }, [pollingInterval]);
 
@@ -128,18 +128,18 @@ export default function AdminPage() {
         // Run immediately
         await handleManualPoll();
 
-        // Then set up interval
+        // Then set up interval (in seconds now)
         pollingIntervalRef.current = setInterval(async () => {
           try {
             await handleManualPoll();
           } catch (error) {
             console.error("Automated poll error:", error);
           }
-        }, pollingInterval * 60 * 1000); // Convert minutes to milliseconds
+        }, pollingInterval * 1000);
 
         toast({
           title: "Polling Started",
-          description: `Automated polling will run every ${pollingInterval} minutes`,
+          description: `Automated polling will run every ${pollingInterval} seconds`,
         });
       } else {
         toast({
@@ -386,7 +386,7 @@ export default function AdminPage() {
                       </Label>
                       <p className="text-sm text-muted-foreground">
                         {pollingEnabled 
-                          ? "API calls running every 2 minutes" 
+                          ? "API calls running every 30 seconds" 
                           : "Polling suspended - no API calls"}
                       </p>
                     </div>
@@ -401,11 +401,11 @@ export default function AdminPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="p-4 bg-muted/30 rounded-lg">
                       <p className="text-sm text-muted-foreground mb-1">Polling Interval</p>
-                      <p className="text-2xl font-bold">2 min</p>
+                      <p className="text-2xl font-bold">30 sec</p>
                     </div>
                     <div className="p-4 bg-muted/30 rounded-lg">
                       <p className="text-sm text-muted-foreground mb-1">Max API Calls/Hour</p>
-                      <p className="text-2xl font-bold">60</p>
+                      <p className="text-2xl font-bold">120</p>
                     </div>
                     <div className="p-4 bg-muted/30 rounded-lg">
                       <p className="text-sm text-muted-foreground mb-1">Vendor</p>
