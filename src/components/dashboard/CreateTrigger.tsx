@@ -68,6 +68,13 @@ const GAME_TIME_CONTEXTS = {
   ]
 };
 
+const SPORT_DISPLAY_NAMES: Record<string, string> = {
+  "basketball_nba": "NBA",
+  "americanfootball_nfl": "NFL",
+  "icehockey_nhl": "NHL",
+  "baseball_mlb": "MLB"
+};
+
 export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -256,7 +263,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       const oddsComparator = oddsDirection === "higher" ? ">=" : "<=";
 
       console.log("Creating trigger with data:", {
-        sport: selectedSportTitle,
+        sport: SPORT_DISPLAY_NAMES[selectedSport] || selectedSport,
         team_or_player: selectedTeam,
         bet_type: betType,
         odds_comparator: oddsComparator,
@@ -268,7 +275,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       });
 
       const trigger = await triggerService.createTrigger({
-        sport: selectedSport,
+        sport: SPORT_DISPLAY_NAMES[selectedSport] || selectedSport,
         team_or_player: selectedTeam,
         team_id: selectedTeamId,
         bet_type: betType,
