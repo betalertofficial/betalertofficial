@@ -381,6 +381,7 @@ export type Database = {
           odds_value: number
           sport: string
           status: string | null
+          team_id: string | null
           team_or_player: string
           updated_at: string | null
           vendor_id: string | null
@@ -395,6 +396,7 @@ export type Database = {
           odds_value: number
           sport: string
           status?: string | null
+          team_id?: string | null
           team_or_player: string
           updated_at?: string | null
           vendor_id?: string | null
@@ -409,11 +411,20 @@ export type Database = {
           odds_value?: number
           sport?: string
           status?: string | null
+          team_id?: string | null
           team_or_player?: string
           updated_at?: string | null
           vendor_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "triggers_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendor_logs: {
         Row: {

@@ -75,14 +75,15 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
   
   const [subjectType, setSubjectType] = useState<"team" | "player">("team");
   const [sports, setSports] = useState<any[]>([]);
-  const [selectedSport, setSelectedSport] = useState("");
+  const [selectedSport, setSelectedSport] = useState("basketball_nba");
   const [selectedSportTitle, setSelectedSportTitle] = useState("");
   
   const [teams, setTeams] = useState<Team[]>([]);
-  const [sportsbook, setSportsbook] = useState<"fanduel" | "draftkings">("fanduel");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [events, setEvents] = useState<OddsApiEvent[]>([]);
   const [selectedTeam, setSelectedTeam] = useState("");
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sportsbook, setSportsbook] = useState<"fanduel" | "draftkings">("fanduel");
+  const [events, setEvents] = useState<OddsApiEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<OddsApiEvent | null>(null);
   const [teamOdds, setTeamOdds] = useState<TeamOdds | null>(null);
   
@@ -266,9 +267,10 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
         bookmaker: sportsbook
       });
 
-      await triggerService.createTrigger(user.id, {
-        sport: selectedSportTitle,
+      const trigger = await triggerService.createTrigger({
+        sport: selectedSport,
         team_or_player: selectedTeam,
+        team_id: selectedTeamId,
         bet_type: betType,
         odds_comparator: oddsComparator,
         odds_value: finalOddsValue,
@@ -288,6 +290,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       
       setSearchQuery("");
       setSelectedTeam("");
+      setSelectedTeamId("");
       setSelectedEvent(null);
       setTeamOdds(null);
       setOddsValue("");
@@ -408,11 +411,13 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                   {filteredTeams.map((team) => (
                     <button
                       key={team.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2 hover:bg-gray-700 rounded-md transition-colors"
                       onClick={() => {
                         setSelectedTeam(team.name);
+                        setSelectedTeamId(team.id);
                         setSearchQuery("");
                       }}
-                      className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 transition-colors"
                     >
                       <div className="font-medium">{team.name}</div>
                       <div className="text-sm text-gray-400">{team.abbrev}</div>

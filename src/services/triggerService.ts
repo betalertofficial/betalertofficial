@@ -1,6 +1,18 @@
-
 import { supabase } from "@/integrations/supabase/client";
-import type { Trigger, ProfileTrigger } from "@/types/database";
+import type { Trigger, ProfileTrigger, BetType, TriggerFrequency } from "@/types/database";
+
+interface CreateTriggerParams {
+  sport: string;
+  team_or_player: string;
+  team_id?: string;
+  bet_type: BetType;
+  odds_comparator: string;
+  odds_value: number;
+  bookmaker?: string;
+  vendor_id?: string;
+  frequency: TriggerFrequency;
+  status: string;
+}
 
 export const triggerService = {
   async getUserTriggers(userId: string): Promise<ProfileTrigger[]> {
@@ -15,11 +27,13 @@ export const triggerService = {
           id,
           sport,
           team_or_player,
+          team_id,
           bet_type,
           odds_comparator,
           odds_value,
           frequency,
           status,
+          bookmaker,
           vendor_id,
           created_at,
           updated_at
@@ -32,14 +46,29 @@ export const triggerService = {
     return data as ProfileTrigger[];
   },
 
-  async createTrigger(
-    userId: string,
-    triggerData: Omit<Trigger, "id" | "created_at" | "updated_at">
-  ): Promise<ProfileTrigger> {
-    // Insert trigger with all fields including bookmaker
+  async createTrigger(params: CreateTriggerParams): Promise<ProfileTrigger> {
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    // Insert trigger
     const { data: trigger, error: triggerError } = await supabase
       .from("triggers")
-      .insert([triggerData])
+      .insert([{
+        sport: params.sport,
+        team_or_player: params.team_or_player,
+        team_id: params.team_id,
+        bet_type: params.bet_type,
+        odds_comparator: params.odds_comparator,
+        odds_value: params.odds_value,
+        frequency: params.frequency,
+        status: params.status,
+        vendor_id: params.vendor_id,
+        bookmaker: params.bookmaker
+      }])
       .select()
       .single();
 
@@ -53,7 +82,7 @@ export const triggerService = {
       .from("profile_triggers")
       .insert([
         {
-          profile_id: userId,
+          profile_id: user.id,
           trigger_id: trigger.id
         }
       ])
@@ -94,15 +123,5 @@ export const triggerService = {
       .eq("trigger_id", triggerId);
 
     if (error) throw error;
-  },
-
-  async getTriggerStats(userId: string) {
-    const triggers = await this.getUserTriggers(userId);
-    
-    const active = triggers.filter(pt => pt.trigger?.status === "active").length;
-    const completed = triggers.filter(pt => pt.trigger?.status === "completed").length;
-    const paused = triggers.filter(pt => pt.trigger?.status === "paused").length;
-
-    return { active, completed, paused, total: triggers.length };
   }
 };
