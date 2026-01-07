@@ -112,62 +112,37 @@ export default async function handler(
 
     console.log("=== Starting Manual Poll ===");
 
-    // 1. Fetch all active triggers with their profile info
-    const { data: profileTriggers, error: triggersError } = await supabase
-      .from("profile_triggers")
-      .select(`
-        id,
-        profile_id,
-        trigger_id,
-        triggers!profile_triggers_trigger_id_fkey (
-          id,
-          sport,
-          team_or_player,
-          bet_type,
-          odds_comparator,
-          odds_value,
-          frequency,
-          status,
-          bookmaker,
-          vendor_id
-        ),
-        profiles!profile_triggers_profile_id_fkey (
-          phone_e164
-        )
-      `)
-      .eq("triggers.status", "active");
+    // 1. Fetch all active triggers for NBA
+    const { data: triggers, error: triggersError } = await supabase
+      .from("triggers")
+      .select("*")
+      .eq("status", "active")
+      .eq("sport", "basketball_nba"); // Changed from "NBA" to match database format
 
-    if (triggersError || !profileTriggers) {
+    if (triggersError || !triggers) {
       throw new Error(`Failed to fetch triggers: ${triggersError?.message}`);
     }
 
     // Transform the nested structure into flat triggers array
-    const triggers: DatabaseTrigger[] = profileTriggers
-      .map((pt: any): DatabaseTrigger | null => {
-        // Handle potential array wrapping from Supabase joins
-        const trigger = Array.isArray(pt.triggers) ? pt.triggers[0] : pt.triggers;
-        const profile = Array.isArray(pt.profiles) ? pt.profiles[0] : pt.profiles;
-
-        if (!trigger || !profile) return null;
-
+    const triggersArray: DatabaseTrigger[] = triggers
+      .map((t: any): DatabaseTrigger => {
         return {
-          id: trigger.id,
-          profile_id: pt.profile_id,
-          sport: trigger.sport,
-          team_or_player: trigger.team_or_player,
-          bet_type: trigger.bet_type,
-          odds_comparator: trigger.odds_comparator,
-          odds_value: trigger.odds_value,
-          frequency: trigger.frequency,
-          status: trigger.status,
-          bookmaker: trigger.bookmaker,
-          vendor_id: trigger.vendor_id,
-          phone_e164: profile.phone_e164
+          id: t.id,
+          profile_id: t.profile_id,
+          sport: t.sport,
+          team_or_player: t.team_or_player,
+          bet_type: t.bet_type,
+          odds_comparator: t.odds_comparator,
+          odds_value: t.odds_value,
+          frequency: t.frequency,
+          status: t.status,
+          bookmaker: t.bookmaker,
+          vendor_id: t.vendor_id,
+          phone_e164: t.phone_e164
         };
-      })
-      .filter((t): t is DatabaseTrigger => t !== null);
+      });
 
-    if (triggers.length === 0) {
+    if (triggersArray.length === 0) {
       return res.status(200).json({
         success: true,
         message: "No active triggers found",
@@ -179,10 +154,10 @@ export default async function handler(
       });
     }
 
-    console.log(`Found ${triggers.length} active triggers`);
+    console.log(`Found ${triggersArray.length} active triggers`);
 
     // Group triggers by sport for efficient API calls
-    const triggersBySport = (triggers as any[]).reduce<Record<string, DatabaseTrigger[]>>((acc, trigger) => {
+    const triggersBySport = (triggersArray as any[]).reduce<Record<string, DatabaseTrigger[]>>((acc, trigger) => {
       const sport = trigger.sport || "Unknown";
       if (!acc[sport]) {
         acc[sport] = [];

@@ -158,38 +158,23 @@ export default function AdminPage() {
   };
 
   const handleManualPoll = async () => {
-    setIsManualPolling(true);
+    setManualPollLoading(true);
     try {
       const result = await adminService.manualPollAndCheckTriggers();
       
       toast({
         title: "Manual Poll Complete",
-        description: `Checked ${result.checked} triggers, ${result.hit} hit. Message: ${result.message}`,
-        variant: result.hit > 0 ? "default" : "default",
+        description: `Checked ${result.checked} triggers, ${result.hit} hit, ${result.alerts || 0} alerts created, ${result.matches || 0} matches recorded`,
       });
-      
-      await loadAdminData();
-    } catch (error: any) {
-      console.error("Error running manual poll:", error);
-      
-      const errorMessage = error.message || "Unknown error occurred";
-      const errorDetails = error.response?.data || { message: errorMessage };
-
+    } catch (error) {
+      console.error("Manual poll error:", error);
       toast({
         title: "Manual Poll Failed",
-        description: (
-          <div className="mt-2 w-[340px] md:w-[500px] overflow-auto">
-            <p className="text-sm font-medium mb-2">The API returned the following error:</p>
-            <pre className="rounded-md bg-slate-950 p-4">
-              <code className="text-white text-xs">{JSON.stringify(errorDetails, null, 2)}</code>
-            </pre>
-          </div>
-        ),
-        variant: "destructive",
-        duration: 10000,
+        description: error instanceof Error ? error.message : "Failed to run manual poll",
+        variant: "destructive"
       });
     } finally {
-      setIsManualPolling(false);
+      setManualPollLoading(false);
     }
   };
 
