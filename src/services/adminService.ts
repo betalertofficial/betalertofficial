@@ -145,7 +145,7 @@ export const adminService = {
     if (error) throw error;
   },
 
-  async manualPollAndCheckTriggers(): Promise<{ checked: number; hit: number; message: string; alerts: number; matches: number }> {
+  async manualPollAndCheckTriggers(): Promise<{ checked: number; hit: number; message: string }> {
     // Get fresh session
     const { data: { session }, error } = await supabase.auth.getSession();
     
@@ -179,9 +179,7 @@ export const adminService = {
     return {
       checked: data.checked || 0,
       hit: data.hit || 0,
-      message: data.message || "Manual poll completed",
-      alerts: data.alerts || 0,
-      matches: data.matches || 0
+      message: data.message || "Manual poll completed"
     };
   }
 };
