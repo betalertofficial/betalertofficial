@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/router";
 import { adminService, type AdminStats } from "@/services/adminService";
@@ -29,11 +29,13 @@ export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [stats, setStats] = useState<AdminStats | null>(null);
-  const [pollingEnabled, setPollingEnabled] = useState(true);
-  const [updatingPolling, setUpdatingPolling] = useState(false);
-  const [isPollingModalOpen, setIsPollingModalOpen] = useState(false);
+  const [pollingEnabled, setPollingEnabled] = useState(false);
+  const [pollingInterval, setPollingInterval] = useState(2);
+  const [manualPollLoading, setManualPollLoading] = useState(false);
+  const [showPollingModal, setShowPollingModal] = useState(false);
   const [isManualPolling, setIsManualPolling] = useState(false);
   const [isMappingTeams, setIsMappingTeams] = useState(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -60,6 +62,32 @@ export default function AdminPage() {
     checkAdmin();
   }, [user]);
 
+  // Cleanup polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Restart interval if polling is enabled and interval changes
+  useEffect(() => {
+    if (pollingEnabled && pollingIntervalRef.current) {
+      // Clear existing interval
+      clearInterval(pollingIntervalRef.current);
+
+      // Start new interval with updated time
+      pollingIntervalRef.current = setInterval(async () => {
+        try {
+          await handleManualPoll();
+        } catch (error) {
+          console.error("Automated poll error:", error);
+        }
+      }, pollingInterval * 60 * 1000);
+    }
+  }, [pollingInterval]);
+
   const loadAdminData = async () => {
     try {
       const [statsData, settingsData] = await Promise.all([
@@ -74,16 +102,58 @@ export default function AdminPage() {
     }
   };
 
-  const handleTogglePolling = async (enabled: boolean) => {
-    setUpdatingPolling(true);
+  const handlePollingToggle = async (enabled: boolean) => {
     try {
-      await adminService.updateAdminSetting("odds_polling_enabled", enabled);
+      // Clear any existing interval
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+
+      const response = await fetch("/api/admin/polling", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled, interval: pollingInterval }),
+        credentials: "include"
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update polling settings");
+      }
+
       setPollingEnabled(enabled);
+
+      // If enabling, start the polling interval
+      if (enabled) {
+        // Run immediately
+        await handleManualPoll();
+
+        // Then set up interval
+        pollingIntervalRef.current = setInterval(async () => {
+          try {
+            await handleManualPoll();
+          } catch (error) {
+            console.error("Automated poll error:", error);
+          }
+        }, pollingInterval * 60 * 1000); // Convert minutes to milliseconds
+
+        toast({
+          title: "Polling Started",
+          description: `Automated polling will run every ${pollingInterval} minutes`,
+        });
+      } else {
+        toast({
+          title: "Polling Stopped",
+          description: "Automated polling has been disabled",
+        });
+      }
     } catch (error) {
-      console.error("Error updating polling setting:", error);
-      alert("Failed to update polling setting");
-    } finally {
-      setUpdatingPolling(false);
+      console.error("Error toggling polling:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update polling settings",
+        variant: "destructive"
+      });
     }
   };
 
@@ -277,8 +347,8 @@ export default function AdminPage() {
                   <div className="flex items-center gap-2 mt-2">
                     <Switch
                       checked={pollingEnabled}
-                      onCheckedChange={handleTogglePolling}
-                      disabled={updatingPolling}
+                      onCheckedChange={handlePollingToggle}
+                      disabled={manualPollLoading}
                     />
                     <Badge className={pollingEnabled ? "bg-primary" : "bg-muted"}>
                       {pollingEnabled ? "ON" : "OFF"}
@@ -323,8 +393,8 @@ export default function AdminPage() {
                     <Switch
                       id="polling-switch"
                       checked={pollingEnabled}
-                      onCheckedChange={handleTogglePolling}
-                      disabled={updatingPolling}
+                      onCheckedChange={handlePollingToggle}
+                      disabled={manualPollLoading}
                     />
                   </div>
 
@@ -433,7 +503,7 @@ export default function AdminPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={() => setIsPollingModalOpen(true)}>Manage API Polling</Button>
+              <Button onClick={() => setShowPollingModal(true)}>Manage API Polling</Button>
             </CardContent>
           </Card>
         </div>
@@ -465,7 +535,7 @@ export default function AdminPage() {
         </div>
       </footer>
 
-      <PollingControlModal isOpen={isPollingModalOpen} onOpenChange={setIsPollingModalOpen} />
+      <PollingControlModal isOpen={showPollingModal} onOpenChange={setShowPollingModal} />
     </div>
   );
 }
