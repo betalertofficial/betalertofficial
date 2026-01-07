@@ -123,6 +123,8 @@ export default async function handler(
       throw new Error(`Failed to fetch triggers: ${triggersError?.message}`);
     }
 
+    console.log(`Raw triggers from database:`, JSON.stringify(triggers, null, 2));
+
     // Transform the nested structure into flat triggers array
     const triggersArray: DatabaseTrigger[] = triggers
       .map((t: any): DatabaseTrigger => {
