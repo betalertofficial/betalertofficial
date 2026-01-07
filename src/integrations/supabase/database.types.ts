@@ -295,6 +295,42 @@ export type Database = {
         }
         Relationships: []
       }
+      teams: {
+        Row: {
+          abbrev: string | null
+          created_at: string | null
+          id: string
+          league: string
+          name: string
+          primary_color: string | null
+          secondary_color: string | null
+          slug: string
+          updated_at: string | null
+        }
+        Insert: {
+          abbrev?: string | null
+          created_at?: string | null
+          id?: string
+          league: string
+          name: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          slug: string
+          updated_at?: string | null
+        }
+        Update: {
+          abbrev?: string | null
+          created_at?: string | null
+          id?: string
+          league?: string
+          name?: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          slug?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       trigger_matches: {
         Row: {
           id: string
@@ -410,6 +446,57 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "vendor_logs_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_team_map: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          last_verified_at: string | null
+          team_id: string
+          updated_at: string | null
+          vendor_id: string
+          vendor_sport_key: string | null
+          vendor_team_key: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_verified_at?: string | null
+          team_id: string
+          updated_at?: string | null
+          vendor_id: string
+          vendor_sport_key?: string | null
+          vendor_team_key: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_verified_at?: string | null
+          team_id?: string
+          updated_at?: string | null
+          vendor_id?: string
+          vendor_sport_key?: string | null
+          vendor_team_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_team_map_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_team_map_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
             referencedRelation: "vendors"
