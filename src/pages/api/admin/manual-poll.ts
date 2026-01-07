@@ -54,6 +54,7 @@ interface OddsSnapshotInsert {
 interface TriggerMatchInsert {
   trigger_id: string;
   odds_snapshot_id: string;
+  matched_value: number;
 }
 
 export default async function handler(
@@ -303,7 +304,8 @@ export default async function handler(
           if (matchingSnapshot) {
             triggerMatchesToInsert.push({
               trigger_id: hit.triggerId,
-              odds_snapshot_id: matchingSnapshot.id
+              odds_snapshot_id: matchingSnapshot.id,
+              matched_value: hit.snapshotData.odds_value
             });
           }
         }
