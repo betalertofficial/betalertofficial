@@ -68,8 +68,9 @@ export const triggerService = {
         .insert([{
           id: user.id,
           trigger_limit: 3,
-          phone_number: null,
-          full_name: "Anonymous User"
+          name: "Anonymous User",
+          // phone_e164 and country_code are now nullable, so we can omit them
+          role: "user"
         }]);
 
       if (profileError) {
