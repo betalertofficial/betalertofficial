@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { profileService } from "@/services/profileService";
+import { authService } from "@/services/authService";
 import type { Profile } from "@/types/database";
 
 interface AuthContextType {
@@ -37,7 +38,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    setLoading(true);
+    const initializeAuth = async () => {
+      setLoading(true);
+      
+      // Check if we have an existing session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        // No session exists, create anonymous user
+        console.log("[AuthContext] No session found, creating anonymous user");
+        const { user: anonUser, error } = await authService.signInAnonymously();
+        
+        if (error) {
+          console.error("[AuthContext] Error creating anonymous user:", error);
+        } else {
+          console.log("[AuthContext] Anonymous user created:", anonUser?.id);
+        }
+      }
+      
+      setLoading(false);
+    };
+
+    initializeAuth();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         console.log("[AuthContext] Auth state changed:", _event, session?.user?.id || "no user");
@@ -55,7 +78,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null);
         }
-        setLoading(false);
       }
     );
 

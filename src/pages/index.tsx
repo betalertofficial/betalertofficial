@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { PhoneAuth } from "@/components/auth/PhoneAuth";
 import { MyTriggers } from "@/components/dashboard/MyTriggers";
 import { History } from "@/components/dashboard/History";
 import { Settings } from "@/components/dashboard/Settings";
@@ -19,10 +18,6 @@ export default function HomePage() {
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
-  }
-
-  if (!user) {
-    return <PhoneAuth />;
   }
 
   return (

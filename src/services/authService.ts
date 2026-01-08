@@ -51,6 +51,31 @@ export const authService = {
     return session;
   },
 
+  // Sign in anonymously
+  async signInAnonymously(): Promise<{ user: AuthUser | null; error: AuthError | null }> {
+    try {
+      const { data, error } = await supabase.auth.signInAnonymously();
+
+      if (error) {
+        return { user: null, error: { message: error.message, code: error.status?.toString() } };
+      }
+
+      const authUser = data.user ? {
+        id: data.user.id,
+        email: data.user.email || "",
+        user_metadata: data.user.user_metadata,
+        created_at: data.user.created_at
+      } : null;
+
+      return { user: authUser, error: null };
+    } catch (error) {
+      return { 
+        user: null, 
+        error: { message: "An unexpected error occurred during anonymous sign in" } 
+      };
+    }
+  },
+
   // Sign up with email and password
   async signUp(email: string, password: string): Promise<{ user: AuthUser | null; error: AuthError | null }> {
     try {
