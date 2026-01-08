@@ -54,6 +54,30 @@ export const triggerService = {
       throw new Error("User not authenticated");
     }
 
+    // Check if profile exists, create if not (for anonymous users)
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", user.id)
+      .single();
+
+    if (!existingProfile) {
+      // Create profile for anonymous user with trigger_limit of 3
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert([{
+          id: user.id,
+          trigger_limit: 3,
+          phone_number: null,
+          full_name: "Anonymous User"
+        }]);
+
+      if (profileError) {
+        console.error("Error creating profile for anonymous user:", profileError);
+        throw new Error("Failed to create user profile");
+      }
+    }
+
     // Insert trigger
     const { data: trigger, error: triggerError } = await supabase
       .from("triggers")
