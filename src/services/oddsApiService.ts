@@ -32,6 +32,25 @@ export interface OddsApiOutcome {
   description?: string;
 }
 
+export interface OddsApiScore {
+  id: string;
+  sport_key: string;
+  sport_title: string;
+  commence_time: string;
+  completed: boolean;
+  home_team: string;
+  away_team: string;
+  scores: Array<{
+    name: string;
+    score: string;
+  }> | null;
+  last_update: string | null;
+}
+
+export interface OddsApiEventWithScore extends OddsApiEvent {
+  score_data?: OddsApiScore;
+}
+
 export const oddsApiService = {
   async getSports(apiKey: string = DEFAULT_API_KEY) {
     const url = `${BASE_URL}/sports?apiKey=${apiKey}`;
@@ -65,6 +84,18 @@ export const oddsApiService = {
     
     if (!response.ok) {
       throw new Error(`Odds API error: ${response.statusText}`);
+    }
+    
+    return response.json();
+  },
+
+  async getScores(sportKey: string, apiKey: string = DEFAULT_API_KEY): Promise<OddsApiScore[]> {
+    const url = `${BASE_URL}/sports/${sportKey}/scores?apiKey=${apiKey}&daysFrom=2`;
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`Odds API scores error: ${response.statusText}`);
     }
     
     return response.json();
