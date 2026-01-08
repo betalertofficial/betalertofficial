@@ -222,8 +222,21 @@ export default async function handler(
       try {
         // Fetch odds for this sport
         console.log(`Fetching odds for sport: ${sport} (${sportKey})`);
-        const events = await oddsApiService.getOddsForSport(sportKey, ODDS_API_KEY) as OddsApiEvent[];
-        console.log(`Found ${events.length} events for ${sportKey}`);
+        const [events, scores] = await Promise.all([
+          oddsApiService.getOddsForSport(sportKey, ODDS_API_KEY),
+          oddsApiService.getScores(sportKey, ODDS_API_KEY)
+        ]);
+        
+        console.log(`Found ${events.length} events and ${scores.length} scores for ${sportKey}`);
+
+        // Merge score data with events
+        const eventsWithScores = events.map(event => {
+          const scoreData = scores.find(score => score.id === event.id);
+          return {
+            ...event,
+            score_data: scoreData
+          };
+        });
 
         // Check each trigger against the events
         for (const trigger of sportTriggers) {
@@ -231,7 +244,7 @@ export default async function handler(
           console.log(`Checking trigger ${trigger.id} for ${trigger.team_or_player}`);
 
           // Find matching events (team/player)
-          const matchingEvents = events.filter(event =>
+          const matchingEvents = eventsWithScores.filter(event =>
             trigger.team_or_player.toLowerCase().includes(event.home_team.toLowerCase()) ||
             trigger.team_or_player.toLowerCase().includes(event.away_team.toLowerCase())
           );
@@ -410,8 +423,31 @@ export default async function handler(
         if (hit) {
           const { trigger, snapshotData } = hit;
           
+          // Get score data from the event if available
+          const event = snapshotData.event_data;
+          let scoreInfo = '';
+          
+          if (event?.score_data) {
+            const sd = event.score_data;
+            if (sd.scores && sd.scores.length > 0) {
+              const homeScore = sd.scores.find((s: any) => s.name === event.home_team);
+              const awayScore = sd.scores.find((s: any) => s.name === event.away_team);
+              
+              if (homeScore && awayScore) {
+                scoreInfo = ` | Score: ${awayScore.name} ${awayScore.score} - ${homeScore.name} ${homeScore.score}`;
+                
+                // Add completion status if available
+                if (sd.completed) {
+                  scoreInfo += ' (Final)';
+                } else if (sd.last_update) {
+                  scoreInfo += ' (Live)';
+                }
+              }
+            }
+          }
+          
           // Generate descriptive alert message
-          const message = `🎯 ${trigger.team_or_player} ${trigger.bet_type} ${trigger.odds_comparator} ${trigger.odds_value} HIT! Current odds: ${snapshotData.odds_value} on ${snapshotData.bookmaker}`;
+          const message = `🎯 ${trigger.team_or_player} ${trigger.bet_type} ${trigger.odds_comparator} ${trigger.odds_value} HIT! Current odds: ${snapshotData.odds_value} on ${snapshotData.bookmaker}${scoreInfo}`;
 
           alertsToInsert.push({
             trigger_match_id: match.id,
