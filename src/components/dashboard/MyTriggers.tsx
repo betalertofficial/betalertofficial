@@ -94,18 +94,6 @@ export function MyTriggers() {
     );
   }
 
-  // Show warning if profile isn't loaded yet
-  if (!profile) {
-    return (
-      <div className="space-y-6">
-        <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 px-4 py-3 rounded-lg">
-          <p className="font-semibold">Loading your profile...</p>
-          <p className="text-sm mt-1">If this persists, try refreshing the page.</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
