@@ -442,6 +442,8 @@ export default async function handler(
               
               if (detailedScore) {
                 scoreInfo = ` | ${apiSportsService.formatGameScore(detailedScore)}`;
+                // Add detailed game data for debugging
+                scoreInfo += ` [Q${detailedScore.quarter} | Status: ${detailedScore.status} | Clock: ${detailedScore.clock || 'N/A'}]`;
               }
             } catch (error) {
               console.error('Error fetching detailed score from API-Sports:', error);
