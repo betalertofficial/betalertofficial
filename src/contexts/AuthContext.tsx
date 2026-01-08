@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { profileService } from "@/services/profileService";
 import { authService } from "@/services/authService";
 import type { Profile } from "@/types/database";
+import { useToast } from "@/hooks/use-toast";
 
 interface AuthContextType {
   user: User | null;
@@ -19,6 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   const refreshProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -51,8 +53,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (error) {
           console.error("[AuthContext] Error creating anonymous user:", error);
+          toast({
+            title: "Connection Error",
+            description: "Unable to initialize session. Please refresh the page.",
+            variant: "destructive",
+          });
         } else {
           console.log("[AuthContext] Anonymous user created:", anonUser?.id);
+          toast({
+            title: "Welcome! 👋",
+            description: "Browsing anonymously - create a trigger to save your account",
+          });
         }
       }
       
