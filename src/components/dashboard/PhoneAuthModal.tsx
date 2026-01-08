@@ -40,7 +40,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
 
       const phoneE164 = `+1${cleaned}`;
 
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.updateUser({
         phone: phoneE164,
       });
 
