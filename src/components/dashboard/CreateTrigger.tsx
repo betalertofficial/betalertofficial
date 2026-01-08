@@ -12,6 +12,8 @@ import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
 import { teamsService, type Team } from "@/services/teamsService";
 import type { BetType, TriggerFrequency } from "@/types/database";
+import { PhoneAuthModal } from "./PhoneAuthModal";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CreateTriggerProps {
   open: boolean;
@@ -79,6 +81,9 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  
+  const [phoneAuthOpen, setPhoneAuthOpen] = useState(false);
+  const [pendingTriggerData, setPendingTriggerData] = useState<any>(null);
   
   const [subjectType, setSubjectType] = useState<"team" | "player">("team");
   const [sports, setSports] = useState<any[]>([]);
@@ -243,6 +248,37 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       return;
     }
 
+    // Check if user is anonymous
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (currentUser?.is_anonymous) {
+      // Store trigger data and show phone auth modal
+      const numericValue = parseFloat(oddsValue);
+      const finalOddsValue = oddsSign === "-" ? -numericValue : numericValue;
+      const oddsComparator = oddsDirection === "higher" ? ">=" : "<=";
+      
+      setPendingTriggerData({
+        sport: SPORT_DISPLAY_NAMES[selectedSport] || selectedSport,
+        team_or_player: selectedTeam,
+        team_id: selectedTeamId,
+        bet_type: betType,
+        odds_comparator: oddsComparator,
+        odds_value: finalOddsValue,
+        frequency,
+        status: "active",
+        bookmaker: sportsbook
+      });
+      
+      setPhoneAuthOpen(true);
+      return;
+    }
+
+    // If not anonymous, proceed with trigger creation
+    await createTriggerWithData();
+  };
+
+  const createTriggerWithData = async () => {
+    if (!user) return;
+
     try {
       setLoading(true);
       
@@ -258,43 +294,43 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
         throw new Error("Odds API vendor not found. Please contact support.");
       }
 
-      const numericValue = parseFloat(oddsValue);
-      const finalOddsValue = oddsSign === "-" ? -numericValue : numericValue;
-      const oddsComparator = oddsDirection === "higher" ? ">=" : "<=";
+      // Use pending data if available, otherwise gather from form
+      let triggerData;
+      if (pendingTriggerData) {
+        triggerData = { ...pendingTriggerData, vendor_id: oddsApiVendor.id };
+      } else {
+        const numericValue = parseFloat(oddsValue);
+        const finalOddsValue = oddsSign === "-" ? -numericValue : numericValue;
+        const oddsComparator = oddsDirection === "higher" ? ">=" : "<=";
 
-      console.log("Creating trigger with data:", {
-        sport: SPORT_DISPLAY_NAMES[selectedSport] || selectedSport,
-        team_or_player: selectedTeam,
-        bet_type: betType,
-        odds_comparator: oddsComparator,
-        odds_value: finalOddsValue,
-        frequency,
-        status: "active",
-        vendor_id: oddsApiVendor.id,
-        bookmaker: sportsbook
-      });
+        triggerData = {
+          sport: SPORT_DISPLAY_NAMES[selectedSport] || selectedSport,
+          team_or_player: selectedTeam,
+          team_id: selectedTeamId,
+          bet_type: betType,
+          odds_comparator: oddsComparator,
+          odds_value: finalOddsValue,
+          frequency,
+          status: "active",
+          vendor_id: oddsApiVendor.id,
+          bookmaker: sportsbook
+        };
+      }
 
-      const trigger = await triggerService.createTrigger({
-        sport: SPORT_DISPLAY_NAMES[selectedSport] || selectedSport,
-        team_or_player: selectedTeam,
-        team_id: selectedTeamId,
-        bet_type: betType,
-        odds_comparator: oddsComparator,
-        odds_value: finalOddsValue,
-        frequency,
-        status: "active",
-        vendor_id: oddsApiVendor.id,
-        bookmaker: sportsbook
-      });
+      console.log("Creating trigger with data:", triggerData);
+
+      const trigger = await triggerService.createTrigger(triggerData);
 
       toast({
         title: "Success!",
-        description: "Trigger created successfully",
+        description: "Trigger created successfully. You'll receive SMS alerts when odds match your criteria.",
       });
 
       onSuccess();
       onOpenChange(false);
       
+      // Clear form and pending data
+      setPendingTriggerData(null);
       setSearchQuery("");
       setSelectedTeam("");
       setSelectedTeamId("");
@@ -312,6 +348,11 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePhoneAuthSuccess = async () => {
+    // After successful phone verification, create the trigger
+    await createTriggerWithData();
   };
 
   const filteredTeams = teams.filter(team => 
@@ -587,6 +628,12 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
           </Button>
         </div>
       </DialogContent>
+
+      <PhoneAuthModal
+        open={phoneAuthOpen}
+        onOpenChange={setPhoneAuthOpen}
+        onSuccess={handlePhoneAuthSuccess}
+      />
     </Dialog>
   );
 }
