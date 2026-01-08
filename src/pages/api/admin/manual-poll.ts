@@ -441,9 +441,21 @@ export default async function handler(
               );
               
               if (detailedScore) {
-                scoreInfo = ` | ${apiSportsService.formatGameScore(detailedScore)}`;
-                // Add detailed game data for debugging
-                scoreInfo += ` [Q${detailedScore.quarter} | Status: ${detailedScore.status} | Clock: ${detailedScore.clock || 'N/A'}]`;
+                // Format the score
+                const awayTeamName = detailedScore.awayTeam;
+                const homeTeamName = detailedScore.homeTeam;
+                const awayScore = detailedScore.awayScore;
+                const homeScore = detailedScore.homeScore;
+                
+                // Format the time based on clock availability
+                let timeInfo = '';
+                if (detailedScore.clock && detailedScore.clock !== 'N/A') {
+                  timeInfo = ` | Time: ${detailedScore.clock} left in Q${detailedScore.quarter}`;
+                } else {
+                  timeInfo = ` | Time: End of Q${detailedScore.quarter}`;
+                }
+                
+                scoreInfo = ` | ${awayTeamName} ${awayScore} - ${homeTeamName} ${homeScore}${timeInfo}`;
               }
             } catch (error) {
               console.error('Error fetching detailed score from API-Sports:', error);
