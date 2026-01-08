@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
 import { oddsApiService } from "@/services/oddsApiService";
+import { apiSportsService } from "@/services/apiSportsService";
 
 // Use local API key
 const ODDS_API_KEY = "8fd23ab732557e3db9238fc571eddbbe";
@@ -423,24 +424,35 @@ export default async function handler(
         if (hit) {
           const { trigger, snapshotData } = hit;
           
-          // Get score data from the event if available
-          const event = snapshotData.event_data;
+          // Get detailed score data from API-Sports if available
           let scoreInfo = '';
+          const event = snapshotData.event_data;
           
-          if (event?.score_data) {
-            const sd = event.score_data;
-            if (sd.scores && sd.scores.length > 0) {
-              const homeScore = sd.scores.find((s: any) => s.name === event.home_team);
-              const awayScore = sd.scores.find((s: any) => s.name === event.away_team);
+          if (event) {
+            // Extract date from event commence_time (format: YYYY-MM-DD)
+            const eventDate = event.commence_time.split('T')[0];
+            
+            try {
+              // Fetch detailed game info from API-Sports
+              const detailedScore = await apiSportsService.findGame(
+                event.home_team,
+                event.away_team,
+                eventDate
+              );
               
-              if (homeScore && awayScore) {
-                scoreInfo = ` | Score: ${awayScore.name} ${awayScore.score} - ${homeScore.name} ${homeScore.score}`;
+              if (detailedScore) {
+                scoreInfo = ` | ${apiSportsService.formatGameScore(detailedScore)}`;
+              }
+            } catch (error) {
+              console.error('Error fetching detailed score from API-Sports:', error);
+              // Fallback to Odds API score data if available
+              if (event.score_data?.scores && event.score_data.scores.length > 0) {
+                const homeScore = event.score_data.scores.find((s: any) => s.name === event.home_team);
+                const awayScore = event.score_data.scores.find((s: any) => s.name === event.away_team);
                 
-                // Add completion status if available
-                if (sd.completed) {
-                  scoreInfo += ' (Final)';
-                } else if (sd.last_update) {
-                  scoreInfo += ' (Live)';
+                if (homeScore && awayScore) {
+                  const status = event.score_data.completed ? '(Final)' : '(Live)';
+                  scoreInfo = ` | Score: ${awayScore.name} ${awayScore.score} - ${homeScore.name} ${homeScore.score} ${status}`;
                 }
               }
             }
