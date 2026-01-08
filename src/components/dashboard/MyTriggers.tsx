@@ -84,7 +84,7 @@ export function MyTriggers() {
 
   // Calculate active triggers count for the limit check
   const activeCount = triggers.filter(t => t.trigger?.status === "active").length;
-  const remaining = profile?.trigger_limit ? profile.trigger_limit - activeCount : 0;
+  const remaining = profile?.trigger_limit ? profile.trigger_limit - activeCount : 3;
 
   if (loading || authLoading) {
     return (
