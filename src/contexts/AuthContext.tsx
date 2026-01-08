@@ -53,18 +53,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (error) {
           console.error("[AuthContext] Error creating anonymous user:", error);
-          toast({
-            title: "Connection Error",
-            description: "Unable to initialize session. Please refresh the page.",
-            variant: "destructive",
-          });
-        } else {
-          console.log("[AuthContext] Anonymous user created:", anonUser?.id);
+          
+          // Check if anonymous auth is disabled (422 error)
+          if (error.code === "422") {
+            console.warn("[AuthContext] Anonymous authentication is not enabled in Supabase project settings");
+            toast({
+              title: "Setup Required",
+              description: "Anonymous authentication is not enabled. Please enable it in Supabase Dashboard → Authentication → Providers",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Connection Error",
+              description: "Unable to initialize session. Please refresh the page.",
+              variant: "destructive",
+            });
+          }
+          
+          // Don't block the app - user can still use it without auth
+          setLoading(false);
+          return;
+        }
+        
+        if (anonUser) {
+          console.log("[AuthContext] Anonymous user created:", anonUser.id);
           toast({
             title: "Welcome! 👋",
             description: "Browsing anonymously - create a trigger to save your account",
           });
         }
+      } else {
+        console.log("[AuthContext] Existing session found:", session.user.id);
       }
       
       setLoading(false);
@@ -95,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [toast]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
