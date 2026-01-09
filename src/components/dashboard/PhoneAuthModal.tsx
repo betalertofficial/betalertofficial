@@ -40,7 +40,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
         description: "The request took too long. Please check your Supabase configuration and try again.",
         variant: "destructive"
       });
-    }, 10000); // 10 second timeout
+    }, 30000); // 30 second timeout
 
     try {
       const cleaned = phone.replace(/\D/g, "");
