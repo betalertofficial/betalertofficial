@@ -137,17 +137,13 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
       const cleaned = phone.replace(/\D/g, "");
       const phoneE164 = `+1${cleaned}`;
 
-      // Get current user session before verification
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      const isAnonymous = currentUser?.is_anonymous;
-      const anonymousUserId = currentUser?.id;
-
       console.log("[PhoneAuthModal] Verifying OTP for:", phoneE164);
-      console.log("[PhoneAuthModal] Current anonymous user:", anonymousUserId);
+      console.log("[PhoneAuthModal] Using digits only format:", cleaned);
 
       // Verify OTP - this will link the phone identity to the anonymous account
+      // Use digits-only format (no + prefix) as per Supabase documentation
       const { data, error } = await supabase.auth.verifyOtp({
-        phone: phoneE164,
+        phone: cleaned,  // Use digits only, no + prefix
         token: otp,
         type: "phone_change",
       });
@@ -159,33 +155,10 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
 
       console.log("[PhoneAuthModal] OTP verified successfully");
       console.log("[PhoneAuthModal] User after verification:", data.user?.id);
+      console.log("[PhoneAuthModal] User phone:", data.user?.phone);
 
-      // If the user was anonymous, update the profile with phone number
-      if (isAnonymous && anonymousUserId) {
-        console.log("[PhoneAuthModal] Updating profile for anonymous user conversion");
-        
-        // Use upsert to handle both cases:
-        // 1. Profile exists (update it)
-        // 2. Profile missing (create it)
-        const { error: updateError } = await supabase
-          .from("profiles")
-          .upsert({
-            id: anonymousUserId,
-            phone_e164: phoneE164,
-            country_code: "US",
-            name: "",
-            updated_at: new Date().toISOString()
-          }, { 
-            onConflict: 'id' 
-          });
-
-        if (updateError) {
-          console.error("[PhoneAuthModal] Profile update error:", updateError);
-          throw updateError;
-        }
-
-        console.log("[PhoneAuthModal] Profile updated successfully");
-      }
+      // Supabase automatically updates the user's phone number and profile
+      // No manual profile update needed
 
       toast({
         title: "Success!",
