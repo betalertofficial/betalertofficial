@@ -107,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 id: currentUser.id,
                 phone_e164: null,
                 country_code: null,
+                role: "user",
               });
               setProfile(newProfile);
               console.log("[AuthContext] Profile created successfully:", newProfile.id);
