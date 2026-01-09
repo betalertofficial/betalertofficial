@@ -40,11 +40,29 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
 
       const phoneE164 = `+1${cleaned}`;
 
-      const { error } = await supabase.auth.updateUser({
+      // Get current anonymous user
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      if (!currentUser) {
+        throw new Error("No user session found");
+      }
+
+      console.log("[PhoneAuthModal] Current user:", currentUser.id, "is_anonymous:", currentUser.is_anonymous);
+
+      // For anonymous users, we need to use signInWithOtp which will link the identity
+      const { error } = await supabase.auth.signInWithOtp({
         phone: phoneE164,
+        options: {
+          shouldCreateUser: false, // Don't create a new user, link to existing
+        }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("[PhoneAuthModal] OTP send error:", error);
+        throw error;
+      }
+
+      console.log("[PhoneAuthModal] OTP sent successfully to:", phoneE164);
 
       setStep("otp");
       toast({
@@ -52,6 +70,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
         description: `Verification code sent to ${phone}`,
       });
     } catch (err: any) {
+      console.error("[PhoneAuthModal] Error in handleSendOtp:", err);
       toast({
         title: "Error",
         description: err.message || "Failed to send verification code",
@@ -70,32 +89,48 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
       const cleaned = phone.replace(/\D/g, "");
       const phoneE164 = `+1${cleaned}`;
 
-      // Get current user session
+      // Get current user session before verification
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       const isAnonymous = currentUser?.is_anonymous;
+      const anonymousUserId = currentUser?.id;
 
-      // Verify OTP
+      console.log("[PhoneAuthModal] Verifying OTP for:", phoneE164);
+      console.log("[PhoneAuthModal] Current anonymous user:", anonymousUserId);
+
+      // Verify OTP - this will link the phone identity to the anonymous account
       const { data, error } = await supabase.auth.verifyOtp({
         phone: phoneE164,
         token: otp,
         type: "sms",
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("[PhoneAuthModal] OTP verification error:", error);
+        throw error;
+      }
 
-      // If the user was anonymous, we need to link the accounts
-      if (isAnonymous && currentUser) {
-        // Update the profile with phone number
+      console.log("[PhoneAuthModal] OTP verified successfully");
+      console.log("[PhoneAuthModal] User after verification:", data.user?.id);
+
+      // If the user was anonymous, update the profile with phone number
+      if (isAnonymous && anonymousUserId) {
+        console.log("[PhoneAuthModal] Updating profile for anonymous user conversion");
+        
         const { error: updateError } = await supabase
           .from("profiles")
           .update({
             phone_e164: phoneE164,
             country_code: "US",
-            name: ""
+            name: "" // Set empty name for now
           })
-          .eq("id", currentUser.id);
+          .eq("id", anonymousUserId);
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error("[PhoneAuthModal] Profile update error:", updateError);
+          throw updateError;
+        }
+
+        console.log("[PhoneAuthModal] Profile updated successfully");
       }
 
       toast({
@@ -112,6 +147,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
+      console.error("[PhoneAuthModal] Error in handleVerifyOtp:", err);
       toast({
         title: "Error",
         description: err.message || "Invalid verification code",
