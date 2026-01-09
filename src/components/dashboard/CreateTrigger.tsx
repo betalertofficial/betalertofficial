@@ -10,6 +10,7 @@ import { Loader2, Search, Bell, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
+import { authService } from "@/services/authService";
 import { teamsService, type Team } from "@/services/teamsService";
 import type { BetType, TriggerFrequency } from "@/types/database";
 import { PhoneAuthModal } from "./PhoneAuthModal";
@@ -239,7 +240,38 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
   };
 
   const handleCreateTrigger = async () => {
-    if (!user || !selectedTeam || !oddsValue) {
+    // 1. Lazy Auth: If no user exists, try to sign in anonymously right now
+    let currentUser = user;
+    
+    if (!currentUser) {
+      setLoading(true);
+      try {
+        console.log("No user found, attempting lazy anonymous sign-in...");
+        const { user: anonUser, error } = await authService.signInAnonymously();
+        
+        if (error || !anonUser) {
+           throw error || new Error("Failed to create anonymous user");
+        }
+        
+        // Refresh the page/context state ideally, but here we just need a valid user to proceed
+        // We can re-fetch the user from Supabase to ensure we have the session
+        const { data: { user: sbUser } } = await supabase.auth.getUser();
+        currentUser = sbUser;
+        
+      } catch (error: any) {
+        console.error("Lazy auth failed:", error);
+        toast({
+          title: "Authentication Failed",
+          description: "Could not start anonymous session. Please check 'Allow new users to sign up' in Supabase Settings.",
+          variant: "destructive"
+        });
+        setLoading(false);
+        return;
+      }
+      setLoading(false);
+    }
+
+    if (!currentUser || !selectedTeam || !oddsValue) {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields",
@@ -248,9 +280,13 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
       return;
     }
 
-    // Check if user is anonymous
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (currentUser?.is_anonymous) {
+    // Check if user is anonymous (fetch fresh state to be sure)
+    const { data: { user: freshUser } } = await supabase.auth.getUser();
+    
+    // Use freshUser or currentUser as fallback
+    const effectiveUser = freshUser || currentUser;
+    
+    if (effectiveUser?.is_anonymous) {
       // Store trigger data and show phone auth modal
       const numericValue = parseFloat(oddsValue);
       const finalOddsValue = oddsSign === "-" ? -numericValue : numericValue;

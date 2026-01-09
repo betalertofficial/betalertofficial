@@ -54,8 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) {
           console.error("[AuthContext] Error creating anonymous user:", error);
           
-          // Check if anonymous auth is disabled (422 error)
-          if (error.code === "422") {
+          // Check if anonymous auth is disabled (406 or 422 error)
+          if (error.code === "422" || error.code === "406") {
             console.warn("[AuthContext] Anonymous authentication is not enabled in Supabase project settings");
             toast({
               title: "Setup Required",
@@ -100,9 +100,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (currentUser) {
           try {
             const profileData = await profileService.getProfile(currentUser.id);
-            setProfile(profileData);
+            
+            if (!profileData) {
+              console.log("[AuthContext] No profile found, creating one for user:", currentUser.id);
+              const newProfile = await profileService.createProfile({
+                id: currentUser.id,
+                phone_e164: null,
+                country_code: null,
+              });
+              setProfile(newProfile);
+              console.log("[AuthContext] Profile created successfully:", newProfile.id);
+            } else {
+              setProfile(profileData);
+            }
           } catch (error) {
-            console.error("[AuthContext] Error fetching profile on auth change:", error);
+            console.error("[AuthContext] Error fetching/creating profile on auth change:", error);
             setProfile(null);
           }
         } else {

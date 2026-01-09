@@ -164,14 +164,20 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
       if (isAnonymous && anonymousUserId) {
         console.log("[PhoneAuthModal] Updating profile for anonymous user conversion");
         
+        // Use upsert to handle both cases:
+        // 1. Profile exists (update it)
+        // 2. Profile missing (create it)
         const { error: updateError } = await supabase
           .from("profiles")
-          .update({
+          .upsert({
+            id: anonymousUserId,
             phone_e164: phoneE164,
             country_code: "US",
-            name: ""
-          })
-          .eq("id", anonymousUserId);
+            name: "",
+            updated_at: new Date().toISOString()
+          }, { 
+            onConflict: 'id' 
+          });
 
         if (updateError) {
           console.error("[PhoneAuthModal] Profile update error:", updateError);
