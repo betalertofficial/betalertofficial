@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
+  const waitingForOtp = useRef(false);
 
   const formatPhone = (value: string) => {
     const cleaned = value.replace(/\D/g, "");
@@ -31,6 +32,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    waitingForOtp.current = true;
 
     // Create a timeout to prevent infinite spinning
     const timeoutId = setTimeout(() => {
@@ -256,29 +258,14 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
   };
 
   useEffect(() => {
-    const channel = supabase
-      .channel("phone_auth")
-      .on(
-        "broadcast",
-        { event: "auth.user.updated" },
-        (payload) => {
-          console.log("[PhoneAuthModal] USER_UPDATED event received:", payload);
-          if (payload.new.phone) {
-            setStep("otp");
-            setLoading(false);
-            toast({
-              title: "Code Sent",
-              description: `Verification code sent to ${payload.new.phone}. For testing, use code: 123456`,
-            });
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-    };
-  }, [toast]);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[PhoneAuthModal] Auth event received:", event);
+      
+      if (event === "USER_UPDATED" && session?.user) {
+        console.log("[PhoneAuthModal] USER_UPDATED - user phone:", session.user.phone);
+      }
+    });
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
