@@ -5,17 +5,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { profileService } from "@/services/profileService";
-import { Shield } from "lucide-react";
-import { useRouter } from "next/router";
+import { useToast } from "@/hooks/use-toast";
 
-export function PhoneAuth() {
-  const router = useRouter();
+interface PhoneAuthProps {
+  onSuccess?: () => void;
+}
+
+export function PhoneAuth({ onSuccess }: PhoneAuthProps) {
+  const { toast } = useToast();
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [adminLoading, setAdminLoading] = useState(false);
 
   const formatPhone = (value: string) => {
     const cleaned = value.replace(/\D/g, "");
@@ -45,6 +47,10 @@ export function PhoneAuth() {
       if (error) throw error;
 
       setStep("otp");
+      toast({
+        title: "Code Sent! 📱",
+        description: "Check your phone for the verification code",
+      });
     } catch (err: any) {
       setError(err.message || "Failed to send verification code");
     } finally {
@@ -73,17 +79,24 @@ export function PhoneAuth() {
         const existingProfile = await profileService.getProfile(data.user.id);
         
         if (!existingProfile) {
-          const isAdmin = phoneE164 === "+15555550001";
-          
           await profileService.createProfile({
             id: data.user.id,
             phone_e164: phoneE164,
             country_code: "US",
-            role: isAdmin ? "super_admin" : "user",
-            subscription_tier: isAdmin ? "enterprise" : "free",
-            trigger_limit: isAdmin ? 999 : 3,
-            name: isAdmin ? "Super Admin" : ""
+            role: "user",
+            subscription_tier: "free",
+            trigger_limit: 3,
+            name: ""
           });
+        }
+
+        toast({
+          title: "Success! 🎉",
+          description: "Your phone number has been verified",
+        });
+
+        if (onSuccess) {
+          onSuccess();
         }
       }
     } catch (err: any) {
@@ -93,159 +106,98 @@ export function PhoneAuth() {
     }
   };
 
-  const handleAdminOverride = async () => {
-    setAdminLoading(true);
-    setError("");
-
-    try {
-      // Call the dev-admin-login API to create a real session
-      const response = await fetch("/api/dev-admin-login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to create admin session");
-      }
-
-      const { access_token, refresh_token } = await response.json();
-
-      // Set the session in Supabase client
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token,
-        refresh_token
-      });
-
-      if (sessionError) throw sessionError;
-
-      // Session is now active - the AuthContext will pick it up automatically
-      // No need to reload, just let the auth state change handler do its job
-    } catch (err: any) {
-      console.error("Admin override error:", err);
-      setError(err.message || "Failed to sign in as super admin");
-      setAdminLoading(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md glass-panel">
-        <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-            Bet Alert
-          </CardTitle>
-          <CardDescription className="text-muted-foreground mt-2">
-            {step === "phone" ? "Enter your phone number to get started" : "Enter the verification code"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {step === "phone" ? (
-            <form onSubmit={handleSendOtp} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="(555) 123-4567"
-                  value={phone}
-                  onChange={(e) => setPhone(formatPhone(e.target.value))}
-                  maxLength={14}
-                  required
-                  className="text-lg"
-                />
-                <p className="text-xs text-muted-foreground">US numbers only. Standard SMS rates may apply.</p>
+    <Card className="w-full glass-panel border-border">
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl font-bold text-foreground">
+          Verify Your Phone
+        </CardTitle>
+        <CardDescription className="text-muted-foreground mt-2">
+          {step === "phone" ? "Enter your phone number to receive alerts" : "Enter the verification code"}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {step === "phone" ? (
+          <form onSubmit={handleSendOtp} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="(555) 123-4567"
+                value={phone}
+                onChange={(e) => setPhone(formatPhone(e.target.value))}
+                maxLength={14}
+                required
+                className="text-lg"
+              />
+              <p className="text-xs text-muted-foreground">US numbers only. Standard SMS rates may apply.</p>
+            </div>
+
+            {error && (
+              <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm">
+                {error}
               </div>
+            )}
 
-              {error && (
-                <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
+            <Button
+              type="submit"
+              className="w-full btn-primary"
+              disabled={loading}
+            >
+              {loading ? "Sending..." : "Send Verification Code"}
+            </Button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyOtp} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="otp">Verification Code</Label>
+              <Input
+                id="otp"
+                type="text"
+                placeholder="000000"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                maxLength={6}
+                required
+                className="text-lg text-center tracking-widest"
+              />
+              <p className="text-xs text-muted-foreground">Enter the 6-digit code sent to {phone}</p>
+            </div>
 
-              <Button
-                type="submit"
-                className="w-full btn-primary"
-                disabled={loading}
-              >
-                {loading ? "Sending..." : "Send Verification Code"}
-              </Button>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">
-                    Development Only
-                  </span>
-                </div>
+            {error && (
+              <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm">
+                {error}
               </div>
+            )}
 
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full border-primary/30 hover:bg-primary/10"
-                onClick={() => router.push("/admin-login")}
-                disabled={loading}
-              >
-                <Shield className="h-4 w-4 mr-2" />
-                Super Admin Login
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="otp">Verification Code</Label>
-                <Input
-                  id="otp"
-                  type="text"
-                  placeholder="000000"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  maxLength={6}
-                  required
-                  className="text-lg text-center tracking-widest"
-                />
-                <p className="text-xs text-muted-foreground">Enter the 6-digit code sent to {phone}</p>
-              </div>
+            <Button
+              type="submit"
+              className="w-full btn-primary"
+              disabled={loading || otp.length !== 6}
+            >
+              {loading ? "Verifying..." : "Verify & Continue"}
+            </Button>
 
-              {error && (
-                <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={() => {
+                setStep("phone");
+                setOtp("");
+                setError("");
+              }}
+            >
+              Change Phone Number
+            </Button>
+          </form>
+        )}
 
-              <Button
-                type="submit"
-                className="w-full btn-primary"
-                disabled={loading || otp.length !== 6}
-              >
-                {loading ? "Verifying..." : "Verify & Sign In"}
-              </Button>
-
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                onClick={() => {
-                  setStep("phone");
-                  setOtp("");
-                  setError("");
-                }}
-              >
-                Change Phone Number
-              </Button>
-            </form>
-          )}
-
-          <p className="text-xs text-center text-muted-foreground mt-6">
-            Please gamble responsibly. Must be 21+ and located in eligible states.
-          </p>
-        </CardContent>
-      </Card>
-    </div>
+        <p className="text-xs text-center text-muted-foreground mt-6">
+          By verifying your phone, you agree to receive SMS alerts when your triggers are hit.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

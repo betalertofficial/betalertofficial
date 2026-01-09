@@ -6,11 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Bell, TrendingUp } from "lucide-react";
+import { Loader2, Search, Bell, TrendingUp, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
 import { teamsService, type Team } from "@/services/teamsService";
+import { PhoneAuth } from "@/components/auth/PhoneAuth";
 import type { BetType, TriggerFrequency } from "@/types/database";
 
 interface CreateTriggerProps {
@@ -76,9 +77,10 @@ const SPORT_DISPLAY_NAMES: Record<string, string> = {
 };
 
 export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerProps) {
-  const { user } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [showPhoneAuth, setShowPhoneAuth] = useState(false);
   
   const [subjectType, setSubjectType] = useState<"team" | "player">("team");
   const [sports, setSports] = useState<any[]>([]);
@@ -102,6 +104,9 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
   const [frequency, setFrequency] = useState<TriggerFrequency>("once");
 
   const gameTimeOptions = GAME_TIME_CONTEXTS[selectedSport as keyof typeof GAME_TIME_CONTEXTS] || GAME_TIME_CONTEXTS.default;
+
+  // Check if user needs phone authentication
+  const needsPhoneAuth = !profile?.phone_e164 || user?.is_anonymous;
 
   useEffect(() => {
     if (open) {
@@ -131,7 +136,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
         setLoading(true);
         // Map sport key to league name in database
         const leagueMap: Record<string, string> = {
-          "basketball_nba": "nba" // Database stores lowercase "nba"
+          "basketball_nba": "nba"
         };
         
         const league = leagueMap[selectedSport];
@@ -233,7 +238,22 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
     setTeamOdds(odds);
   };
 
+  const handlePhoneAuthSuccess = async () => {
+    setShowPhoneAuth(false);
+    await refreshProfile();
+    toast({
+      title: "Phone Verified! 📱",
+      description: "You can now create triggers and receive SMS alerts",
+    });
+  };
+
   const handleCreateTrigger = async () => {
+    // Check if user needs phone authentication
+    if (needsPhoneAuth) {
+      setShowPhoneAuth(true);
+      return;
+    }
+
     if (!user || !selectedTeam || !oddsValue) {
       toast({
         title: "Missing Information",
@@ -330,263 +350,297 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-[#1B2229] border-border">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-foreground">Create Trigger</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-[#1B2229] border-border">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-foreground">Create Trigger</DialogTitle>
+          </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-muted-foreground">Subject Type</Label>
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                type="button"
-                variant={subjectType === "team" ? "default" : "outline"}
-                className={subjectType === "team" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
-                onClick={() => setSubjectType("team")}
-              >
-                Team
-              </Button>
-              <Button
-                type="button"
-                variant={subjectType === "player" ? "default" : "outline"}
-                className={subjectType === "player" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
-                onClick={() => setSubjectType("player")}
-                disabled
-              >
-                Player
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-gray-300">League</Label>
-            <Select value={selectedSport} onValueChange={(v) => {
-              setSelectedSport(v);
-              const sport = sports.find(s => s.key === v);
-              setSelectedSportTitle(sport?.title || v);
-              setSelectedTeam("");
-              setSearchQuery("");
-            }}>
-              <SelectTrigger className="w-full bg-gray-800 border-gray-700 text-white">
-                <SelectValue placeholder="Select league" />
-              </SelectTrigger>
-              <SelectContent className="bg-gray-800 border-gray-700">
-                <SelectItem value="basketball_nba" className="text-white hover:bg-gray-700">
-                  NBA
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-muted-foreground">Sportsbook</Label>
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                type="button"
-                variant={sportsbook === "fanduel" ? "default" : "outline"}
-                className={sportsbook === "fanduel" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
-                onClick={() => setSportsbook("fanduel")}
-              >
-                FanDuel
-              </Button>
-              <Button
-                type="button"
-                variant={sportsbook === "draftkings" ? "default" : "outline"}
-                className={sportsbook === "draftkings" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
-                onClick={() => setSportsbook("draftkings")}
-              >
-                DraftKings
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-gray-300">Team</Label>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder={loading ? "Loading teams..." : "Search teams..."}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                disabled={loading || !selectedSport}
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              />
-              {searchQuery && filteredTeams.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
-                  {filteredTeams.map((team) => (
-                    <button
-                      key={team.id}
-                      type="button"
-                      className="w-full text-left px-3 py-2 hover:bg-gray-700 rounded-md transition-colors"
-                      onClick={() => {
-                        setSelectedTeam(team.name);
-                        setSelectedTeamId(team.id);
-                        setSearchQuery("");
-                      }}
-                    >
-                      <div className="font-medium">{team.name}</div>
-                      <div className="text-sm text-gray-400">{team.abbrev}</div>
-                    </button>
-                  ))}
+          <div className="space-y-6 py-4">
+            {needsPhoneAuth && (
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Phone className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold text-foreground">Phone Verification Required</h3>
                 </div>
-              )}
-            </div>
-            {selectedTeam && (
-              <div className="text-sm text-gray-400">
-                Selected: <span className="text-white font-medium">{selectedTeam}</span>
+                <p className="text-sm text-muted-foreground">
+                  To receive SMS alerts when your triggers are hit, you need to verify your phone number first.
+                </p>
+                <Button
+                  type="button"
+                  className="w-full btn-primary"
+                  onClick={() => setShowPhoneAuth(true)}
+                >
+                  <Phone className="h-4 w-4 mr-2" />
+                  Verify Phone Number
+                </Button>
               </div>
             )}
-          </div>
 
-          {selectedEvent && teamOdds && (
-            <div className="bg-[#242B33] border border-border rounded-lg p-4 space-y-4">
-              <div className="flex items-center gap-2 mb-3">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                <h3 className="font-semibold text-foreground">Current Market Context</h3>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-muted-foreground">Subject Type</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  type="button"
+                  variant={subjectType === "team" ? "default" : "outline"}
+                  className={subjectType === "team" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                  onClick={() => setSubjectType("team")}
+                >
+                  Team
+                </Button>
+                <Button
+                  type="button"
+                  variant={subjectType === "player" ? "default" : "outline"}
+                  className={subjectType === "player" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                  onClick={() => setSubjectType("player")}
+                  disabled
+                >
+                  Player
+                </Button>
               </div>
+            </div>
 
-              <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                <span>Current game:</span>
-                <span className="text-foreground font-medium">
-                  {selectedEvent.home_team} vs {selectedEvent.away_team}
-                </span>
-                {isGameLive(selectedEvent.commence_time) && (
-                  <Badge className="bg-red-600 text-white">LIVE</Badge>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-300">League</Label>
+              <Select value={selectedSport} onValueChange={(v) => {
+                setSelectedSport(v);
+                const sport = sports.find(s => s.key === v);
+                setSelectedSportTitle(sport?.title || v);
+                setSelectedTeam("");
+                setSearchQuery("");
+              }}>
+                <SelectTrigger className="w-full bg-gray-800 border-gray-700 text-white">
+                  <SelectValue placeholder="Select league" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-800 border-gray-700">
+                  <SelectItem value="basketball_nba" className="text-white hover:bg-gray-700">
+                    NBA
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-muted-foreground">Sportsbook</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  type="button"
+                  variant={sportsbook === "fanduel" ? "default" : "outline"}
+                  className={sportsbook === "fanduel" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                  onClick={() => setSportsbook("fanduel")}
+                >
+                  FanDuel
+                </Button>
+                <Button
+                  type="button"
+                  variant={sportsbook === "draftkings" ? "default" : "outline"}
+                  className={sportsbook === "draftkings" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                  onClick={() => setSportsbook("draftkings")}
+                >
+                  DraftKings
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-300">Team</Label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder={loading ? "Loading teams..." : "Search teams..."}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  disabled={loading || !selectedSport}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                />
+                {searchQuery && filteredTeams.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
+                    {filteredTeams.map((team) => (
+                      <button
+                        key={team.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-gray-700 rounded-md transition-colors"
+                        onClick={() => {
+                          setSelectedTeam(team.name);
+                          setSelectedTeamId(team.id);
+                          setSearchQuery("");
+                        }}
+                      >
+                        <div className="font-medium">{team.name}</div>
+                        <div className="text-sm text-gray-400">{team.abbrev}</div>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
-
-              {teamOdds.moneyline !== undefined && (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Live moneyline odds for {selectedTeam} on {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}:
-                  </p>
-                  <div className="bg-[#1B2229] rounded-lg p-3">
-                    <Badge className="bg-[#2A3139] text-foreground mb-2">
-                      {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}: {formatOdds(teamOdds.moneyline)}
-                    </Badge>
-                    <p className="text-sm">
-                      Current {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} odds:{" "}
-                      <span className="text-primary font-bold">{formatOdds(teamOdds.moneyline)}</span>
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {teamOdds.spread && (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Live spread odds for {selectedTeam} on {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}:
-                  </p>
-                  <div className="bg-[#1B2229] rounded-lg p-3">
-                    <Badge className="bg-[#2A3139] text-foreground mb-2">
-                      {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}: {formatOdds(teamOdds.spread.point)} ({formatOdds(teamOdds.spread.odds)})
-                    </Badge>
-                    <p className="text-sm">
-                      Current {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} odds:{" "}
-                      <span className="text-primary font-bold">{formatOdds(teamOdds.spread.point)}</span>
-                    </p>
-                  </div>
+              {selectedTeam && (
+                <div className="text-sm text-gray-400">
+                  Selected: <span className="text-white font-medium">{selectedTeam}</span>
                 </div>
               )}
             </div>
-          )}
 
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-muted-foreground">Bet Type</Label>
-            <Select value={betType} onValueChange={(v) => setBetType(v as BetType)}>
-              <SelectTrigger className="bg-[#242B33] border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="moneyline">Moneyline</SelectItem>
-                <SelectItem value="spread">Spread</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            {selectedEvent && teamOdds && (
+              <div className="bg-[#242B33] border border-border rounded-lg p-4 space-y-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold text-foreground">Current Market Context</h3>
+                </div>
 
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-muted-foreground">Odds Threshold</Label>
-            <div className="grid grid-cols-7 gap-3">
-              <Select value={oddsSign} onValueChange={(v) => setOddsSign(v as "+" | "-")}>
-                <SelectTrigger className="col-span-1 bg-[#242B33] border-border">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                  <span>Current game:</span>
+                  <span className="text-foreground font-medium">
+                    {selectedEvent.home_team} vs {selectedEvent.away_team}
+                  </span>
+                  {isGameLive(selectedEvent.commence_time) && (
+                    <Badge className="bg-red-600 text-white">LIVE</Badge>
+                  )}
+                </div>
+
+                {teamOdds.moneyline !== undefined && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Live moneyline odds for {selectedTeam} on {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}:
+                    </p>
+                    <div className="bg-[#1B2229] rounded-lg p-3">
+                      <Badge className="bg-[#2A3139] text-foreground mb-2">
+                        {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}: {formatOdds(teamOdds.moneyline)}
+                      </Badge>
+                      <p className="text-sm">
+                        Current {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} odds:{" "}
+                        <span className="text-primary font-bold">{formatOdds(teamOdds.moneyline)}</span>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {teamOdds.spread && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Live spread odds for {selectedTeam} on {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}:
+                    </p>
+                    <div className="bg-[#1B2229] rounded-lg p-3">
+                      <Badge className="bg-[#2A3139] text-foreground mb-2">
+                        {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}: {formatOdds(teamOdds.spread.point)} ({formatOdds(teamOdds.spread.odds)})
+                      </Badge>
+                      <p className="text-sm">
+                        Current {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} odds:{" "}
+                        <span className="text-primary font-bold">{formatOdds(teamOdds.spread.point)}</span>
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-muted-foreground">Bet Type</Label>
+              <Select value={betType} onValueChange={(v) => setBetType(v as BetType)}>
+                <SelectTrigger className="bg-[#242B33] border-border">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="+">+</SelectItem>
-                  <SelectItem value="-">-</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                type="number"
-                placeholder="200"
-                value={oddsValue}
-                onChange={(e) => setOddsValue(e.target.value)}
-                className="col-span-3 bg-[#242B33] border-border"
-              />
-              <Select value={oddsDirection} onValueChange={(v) => setOddsDirection(v as "higher" | "lower")}>
-                <SelectTrigger className="col-span-3 bg-[#242B33] border-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="higher">or higher</SelectItem>
-                  <SelectItem value="lower">or lower</SelectItem>
+                  <SelectItem value="moneyline">Moneyline</SelectItem>
+                  <SelectItem value="spread">Spread</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-muted-foreground">Game Time Context</Label>
-            <Select value={gameTimeContext} onValueChange={setGameTimeContext}>
-              <SelectTrigger className="bg-[#242B33] border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {gameTimeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-muted-foreground">Odds Threshold</Label>
+              <div className="grid grid-cols-7 gap-3">
+                <Select value={oddsSign} onValueChange={(v) => setOddsSign(v as "+" | "-")}>
+                  <SelectTrigger className="col-span-1 bg-[#242B33] border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="+">+</SelectItem>
+                    <SelectItem value="-">-</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  placeholder="200"
+                  value={oddsValue}
+                  onChange={(e) => setOddsValue(e.target.value)}
+                  className="col-span-3 bg-[#242B33] border-border"
+                />
+                <Select value={oddsDirection} onValueChange={(v) => setOddsDirection(v as "higher" | "lower")}>
+                  <SelectTrigger className="col-span-3 bg-[#242B33] border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="higher">or higher</SelectItem>
+                    <SelectItem value="lower">or lower</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-muted-foreground">Notification Frequency</Label>
-            <div className="bg-[#242B33] border border-border rounded-lg p-4">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="font-semibold text-foreground">Once</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    You'll be notified the first time the odds threshold is met
-                  </p>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-muted-foreground">Game Time Context</Label>
+              <Select value={gameTimeContext} onValueChange={setGameTimeContext}>
+                <SelectTrigger className="bg-[#242B33] border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {gameTimeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-muted-foreground">Notification Frequency</Label>
+              <div className="bg-[#242B33] border border-border rounded-lg p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <p className="font-semibold text-foreground">Once</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      You'll be notified the first time the odds threshold is met
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <Button
-            type="button"
-            className="w-full btn-primary h-12 text-base"
-            onClick={handleCreateTrigger}
-            disabled={loading || !selectedTeam || !oddsValue}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Bell className="h-4 w-4 mr-2" />
-                Create Trigger
-              </>
-            )}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+            <Button
+              type="button"
+              className="w-full btn-primary h-12 text-base"
+              onClick={handleCreateTrigger}
+              disabled={loading || !selectedTeam || !oddsValue}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : needsPhoneAuth ? (
+                <>
+                  <Phone className="h-4 w-4 mr-2" />
+                  Verify Phone to Continue
+                </>
+              ) : (
+                <>
+                  <Bell className="h-4 w-4 mr-2" />
+                  Create Trigger
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Phone Authentication Modal */}
+      <Dialog open={showPhoneAuth} onOpenChange={setShowPhoneAuth}>
+        <DialogContent className="max-w-md p-0 bg-transparent border-none">
+          <PhoneAuth onSuccess={handlePhoneAuthSuccess} />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
