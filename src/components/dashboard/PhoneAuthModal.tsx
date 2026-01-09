@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -254,6 +254,29 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
     setStep("phone");
     setOtp("");
   };
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("phone_auth")
+      .on(
+        "auth.user.updated",
+        (payload) => {
+          console.log("[PhoneAuthModal] USER_UPDATED event received:", payload);
+          if (payload.new.phone) {
+            setStep("otp");
+            toast({
+              title: "Code Sent",
+              description: `Verification code sent to ${payload.new.phone}. For testing, use code: 123456`,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
