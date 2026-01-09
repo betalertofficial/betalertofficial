@@ -259,11 +259,13 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
     const channel = supabase
       .channel("phone_auth")
       .on(
-        "auth.user.updated",
+        "broadcast",
+        { event: "auth.user.updated" },
         (payload) => {
           console.log("[PhoneAuthModal] USER_UPDATED event received:", payload);
           if (payload.new.phone) {
             setStep("otp");
+            setLoading(false);
             toast({
               title: "Code Sent",
               description: `Verification code sent to ${payload.new.phone}. For testing, use code: 123456`,
@@ -276,7 +278,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
     return () => {
       channel.unsubscribe();
     };
-  }, []);
+  }, [toast]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
