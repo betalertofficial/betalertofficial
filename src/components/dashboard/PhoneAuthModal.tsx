@@ -32,10 +32,27 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
     e.preventDefault();
     setLoading(true);
 
+    // Create a timeout to prevent infinite spinning
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+      toast({
+        title: "Request Timeout",
+        description: "The request took too long. Please check your Supabase configuration and try again.",
+        variant: "destructive"
+      });
+    }, 10000); // 10 second timeout
+
     try {
       const cleaned = phone.replace(/\D/g, "");
       if (cleaned.length !== 10) {
+        clearTimeout(timeoutId);
         throw new Error("Please enter a valid 10-digit phone number");
+      }
+
+      // NANP validation: Area code (first digit) cannot start with 0 or 1
+      if (cleaned.startsWith("0") || cleaned.startsWith("1")) {
+        clearTimeout(timeoutId);
+        throw new Error("Invalid phone number: Area code cannot start with 0 or 1");
       }
 
       const phoneE164 = `+1${cleaned}`;
@@ -44,17 +61,22 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       
       if (!currentUser) {
+        clearTimeout(timeoutId);
         throw new Error("No user session found");
       }
 
       console.log("[PhoneAuthModal] Current user:", currentUser.id, "is_anonymous:", currentUser.is_anonymous);
+      console.log("[PhoneAuthModal] Attempting to send OTP to:", phoneE164);
 
       // For anonymous users, use updateUser to link phone identity
-      const { error } = await supabase.auth.updateUser({
+      const { data, error } = await supabase.auth.updateUser({
         phone: phoneE164,
       });
 
+      console.log("[PhoneAuthModal] updateUser response:", { data, error });
+
       if (error) {
+        clearTimeout(timeoutId);
         console.error("[PhoneAuthModal] updateUser error:", error);
         console.error("[PhoneAuthModal] Error details:", {
           message: error.message,
@@ -63,6 +85,11 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
           name: error.name
         });
         
+        // Handle specific 406 error (Phone signups disabled)
+        if (error.status === 406 || (error as any).code === 406) {
+          throw new Error("Phone signups are disabled. Please go to Supabase > Authentication > Providers > Phone and toggle ON 'Enable phone signups'.");
+        }
+
         // Provide helpful error messages
         if (error.message?.includes("SMS")) {
           throw new Error("SMS provider not configured. Please use test phone number (333) 333-3333 with OTP 123456");
@@ -71,6 +98,14 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
         throw error;
       }
 
+      // Check if data is actually present
+      if (!data || !data.user) {
+        clearTimeout(timeoutId);
+        console.error("[PhoneAuthModal] No user data in response:", data);
+        throw new Error("Failed to update user. Please check Supabase configuration.");
+      }
+
+      clearTimeout(timeoutId);
       console.log("[PhoneAuthModal] OTP sent successfully to:", phoneE164);
 
       setStep("otp");
@@ -79,6 +114,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
         description: `Verification code sent to ${phone}. For testing, use code: 123456`,
       });
     } catch (err: any) {
+      clearTimeout(timeoutId);
       console.error("[PhoneAuthModal] Error in handleSendOtp:", err);
       console.error("[PhoneAuthModal] Full error object:", err);
       
@@ -88,6 +124,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
         variant: "destructive"
       });
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
