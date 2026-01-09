@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,6 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
-  const waitingForOtp = useRef(false);
 
   const formatPhone = (value: string) => {
     const cleaned = value.replace(/\D/g, "");
@@ -32,7 +31,6 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    waitingForOtp.current = true;
 
     // Create a timeout to prevent infinite spinning
     const timeoutId = setTimeout(() => {
@@ -42,7 +40,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
         description: "The request took too long. Please check your Supabase configuration and try again.",
         variant: "destructive"
       });
-    }, 30000); // 30 second timeout
+    }, 10000); // 10 second timeout
 
     try {
       const cleaned = phone.replace(/\D/g, "");
@@ -59,67 +57,75 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
 
       const phoneE164 = `+1${cleaned}`;
 
-      console.log("[PhoneAuthModal] Sending OTP to:", phoneE164);
+      // Get current anonymous user
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      if (!currentUser) {
+        clearTimeout(timeoutId);
+        throw new Error("No user session found");
+      }
 
-      // Use signInWithOtp as per Supabase docs
-      const { error } = await supabase.auth.signInWithOtp({
+      console.log("[PhoneAuthModal] Current user:", currentUser.id, "is_anonymous:", currentUser.is_anonymous);
+      console.log("[PhoneAuthModal] Attempting to send OTP to:", phoneE164);
+
+      // For anonymous users, use updateUser to link phone identity
+      const { data, error } = await supabase.auth.updateUser({
         phone: phoneE164,
       });
 
-      clearTimeout(timeoutId);
+      console.log("[PhoneAuthModal] updateUser response:", { data, error });
 
       if (error) {
-        console.error("[PhoneAuthModal] signInWithOtp error:", error);
+        clearTimeout(timeoutId);
+        console.error("[PhoneAuthModal] updateUser error:", error);
+        console.error("[PhoneAuthModal] Error details:", {
+          message: error.message,
+          status: error.status,
+          code: error.code,
+          name: error.name
+        });
         
         // Handle specific 406 error (Phone signups disabled)
         if (error.status === 406 || (error as any).code === 406) {
-          toast({
-            title: "Error",
-            description: "Phone signups are disabled. Please go to Supabase > Authentication > Providers > Phone and toggle ON 'Enable phone signups'.",
-            variant: "destructive"
-          });
-          setLoading(false);
-          waitingForOtp.current = false;
-          return;
+          throw new Error("Phone signups are disabled. Please go to Supabase > Authentication > Providers > Phone and toggle ON 'Enable phone signups'.");
         }
 
         // Provide helpful error messages
         if (error.message?.includes("SMS")) {
-          toast({
-            title: "Error",
-            description: "SMS provider not configured. Please use test phone number (333) 333-3333 with OTP 123456",
-            variant: "destructive"
-          });
-          setLoading(false);
-          waitingForOtp.current = false;
-          return;
+          throw new Error("SMS provider not configured. Please use test phone number (333) 333-3333 with OTP 123456");
         }
         
         throw error;
       }
 
-      console.log("[PhoneAuthModal] OTP sent successfully");
+      // Check if data is actually present
+      if (!data || !data.user) {
+        clearTimeout(timeoutId);
+        console.error("[PhoneAuthModal] No user data in response:", data);
+        throw new Error("Failed to update user. Please check Supabase configuration.");
+      }
+
+      clearTimeout(timeoutId);
+      console.log("[PhoneAuthModal] OTP sent successfully to:", phoneE164);
 
       setStep("otp");
-      setLoading(false);
-      waitingForOtp.current = false;
-      
       toast({
         title: "Code Sent",
         description: `Verification code sent to ${phone}. For testing, use code: 123456`,
       });
-
     } catch (err: any) {
       clearTimeout(timeoutId);
       console.error("[PhoneAuthModal] Error in handleSendOtp:", err);
+      console.error("[PhoneAuthModal] Full error object:", err);
       
       toast({
         title: "Error",
         description: err.message || "Failed to send verification code. Try test number (333) 333-3333",
         variant: "destructive"
       });
+    } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
-      waitingForOtp.current = false;
     }
   };
 
@@ -139,11 +145,11 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
       console.log("[PhoneAuthModal] Verifying OTP for:", phoneE164);
       console.log("[PhoneAuthModal] Current anonymous user:", anonymousUserId);
 
-      // Verify OTP - use type 'sms' as per Supabase docs
+      // Verify OTP - this will link the phone identity to the anonymous account
       const { data, error } = await supabase.auth.verifyOtp({
         phone: phoneE164,
         token: otp,
-        type: "sms",
+        type: "phone_change",
       });
 
       if (error) {
