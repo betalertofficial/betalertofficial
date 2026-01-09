@@ -40,11 +40,24 @@ export function PhoneAuth({ onSuccess }: PhoneAuthProps) {
 
       const phoneE164 = `+1${cleaned}`;
 
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: phoneE164,
-      });
+      // Get current user to check if they're anonymous
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-      if (error) throw error;
+      if (currentUser?.is_anonymous) {
+        // For anonymous users, use updateUser to link the phone
+        const { error } = await supabase.auth.updateUser({
+          phone: phoneE164,
+        });
+
+        if (error) throw error;
+      } else {
+        // For non-anonymous users, use signInWithOtp
+        const { error } = await supabase.auth.signInWithOtp({
+          phone: phoneE164,
+        });
+
+        if (error) throw error;
+      }
 
       setStep("otp");
       toast({
@@ -67,36 +80,82 @@ export function PhoneAuth({ onSuccess }: PhoneAuthProps) {
       const cleaned = phone.replace(/\D/g, "");
       const phoneE164 = `+1${cleaned}`;
 
-      const { data, error } = await supabase.auth.verifyOtp({
-        phone: phoneE164,
-        token: otp,
-        type: "sms",
-      });
+      // Get current user to check if they're anonymous
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-      if (error) throw error;
-
-      if (data.user) {
-        const existingProfile = await profileService.getProfile(data.user.id);
-        
-        if (!existingProfile) {
-          await profileService.createProfile({
-            id: data.user.id,
-            phone_e164: phoneE164,
-            country_code: "US",
-            role: "user",
-            subscription_tier: "free",
-            trigger_limit: 3,
-            name: ""
-          });
-        }
-
-        toast({
-          title: "Success! 🎉",
-          description: "Your phone number has been verified",
+      if (currentUser?.is_anonymous) {
+        // For anonymous users, verify the OTP to link the phone
+        const { data, error } = await supabase.auth.verifyOtp({
+          phone: phoneE164,
+          token: otp,
+          type: "phone_change",
         });
 
-        if (onSuccess) {
-          onSuccess();
+        if (error) throw error;
+
+        if (data.user) {
+          // Update the existing profile with the phone number
+          const existingProfile = await profileService.getProfile(data.user.id);
+          
+          if (existingProfile) {
+            await profileService.updateProfile(data.user.id, {
+              phone_e164: phoneE164,
+              country_code: "US"
+            });
+          } else {
+            await profileService.createProfile({
+              id: data.user.id,
+              phone_e164: phoneE164,
+              country_code: "US",
+              role: "user",
+              subscription_tier: "free",
+              trigger_limit: 3,
+              name: ""
+            });
+          }
+
+          toast({
+            title: "Success! 🎉",
+            description: "Your phone number has been verified",
+          });
+
+          if (onSuccess) {
+            onSuccess();
+          }
+        }
+      } else {
+        // For non-anonymous users, use standard SMS verification
+        const { data, error } = await supabase.auth.verifyOtp({
+          phone: phoneE164,
+          token: otp,
+          type: "sms",
+        });
+
+        if (error) throw error;
+
+        if (data.user) {
+          const existingProfile = await profileService.getProfile(data.user.id);
+          
+          if (!existingProfile) {
+            await profileService.createProfile({
+              id: data.user.id,
+              phone_e164: phoneE164,
+              country_code: "US",
+              role: "user",
+              subscription_tier: "free",
+              trigger_limit: 3,
+              name: ""
+            });
+          }
+
+          toast({
+            title: "Success! 🎉",
+            description: "Your phone number has been verified",
+          });
+
+          if (onSuccess) {
+            onSuccess();
+          }
         }
       }
     } catch (err: any) {
