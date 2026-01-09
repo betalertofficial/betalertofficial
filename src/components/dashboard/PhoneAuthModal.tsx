@@ -49,16 +49,13 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
 
       console.log("[PhoneAuthModal] Current user:", currentUser.id, "is_anonymous:", currentUser.is_anonymous);
 
-      // For anonymous users, we need to use signInWithOtp which will link the identity
-      const { error } = await supabase.auth.signInWithOtp({
+      // For anonymous users, use updateUser to link phone identity
+      const { error } = await supabase.auth.updateUser({
         phone: phoneE164,
-        options: {
-          shouldCreateUser: false, // Don't create a new user, link to existing
-        }
       });
 
       if (error) {
-        console.error("[PhoneAuthModal] OTP send error:", error);
+        console.error("[PhoneAuthModal] updateUser error:", error);
         throw error;
       }
 
@@ -101,7 +98,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
       const { data, error } = await supabase.auth.verifyOtp({
         phone: phoneE164,
         token: otp,
-        type: "sms",
+        type: "phone_change",
       });
 
       if (error) {
@@ -121,7 +118,7 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
           .update({
             phone_e164: phoneE164,
             country_code: "US",
-            name: "" // Set empty name for now
+            name: ""
           })
           .eq("id", anonymousUserId);
 
