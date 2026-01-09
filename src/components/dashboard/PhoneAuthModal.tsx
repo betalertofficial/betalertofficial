@@ -56,6 +56,18 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
 
       if (error) {
         console.error("[PhoneAuthModal] updateUser error:", error);
+        console.error("[PhoneAuthModal] Error details:", {
+          message: error.message,
+          status: error.status,
+          code: error.code,
+          name: error.name
+        });
+        
+        // Provide helpful error messages
+        if (error.message?.includes("SMS")) {
+          throw new Error("SMS provider not configured. Please use test phone number (333) 333-3333 with OTP 123456");
+        }
+        
         throw error;
       }
 
@@ -64,13 +76,15 @@ export function PhoneAuthModal({ open, onOpenChange, onSuccess }: PhoneAuthModal
       setStep("otp");
       toast({
         title: "Code Sent",
-        description: `Verification code sent to ${phone}`,
+        description: `Verification code sent to ${phone}. For testing, use code: 123456`,
       });
     } catch (err: any) {
       console.error("[PhoneAuthModal] Error in handleSendOtp:", err);
+      console.error("[PhoneAuthModal] Full error object:", err);
+      
       toast({
         title: "Error",
-        description: err.message || "Failed to send verification code",
+        description: err.message || "Failed to send verification code. Try test number (333) 333-3333",
         variant: "destructive"
       });
     } finally {
