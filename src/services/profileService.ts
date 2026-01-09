@@ -19,25 +19,49 @@ export const profileService = {
       .from("profiles")
       .select("*")
       .eq("id", userId)
-      .limit(1);
+      .single();
 
     console.log("[profileService] Query result:", { data, error });
 
+    // Handle "not found" error - this is expected for new users
+    if (error && error.code === "PGRST116") {
+      console.log("[profileService] Profile not found (PGRST116) - this is normal for new users");
+      return null;
+    }
+    
+    // Handle 406 error - usually means RLS policy blocked the query
+    if (error && error.message.includes("Cannot coerce")) {
+      console.error("[profileService] 406 error detected - possible session/RLS issue:", error);
+      // Try to refresh the session
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
+        console.error("[profileService] Session refresh failed:", refreshError);
+      } else {
+        console.log("[profileService] Session refreshed, retrying query...");
+        // Retry the query after session refresh
+        const { data: retryData, error: retryError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .single();
+        
+        if (!retryError) {
+          console.log("[profileService] Retry successful:", retryData);
+          return retryData as Profile | null;
+        }
+        console.error("[profileService] Retry failed:", retryError);
+      }
+      return null;
+    }
+    
+    // Handle any other errors
     if (error) {
       console.error("[profileService] Unexpected error:", error);
       throw error;
     }
-
-    const profile = data?.[0] || null;
-
-    // Handle case where profile doesn't exist yet (normal for new/anonymous users)
-    if (!profile) {
-      console.log("[profileService] Profile not found (empty list) - this is normal for new users");
-      return null;
-    }
     
-    console.log("[profileService] Profile loaded successfully:", profile.id);
-    return profile as Profile | null;
+    console.log("[profileService] Profile loaded successfully:", data?.id);
+    return data as Profile | null;
   },
 
   async createProfile(profile: Omit<Profile, "created_at" | "updated_at" | "name" | "subscription_tier" | "trigger_limit"> & Partial<Pick<Profile, "name" | "subscription_tier" | "trigger_limit">>): Promise<Profile> {
@@ -49,8 +73,6 @@ export const profileService = {
           name: profile.name || "",
           subscription_tier: profile.subscription_tier || "free",
           trigger_limit: profile.trigger_limit || 3,
-          phone_e164: profile.phone_e164 || null,
-          country_code: profile.country_code || null,
         }
       ])
       .select()

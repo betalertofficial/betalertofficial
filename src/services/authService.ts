@@ -6,7 +6,6 @@ export interface AuthUser {
   email: string;
   user_metadata?: any;
   created_at?: string;
-  is_anonymous?: boolean;
 }
 
 export interface AuthError {
@@ -65,8 +64,7 @@ export const authService = {
         id: data.user.id,
         email: data.user.email || "",
         user_metadata: data.user.user_metadata,
-        created_at: data.user.created_at,
-        is_anonymous: data.user.is_anonymous
+        created_at: data.user.created_at
       } : null;
 
       return { user: authUser, error: null };

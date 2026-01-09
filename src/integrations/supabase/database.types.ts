@@ -243,33 +243,33 @@ export type Database = {
       }
       profiles: {
         Row: {
-          country_code: string | null
+          country_code: string
           created_at: string | null
           id: string
           name: string | null
-          phone_e164: string | null
+          phone_e164: string
           role: string | null
           subscription_tier: string | null
           trigger_limit: number | null
           updated_at: string | null
         }
         Insert: {
-          country_code?: string | null
+          country_code: string
           created_at?: string | null
           id: string
           name?: string | null
-          phone_e164?: string | null
+          phone_e164: string
           role?: string | null
           subscription_tier?: string | null
           trigger_limit?: number | null
           updated_at?: string | null
         }
         Update: {
-          country_code?: string | null
+          country_code?: string
           created_at?: string | null
           id?: string
           name?: string | null
-          phone_e164?: string | null
+          phone_e164?: string
           role?: string | null
           subscription_tier?: string | null
           trigger_limit?: number | null
