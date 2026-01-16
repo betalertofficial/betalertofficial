@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import type { Profile } from "@/types/database";
 
@@ -6,14 +5,9 @@ export const profileService = {
   async getProfile(userId: string): Promise<Profile | null> {
     console.log("[profileService] Fetching profile for userId:", userId);
     
-    // First check if we have a valid session
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log("[profileService] Current session:", session?.user?.id || "no session");
-    
-    if (!session) {
-      console.warn("[profileService] No active session found");
-      return null;
-    }
+    // REMOVED: Redundant await supabase.auth.getSession() check here.
+    // It was causing a deadlock because this function is called DURING auth initialization.
+    // The RLS policies on the server will secure the data access automatically.
 
     const { data, error } = await supabase
       .from("profiles")

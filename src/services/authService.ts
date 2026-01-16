@@ -1,13 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 
-export interface AuthUser {
-  id: string;
-  email: string;
-  user_metadata?: any;
-  created_at?: string;
-}
-
 export interface AuthError {
   message: string;
   code?: string;
@@ -35,14 +28,9 @@ const getURL = () => {
 
 export const authService = {
   // Get current user
-  async getCurrentUser(): Promise<AuthUser | null> {
+  async getCurrentUser(): Promise<User | null> {
     const { data: { user } } = await supabase.auth.getUser();
-    return user ? {
-      id: user.id,
-      email: user.email || "",
-      user_metadata: user.user_metadata,
-      created_at: user.created_at
-    } : null;
+    return user;
   },
 
   // Get current session
@@ -52,7 +40,7 @@ export const authService = {
   },
 
   // Sign in anonymously
-  async signInAnonymously(): Promise<{ user: AuthUser | null; error: AuthError | null }> {
+  async signInAnonymously(): Promise<{ user: User | null; error: AuthError | null }> {
     try {
       const { data, error } = await supabase.auth.signInAnonymously();
 
@@ -60,14 +48,7 @@ export const authService = {
         return { user: null, error: { message: error.message, code: error.status?.toString() } };
       }
 
-      const authUser = data.user ? {
-        id: data.user.id,
-        email: data.user.email || "",
-        user_metadata: data.user.user_metadata,
-        created_at: data.user.created_at
-      } : null;
-
-      return { user: authUser, error: null };
+      return { user: data.user, error: null };
     } catch (error) {
       return { 
         user: null, 
@@ -77,7 +58,7 @@ export const authService = {
   },
 
   // Sign up with email and password
-  async signUp(email: string, password: string): Promise<{ user: AuthUser | null; error: AuthError | null }> {
+  async signUp(email: string, password: string): Promise<{ user: User | null; error: AuthError | null }> {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -91,14 +72,7 @@ export const authService = {
         return { user: null, error: { message: error.message, code: error.status?.toString() } };
       }
 
-      const authUser = data.user ? {
-        id: data.user.id,
-        email: data.user.email || "",
-        user_metadata: data.user.user_metadata,
-        created_at: data.user.created_at
-      } : null;
-
-      return { user: authUser, error: null };
+      return { user: data.user, error: null };
     } catch (error) {
       return { 
         user: null, 
@@ -108,7 +82,7 @@ export const authService = {
   },
 
   // Sign in with email and password
-  async signIn(email: string, password: string): Promise<{ user: AuthUser | null; error: AuthError | null }> {
+  async signIn(email: string, password: string): Promise<{ user: User | null; error: AuthError | null }> {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -119,14 +93,7 @@ export const authService = {
         return { user: null, error: { message: error.message, code: error.status?.toString() } };
       }
 
-      const authUser = data.user ? {
-        id: data.user.id,
-        email: data.user.email || "",
-        user_metadata: data.user.user_metadata,
-        created_at: data.user.created_at
-      } : null;
-
-      return { user: authUser, error: null };
+      return { user: data.user, error: null };
     } catch (error) {
       return { 
         user: null, 
@@ -172,7 +139,7 @@ export const authService = {
   },
 
   // Confirm email (REQUIRED)
-  async confirmEmail(token: string, type: 'signup' | 'recovery' | 'email_change' = 'signup'): Promise<{ user: AuthUser | null; error: AuthError | null }> {
+  async confirmEmail(token: string, type: 'signup' | 'recovery' | 'email_change' = 'signup'): Promise<{ user: User | null; error: AuthError | null }> {
     try {
       const { data, error } = await supabase.auth.verifyOtp({
         token_hash: token,
@@ -183,14 +150,7 @@ export const authService = {
         return { user: null, error: { message: error.message, code: error.status?.toString() } };
       }
 
-      const authUser = data.user ? {
-        id: data.user.id,
-        email: data.user.email || "",
-        user_metadata: data.user.user_metadata,
-        created_at: data.user.created_at
-      } : null;
-
-      return { user: authUser, error: null };
+      return { user: data.user, error: null };
     } catch (error) {
       return { 
         user: null, 
