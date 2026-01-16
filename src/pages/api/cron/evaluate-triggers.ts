@@ -1,22 +1,36 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextApiRequest, NextApiResponse } from "next";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Verify this is a cron request from Vercel
   const authHeader = req.headers.authorization;
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    console.error("Unauthorized cron request");
+    console.error("[CRON] Unauthorized cron request");
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  console.log("[CRON] Evaluate-triggers cron job triggered");
+  console.log("[CRON] Evaluate-triggers cron job triggered at", new Date().toISOString());
 
   try {
+    // Validate environment variables
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("[CRON] Missing Supabase environment variables");
+      return res.status(500).json({ error: "Missing Supabase configuration" });
+    }
+
+    // Create Supabase admin client with service role key
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+
+    console.log("[CRON] Fetching polling settings from admin_settings table...");
+
     // Fetch polling settings from admin_settings table
     const { data: settings, error: settingsError } = await supabaseAdmin
       .from("admin_settings")
@@ -25,8 +39,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (settingsError) {
       console.error("[CRON] Error fetching admin settings:", settingsError.message);
-      return res.status(500).json({ error: "Failed to fetch admin settings" });
+      return res.status(500).json({ 
+        error: "Failed to fetch admin settings",
+        details: settingsError.message 
+      });
     }
+
+    console.log("[CRON] Settings retrieved:", settings);
 
     // Parse settings into a map for easy access
     const settingsMap = new Map(
@@ -42,7 +61,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Check if polling is enabled
     if (pollingStatus !== "true") {
       console.log("[CRON] Polling is disabled in admin_settings. Skipping evaluation.");
-      return res.status(200).json({ message: "Polling disabled in admin_settings" });
+      return res.status(200).json({ 
+        message: "Polling disabled in admin_settings",
+        pollingStatus,
+        timestamp: new Date().toISOString()
+      });
     }
 
     console.log("[CRON] Polling is enabled. Invoking evaluate-triggers function...");
@@ -51,7 +74,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data, error } = await supabaseAdmin.functions.invoke("evaluate-triggers", {
       body: { 
         source: "cron",
-        pollingInterval: pollingInterval ? parseInt(pollingInterval) : 60
+        pollingInterval: pollingInterval ? parseInt(pollingInterval) : 60,
+        timestamp: new Date().toISOString()
       }
     });
 
@@ -66,11 +90,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log("[CRON] Successfully invoked evaluate-triggers:", data);
     return res.status(200).json({ 
       message: "Evaluation triggered successfully", 
-      result: data 
+      result: data,
+      timestamp: new Date().toISOString()
     });
 
   } catch (error: any) {
-    console.error("[CRON] Unexpected error:", error.message);
+    console.error("[CRON] Unexpected error:", error.message, error.stack);
     return res.status(500).json({ 
       error: "Unexpected error during cron execution", 
       details: error.message 
