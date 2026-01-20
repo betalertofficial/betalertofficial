@@ -1,9 +1,17 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { oddsApiService } from "@/services/oddsApiService";
 import { apiSportsService } from "@/services/apiSportsService";
+import { alertService } from "@/services/alertService";
 
 // Zapier webhook URL for alert notifications
 const ZAPIER_WEBHOOK_URL = "https://hooks.zapier.com/hooks/catch/7723146/u140xkd/";
+
+export interface EvaluationResult {
+  triggersEvaluated: number;
+  matchesFound: number;
+  alertsSent: number;
+  durationMs: number;
+}
 
 // Database Trigger Interface
 interface DatabaseTrigger {
@@ -109,6 +117,7 @@ export const pollingService = {
       console.log("[PollingService] Fetching active triggers...");
 
       // 2. Fetch active triggers and their profile associations
+      // We query profile_triggers to find which profiles own which active triggers
       const { data: profileTriggers, error: profileTriggersError } = await supabaseClient
         .from("profile_triggers")
         .select(`
@@ -195,15 +204,17 @@ export const pollingService = {
 
             // Store trigger matches
             for (const snapshot of matchingSnapshots) {
-              const { error: matchError } = await supabaseClient
+              const { data: matchData, error: matchError } = await supabaseClient
                 .from("trigger_matches")
                 .insert({
                   trigger_id: trigger.id,
                   odds_snapshot_id: snapshot.id,
                   matched_value: snapshot.odds_value,
-                });
+                })
+                .select("id")
+                .single();
 
-              if (!matchError) {
+              if (!matchError && matchData) {
                 matchesFound++;
 
                 // Send alert
@@ -211,7 +222,8 @@ export const pollingService = {
                   supabaseClient,
                   trigger.profile_id,
                   trigger,
-                  snapshot
+                  snapshot,
+                  matchData.id
                 );
 
                 if (alertSent) {

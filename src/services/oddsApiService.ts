@@ -101,6 +101,31 @@ export const oddsApiService = {
     return response.json();
   },
 
+  async fetchOdds(apiKey: string = DEFAULT_API_KEY): Promise<OddsApiEvent[]> {
+    const sports = ["basketball_nba", "americanfootball_nfl", "baseball_mlb", "icehockey_nhl", "soccer_epl"];
+    let allEvents: OddsApiEvent[] = [];
+    
+    // Fetch odds for each sport
+    // Note: We run these sequentially to be gentle on the rate limit if needed, 
+    // but parallel is fine for small numbers of sports.
+    const promises = sports.map(sport => 
+      this.getOddsForSport(sport, apiKey)
+        .catch(err => {
+          console.error(`Error fetching odds for ${sport}:`, err);
+          return [] as OddsApiEvent[];
+        })
+    );
+    
+    const results = await Promise.all(promises);
+    results.forEach(events => {
+      if (Array.isArray(events)) {
+        allEvents = [...allEvents, ...events];
+      }
+    });
+    
+    return allEvents;
+  },
+
   parseTeamFromEvent(event: OddsApiEvent, teamName: string): {
     team: string;
     isHome: boolean;

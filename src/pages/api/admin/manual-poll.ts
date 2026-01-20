@@ -53,38 +53,49 @@ export default async function handler(
 
     console.log("=== Starting Manual Poll ===");
 
-    // Use the shared polling service with the same logic as cron
-    const result = await pollingService.evaluateTriggers(
-      supabase,
-      ODDS_API_KEY,
-      "[MANUAL]"
+    // Create Supabase ADMIN client for the polling operation to bypass RLS
+    // The user has already been verified as admin using their token above
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!, 
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
     );
 
-    // If polling is disabled, still allow manual poll to run
-    // (manual poll can override the disabled status)
-    if (result.pollingDisabled) {
-      console.log("=== Manual Poll Complete (Polling Disabled) ===");
-      return res.status(200).json({
-        success: true,
-        checked: 0,
-        hit: 0,
-        matches: 0,
-        alerts: 0,
-        message: "Polling is currently disabled in admin settings, but manual poll can still run. No triggers were evaluated.",
-        pollingDisabled: true
-      });
+    // Use the shared polling service with the same logic as cron
+    const result = await pollingService.evaluateTriggers(
+      supabaseAdmin,
+      ODDS_API_KEY,
+      true // skipPollingCheck for manual
+    );
+
+    // If polling is disabled (should not happen with skipPollingCheck=true but handling anyway)
+    if (result.data && result.data.triggersEvaluated === 0 && result.success && !result.data.matchesFound) {
+        // If we get here with success but 0 evaluated, it might mean no triggers found OR polling disabled check logic
+        // But we passed true for skipPollingCheck.
     }
 
+    const stats = result.data || {
+        triggersEvaluated: 0,
+        matchesFound: 0,
+        alertsSent: 0,
+        durationMs: 0
+    };
+
     console.log("=== Manual Poll Complete ===");
-    console.log(`Checked: ${result.checked}, Hit: ${result.hit}`);
+    console.log(`Checked: ${stats.triggersEvaluated}, Hit: ${stats.matchesFound}`);
 
     return res.status(200).json({
       success: result.success,
-      checked: result.checked,
-      hit: result.hit,
-      matches: result.matches,
-      alerts: result.alerts,
-      message: result.message
+      checked: stats.triggersEvaluated,
+      hit: stats.matchesFound,
+      matches: stats.matchesFound,
+      alerts: stats.alertsSent,
+      message: result.error || "Manual poll completed successfully"
     });
 
   } catch (error: any) {

@@ -107,5 +107,43 @@ export const alertService = {
       .eq("id", alertId);
 
     if (error) throw error;
+  },
+
+  async sendAlert(
+    supabaseClient: any,
+    profileId: string,
+    trigger: any,
+    snapshot: any,
+    triggerMatchId?: string
+  ): Promise<boolean> {
+    try {
+      const message = `Trigger Hit! ${trigger.team_or_player} ${trigger.bet_type} ${trigger.odds_comparator} ${trigger.odds_value}. Found: ${snapshot.odds_value} at ${snapshot.bookmaker}`;
+      
+      // If we don't have a triggerMatchId, we might create a detached alert or skip
+      // For now, we'll try to create it.
+      
+      const { data, error } = await supabaseClient
+        .from("alerts")
+        .insert([
+          {
+            profile_id: profileId,
+            trigger_match_id: triggerMatchId || null,
+            message,
+            delivery_status: "pending"
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error creating alert record:", error);
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error("Exception in sendAlert:", err);
+      return false;
+    }
   }
 };

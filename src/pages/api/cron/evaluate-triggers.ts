@@ -46,27 +46,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
 
     // If polling is disabled, return early
-    if (result.pollingDisabled) {
-      console.log("[CRON] ============================================");
-      return res.status(200).json({
-        success: true,
-        message: result.message,
-        pollingDisabled: true,
-        timestamp
-      });
+    if (result.success && !result.data && !result.error) {
+      // Handle explicit "polling disabled" case if service returns distinct structure
+      // Currently it returns success=true with data 0s if disabled, unless we change return type
     }
 
+    // Check if result indicates polling was disabled (based on earlier implementation returning special obj)
+    // The new implementation returns data with 0s if disabled.
+    // We can assume success if result.success is true.
+    
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+    
+    const stats = result.data || {
+      triggersEvaluated: 0,
+      matchesFound: 0,
+      alertsSent: 0,
+      durationMs: 0
+    };
+
     console.log("[CRON] ============================================");
-    console.log(`[CRON] Evaluation complete - Checked: ${result.checked}, Hit: ${result.hit}`);
+    console.log(`[CRON] Evaluation complete - Checked: ${stats.triggersEvaluated}, Hit: ${stats.matchesFound}`);
 
     return res.status(200).json({
-      success: result.success,
-      checked: result.checked,
-      hit: result.hit,
-      matches: result.matches,
-      alerts: result.alerts,
+      success: true,
+      checked: stats.triggersEvaluated,
+      hit: stats.matchesFound,
+      matches: stats.matchesFound,
+      alerts: stats.alertsSent,
       timestamp,
-      message: result.message
+      message: "Cron execution successful"
     });
 
   } catch (error: any) {
