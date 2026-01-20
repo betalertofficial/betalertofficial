@@ -99,7 +99,7 @@ export const pollingService = {
     try {
       // 1. Check if polling is enabled (skip for manual polls)
       if (!skipPollingCheck) {
-        const isEnabled = await this.isPollingEnabled(supabaseClient);
+        const isEnabled = await pollingService.isPollingEnabled(supabaseClient);
         if (!isEnabled) {
           console.log("[PollingService] Polling is disabled, skipping evaluation");
           return {
@@ -193,7 +193,7 @@ export const pollingService = {
       console.log(`[PollingService] Received ${oddsData.length} events with odds data`);
 
       // 5. Store odds snapshots
-      const snapshots = await this.storeOddsSnapshots(supabaseClient, oddsData);
+      const snapshots = await pollingService.storeOddsSnapshots(supabaseClient, oddsData);
       console.log(`[PollingService] Stored ${snapshots.length} odds snapshots`);
 
       // 6. Evaluate each trigger
@@ -202,7 +202,7 @@ export const pollingService = {
 
       for (const trigger of triggersWithProfiles) {
         try {
-          const matchingSnapshots = this.findMatchingOdds(trigger, snapshots);
+          const matchingSnapshots = pollingService.findMatchingOdds(trigger, snapshots);
 
           if (matchingSnapshots.length > 0) {
             console.log(
@@ -265,6 +265,99 @@ export const pollingService = {
         success: false,
         error: errorMessage,
       };
+    }
+  },
+
+  /**
+   * Store odds snapshots in the database
+   */
+  async storeOddsSnapshots(
+    supabaseClient: SupabaseClient,
+    oddsData: any[]
+  ): Promise<OddsSnapshotInsert[]> {
+    const snapshots: OddsSnapshotInsert[] = [];
+
+    for (const event of oddsData) {
+      const sport = event.sport_key;
+      const event_id = event.event_id;
+      const team_or_player = event.team;
+      const bookmaker = event.bookmaker;
+      const bet_type = event.bet_type;
+      const odds_value = event.odds;
+      const deep_link_url = event.deep_link_url;
+      const commence_time = event.commence_time;
+      const event_data = event;
+
+      const { data: snapshotData, error: snapshotError } = await supabaseClient
+        .from("odds_snapshots")
+        .insert({
+          sport,
+          event_id,
+          team_or_player,
+          bookmaker,
+          bet_type,
+          odds_value,
+          deep_link_url,
+          commence_time,
+          event_data,
+        })
+        .select();
+
+      if (!snapshotError && snapshotData) {
+        snapshots.push(...snapshotData);
+      }
+    }
+
+    return snapshots;
+  },
+
+  /**
+   * Find matching odds snapshots for a trigger
+   */
+  findMatchingOdds(
+    trigger: DatabaseTrigger,
+    snapshots: OddsSnapshotInsert[]
+  ): OddsSnapshotInsert[] {
+    const { sport, team_or_player, bet_type, odds_comparator, odds_value } = trigger;
+    const matches: OddsSnapshotInsert[] = [];
+
+    for (const snapshot of snapshots) {
+      const { sport: snapshotSport, team_or_player: snapshotTeam, bet_type: snapshotBetType, odds_value: snapshotOddsValue } = snapshot;
+
+      if (
+        snapshotSport === sport &&
+        snapshotTeam === team_or_player &&
+        snapshotBetType === bet_type &&
+        pollingService.compareOdds(odds_comparator, snapshotOddsValue, odds_value)
+      ) {
+        matches.push(snapshot);
+      }
+    }
+
+    return matches;
+  },
+
+  /**
+   * Compare odds values based on the comparator
+   */
+  compareOdds(
+    comparator: string,
+    snapshotOddsValue: number,
+    triggerOddsValue: number
+  ): boolean {
+    switch (comparator) {
+      case "gt":
+        return snapshotOddsValue > triggerOddsValue;
+      case "lt":
+        return snapshotOddsValue < triggerOddsValue;
+      case "eq":
+        return snapshotOddsValue === triggerOddsValue;
+      case "gte":
+        return snapshotOddsValue >= triggerOddsValue;
+      case "lte":
+        return snapshotOddsValue <= triggerOddsValue;
+      default:
+        return false;
     }
   }
 };
