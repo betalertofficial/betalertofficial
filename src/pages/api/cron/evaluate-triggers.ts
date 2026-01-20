@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const result = await pollingService.evaluateTriggers(
       supabaseAdmin,
       oddsApiKey,
-      "[CRON]"
+      false
     );
 
     // If polling is disabled, return early

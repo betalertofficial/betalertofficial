@@ -159,10 +159,17 @@ export const pollingService = {
       console.log(`[PollingService] Found ${profileTriggers.length} active trigger associations`);
 
       // 3. Transform the data into a usable format
-      const triggersWithProfiles = profileTriggers.map((pt) => ({
-        ...pt.triggers,
-        profile_id: pt.profile_id,
-      }));
+      // Supabase returns joined relations as arrays, so we need to extract the first item
+      const triggersWithProfiles = profileTriggers.flatMap((pt: any) => {
+        const triggerData = Array.isArray(pt.triggers) ? pt.triggers[0] : pt.triggers;
+        
+        if (!triggerData) return [];
+        
+        return [{
+          ...triggerData,
+          profile_id: pt.profile_id,
+        }];
+      });
 
       console.log(`[PollingService] Processing ${triggersWithProfiles.length} triggers`);
 
