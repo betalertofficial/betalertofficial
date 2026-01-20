@@ -163,13 +163,20 @@ export const pollingService = {
       }
 
       console.log(`[PollingService] Found ${profileTriggers.length} active trigger associations`);
+      
+      // DEBUG: Log raw data structure
+      console.log(`[PollingService] DEBUG - First profile trigger structure:`, JSON.stringify(profileTriggers[0], null, 2));
 
       // 3. Transform the data into a usable format
       // Supabase returns joined relations as arrays, so we need to extract the first item
-      const triggersWithProfiles = profileTriggers.flatMap((pt: any) => {
+      const triggersWithProfiles = profileTriggers.flatMap((pt: any, index: number) => {
         const triggerData = Array.isArray(pt.triggers) ? pt.triggers[0] : pt.triggers;
         
-        if (!triggerData) return [];
+        if (!triggerData) {
+          console.log(`[PollingService] DEBUG - Skipping profile trigger at index ${index}: triggerData is ${triggerData}`);
+          console.log(`[PollingService] DEBUG - Raw pt.triggers:`, pt.triggers);
+          return [];
+        }
         
         return [{
           ...triggerData,
@@ -177,7 +184,11 @@ export const pollingService = {
         }];
       });
 
-      console.log(`[PollingService] Processing ${triggersWithProfiles.length} triggers`);
+      console.log(`[PollingService] Processing ${triggersWithProfiles.length} triggers (started with ${profileTriggers.length} associations)`);
+      
+      if (triggersWithProfiles.length < profileTriggers.length) {
+        console.warn(`[PollingService] WARNING: Lost ${profileTriggers.length - triggersWithProfiles.length} triggers during transformation!`);
+      }
 
       // 4. Fetch odds from vendor
       console.log("[PollingService] Fetching latest odds data...");
