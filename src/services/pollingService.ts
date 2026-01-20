@@ -143,7 +143,14 @@ export const pollingService = {
       // Transform the data into our DatabaseTrigger format
       const activeTriggers: DatabaseTrigger[] = triggers
         .map((trigger: any): DatabaseTrigger | null => {
+          // Handle profiles - it could be an array or single object
           const profile = Array.isArray(trigger.profiles) ? trigger.profiles[0] : trigger.profiles;
+          
+          // Skip triggers without valid profile data
+          if (!profile || !profile.phone_e164) {
+            console.warn(`${logPrefix} Skipping trigger ${trigger.id} - missing profile or phone_e164`);
+            return null;
+          }
 
           return {
             id: trigger.id,
@@ -157,12 +164,12 @@ export const pollingService = {
             status: trigger.status,
             bookmaker: trigger.bookmaker,
             vendor_id: trigger.vendor_id,
-            phone_e164: profile?.phone_e164 || ""
+            phone_e164: profile.phone_e164
           };
         })
         .filter((t): t is DatabaseTrigger => t !== null);
 
-      console.log(`${logPrefix} Found ${activeTriggers.length} active triggers`);
+      console.log(`${logPrefix} Found ${activeTriggers.length} active triggers with valid profiles`);
 
       // Group triggers by sport for efficient API calls
       const triggersBySport = activeTriggers.reduce<Record<string, DatabaseTrigger[]>>((acc, trigger) => {
