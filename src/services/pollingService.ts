@@ -16,7 +16,8 @@ export interface EvaluationResult {
 // Database Trigger Interface
 interface DatabaseTrigger {
   id: string;
-  profile_id: string;
+  // profile_id is not directly on the triggers table, but mapped from join
+  profile_id?: string; 
   sport: string;
   team_or_player: string;
   bet_type: string;
@@ -26,7 +27,7 @@ interface DatabaseTrigger {
   status: string;
   bookmaker?: string | null;
   vendor_id?: string | null;
-  phone_e164: string;
+  phone_e164?: string;
 }
 
 interface OddsSnapshotInsert {
@@ -39,6 +40,11 @@ interface OddsSnapshotInsert {
   deep_link_url: string | null;
   commence_time: string;
   event_data: any;
+}
+
+interface OddsSnapshot extends OddsSnapshotInsert {
+  id: string;
+  created_at?: string;
 }
 
 interface TriggerMatchInsert {
@@ -274,8 +280,8 @@ export const pollingService = {
   async storeOddsSnapshots(
     supabaseClient: SupabaseClient,
     oddsData: any[]
-  ): Promise<OddsSnapshotInsert[]> {
-    const snapshots: OddsSnapshotInsert[] = [];
+  ): Promise<OddsSnapshot[]> {
+    const snapshots: OddsSnapshot[] = [];
 
     for (const event of oddsData) {
       const sport = event.sport_key;
@@ -304,7 +310,8 @@ export const pollingService = {
         .select();
 
       if (!snapshotError && snapshotData) {
-        snapshots.push(...snapshotData);
+        // Cast to OddsSnapshot to satisfy TypeScript (includes id)
+        snapshots.push(...(snapshotData as unknown as OddsSnapshot[]));
       }
     }
 
@@ -316,20 +323,32 @@ export const pollingService = {
    */
   findMatchingOdds(
     trigger: DatabaseTrigger,
-    snapshots: OddsSnapshotInsert[]
-  ): OddsSnapshotInsert[] {
+    snapshots: OddsSnapshot[]
+  ): OddsSnapshot[] {
     const { sport, team_or_player, bet_type, odds_comparator, odds_value } = trigger;
-    const matches: OddsSnapshotInsert[] = [];
+    const matches: OddsSnapshot[] = [];
 
     for (const snapshot of snapshots) {
       const { sport: snapshotSport, team_or_player: snapshotTeam, bet_type: snapshotBetType, odds_value: snapshotOddsValue } = snapshot;
 
-      if (
-        snapshotSport === sport &&
-        snapshotTeam === team_or_player &&
-        snapshotBetType === bet_type &&
-        pollingService.compareOdds(odds_comparator, snapshotOddsValue, odds_value)
-      ) {
+      // Basic matching logic - can be expanded
+      // If trigger has specific sport, it must match
+      if (sport && snapshotSport !== sport && snapshotSport !== SPORT_KEY_MAP[sport]) {
+        continue;
+      }
+
+      // If trigger has team/player, it must match (case insensitive partial match)
+      if (team_or_player && !snapshotTeam.toLowerCase().includes(team_or_player.toLowerCase()) && !team_or_player.toLowerCase().includes(snapshotTeam.toLowerCase())) {
+        continue;
+      }
+
+      // If trigger has bet type, it must match
+      if (bet_type && snapshotBetType !== bet_type) {
+        continue;
+      }
+
+      // Check odds value using comparator
+      if (pollingService.compareOdds(odds_comparator, snapshotOddsValue, odds_value)) {
         matches.push(snapshot);
       }
     }
