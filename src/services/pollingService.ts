@@ -74,11 +74,16 @@ export const pollingService = {
       evaluationRunId = runData.id;
 
       // 2. STEP 1: Fetch ALL active triggers directly
+      console.log(`${logPrefix} Querying triggers table for status='active' (case-insensitive)...`);
+      
       // using ilike to be case-insensitive safely
       const { data: activeTriggers, error: triggerError } = await supabase
         .from("triggers")
         .select("*")
         .ilike("status", "active");
+
+      console.log(`${logPrefix} Query completed. Error:`, triggerError ? triggerError.message : "none");
+      console.log(`${logPrefix} Raw data received:`, activeTriggers ? `${activeTriggers.length} records` : "null/undefined");
 
       if (triggerError) throw triggerError;
 
@@ -88,6 +93,10 @@ export const pollingService = {
         // Debug: Check total triggers count just to be sure
         const { count } = await supabase.from("triggers").select("*", { count: 'exact', head: true });
         console.log(`${logPrefix} DEBUG: Total triggers in table: ${count}`);
+        
+        // Debug: Show sample status values to check case sensitivity
+        const { data: sampleTriggers } = await supabase.from("triggers").select("id, status").limit(5);
+        console.log(`${logPrefix} DEBUG: Sample status values:`, sampleTriggers?.map(t => `${t.id}: "${t.status}"`));
 
         await this.completeRun(supabase, evaluationRunId, 0, 0, 0, startTime);
         return { 
