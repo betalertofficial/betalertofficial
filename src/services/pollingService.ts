@@ -46,8 +46,8 @@ export const pollingService = {
   /**
    * Main polling function
    */
-  async evaluateTriggers(source: "cron" | "manual" = "manual"): Promise<PollingResult> {
-    const logPrefix = `[PollingService:${source}]`;
+  async evaluateTriggers(): Promise<PollingResult> {
+    const logPrefix = `[PollingService]`;
     console.log(`${logPrefix} Starting trigger evaluation...`);
     
     const startTime = Date.now();
@@ -60,16 +60,7 @@ export const pollingService = {
     let alertsSent = 0;
 
     try {
-      // 1. Check if polling is enabled (only for cron)
-      if (source === "cron") {
-        const enabled = await this.isPollingEnabled(supabase);
-        if (!enabled) {
-          console.log(`${logPrefix} Polling is disabled in admin settings. Skipping.`);
-          return { status: "skipped", message: "Polling disabled" };
-        }
-      }
-
-      // 2. Create evaluation run record
+      // 1. Create evaluation run record
       const { data: runData, error: runError } = await supabase
         .from("evaluation_runs")
         .insert({
@@ -82,29 +73,36 @@ export const pollingService = {
       if (runError) throw runError;
       evaluationRunId = runData.id;
 
-      // 3. STEP 1: Fetch ALL active triggers directly
+      // 2. STEP 1: Fetch ALL active triggers directly
+      // using ilike to be case-insensitive safely
       const { data: activeTriggers, error: triggerError } = await supabase
         .from("triggers")
         .select("*")
-        .eq("status", "active");
+        .ilike("status", "active");
 
       if (triggerError) throw triggerError;
 
       if (!activeTriggers || activeTriggers.length === 0) {
-        console.log(`${logPrefix} No active triggers found.`);
+        console.log(`${logPrefix} No active triggers found. (Query returned 0 rows)`);
+        
+        // Debug: Check total triggers count just to be sure
+        const { count } = await supabase.from("triggers").select("*", { count: 'exact', head: true });
+        console.log(`${logPrefix} DEBUG: Total triggers in table: ${count}`);
+
         await this.completeRun(supabase, evaluationRunId, 0, 0, 0, startTime);
         return { 
           status: "success", 
           triggersEvaluated: 0, 
           matchesFound: 0, 
-          alertsSent: 0 
+          alertsSent: 0,
+          message: "No active triggers found"
         };
       }
 
       console.log(`${logPrefix} Found ${activeTriggers.length} active triggers directly from table.`);
       triggersEvaluated = activeTriggers.length;
 
-      // 4. STEP 2: Fetch Profile Connections for these triggers
+      // 3. STEP 2: Fetch Profile Connections for these triggers
       const triggerIds = activeTriggers.map(t => t.id);
       const { data: profileConnections, error: connectionError } = await supabase
         .from("profile_triggers")
@@ -120,7 +118,6 @@ export const pollingService = {
       if (connectionError) throw connectionError;
 
       // Map trigger IDs to their profile data
-      // Note: A trigger could technically belong to multiple profiles if shared, but usually 1:1
       const triggerProfileMap = new Map();
       profileConnections?.forEach(pc => {
         // Handle array or single object response for profiles
@@ -133,7 +130,7 @@ export const pollingService = {
         }
       });
 
-      // 5. Group triggers by Sport to minimize API calls
+      // 4. Group triggers by Sport to minimize API calls
       const triggersBySport: Record<string, typeof activeTriggers> = {};
       activeTriggers.forEach(trigger => {
         const sport = trigger.sport;
@@ -143,7 +140,7 @@ export const pollingService = {
         triggersBySport[sport].push(trigger);
       });
 
-      // 6. Evaluate per sport
+      // 5. Evaluate per sport
       for (const [sport, sportTriggers] of Object.entries(triggersBySport)) {
         try {
           console.log(`${logPrefix} Fetching odds for sport: ${sport}`);
@@ -175,7 +172,6 @@ export const pollingService = {
             } else if (trigger.bet_type === 'spreads') {
               relevantOdds = oddsApiService.extractSpreadOdds(event, trigger.team_or_player);
             } else if (trigger.bet_type === 'totals') {
-              // Fixed: using lowercase "over" / "under" to match TS type
               relevantOdds = [
                 ...oddsApiService.extractTotalsOdds(event, "over"),
                 ...oddsApiService.extractTotalsOdds(event, "under")
@@ -241,7 +237,7 @@ export const pollingService = {
         }
       }
 
-      // 7. Complete run
+      // 6. Complete run
       await this.completeRun(
         supabase, 
         evaluationRunId, 
@@ -260,7 +256,7 @@ export const pollingService = {
       };
 
     } catch (error: any) {
-      console.error(`${logPrefix} Critical error:`, error);
+      console.error(`${logPrefix} Critical error:`, error.message);
       
       if (evaluationRunId) {
         await supabase

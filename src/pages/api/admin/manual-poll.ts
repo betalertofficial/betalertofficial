@@ -11,7 +11,7 @@ export default async function handler(
   }
 
   try {
-    const result = await pollingService.evaluateTriggers("manual");
+    const result = await pollingService.evaluateTriggers();
     
     return res.status(200).json({
       success: true,
