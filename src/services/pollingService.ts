@@ -48,10 +48,14 @@ export const pollingService = {
    */
   async evaluateTriggers(): Promise<PollingResult> {
     const logPrefix = `[PollingService]`;
-    console.log(`${logPrefix} Starting trigger evaluation...`);
+    console.error(`${logPrefix} ========== STARTING TRIGGER EVALUATION ==========`);
+    console.error(`${logPrefix} Starting trigger evaluation...`);
     
     const startTime = Date.now();
     const supabase = createServiceClient();
+    
+    console.error(`${logPrefix} Supabase client created successfully`);
+    
     let evaluationRunId: string | null = null;
     
     // Stats tracking
@@ -74,7 +78,7 @@ export const pollingService = {
       evaluationRunId = runData.id;
 
       // 2. STEP 1: Fetch ALL active triggers directly
-      console.log(`${logPrefix} Querying triggers table for status='active' (case-insensitive)...`);
+      console.error(`${logPrefix} Querying triggers table for status='active' (case-insensitive)...`);
       
       // using ilike to be case-insensitive safely
       const { data: activeTriggers, error: triggerError } = await supabase
@@ -82,21 +86,21 @@ export const pollingService = {
         .select("*")
         .ilike("status", "active");
 
-      console.log(`${logPrefix} Query completed. Error:`, triggerError ? triggerError.message : "none");
-      console.log(`${logPrefix} Raw data received:`, activeTriggers ? `${activeTriggers.length} records` : "null/undefined");
+      console.error(`${logPrefix} Query completed. Error:`, triggerError ? triggerError.message : "none");
+      console.error(`${logPrefix} Raw data received:`, activeTriggers ? `${activeTriggers.length} records` : "null/undefined");
 
       if (triggerError) throw triggerError;
 
       if (!activeTriggers || activeTriggers.length === 0) {
-        console.log(`${logPrefix} No active triggers found. (Query returned 0 rows)`);
+        console.error(`${logPrefix} No active triggers found. (Query returned 0 rows)`);
         
         // Debug: Check total triggers count just to be sure
         const { count } = await supabase.from("triggers").select("*", { count: 'exact', head: true });
-        console.log(`${logPrefix} DEBUG: Total triggers in table: ${count}`);
+        console.error(`${logPrefix} DEBUG: Total triggers in table: ${count}`);
         
         // Debug: Show sample status values to check case sensitivity
         const { data: sampleTriggers } = await supabase.from("triggers").select("id, status").limit(5);
-        console.log(`${logPrefix} DEBUG: Sample status values:`, sampleTriggers?.map(t => `${t.id}: "${t.status}"`));
+        console.error(`${logPrefix} DEBUG: Sample status values:`, sampleTriggers?.map(t => `${t.id}: "${t.status}"`));
 
         await this.completeRun(supabase, evaluationRunId, 0, 0, 0, startTime);
         return { 
@@ -108,7 +112,7 @@ export const pollingService = {
         };
       }
 
-      console.log(`${logPrefix} Found ${activeTriggers.length} active triggers directly from table.`);
+      console.error(`${logPrefix} Found ${activeTriggers.length} active triggers directly from table.`);
       triggersEvaluated = activeTriggers.length;
 
       // 3. STEP 2: Fetch Profile Connections for these triggers
