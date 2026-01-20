@@ -22,6 +22,7 @@ export interface PollingResult {
   alertsSent?: number;
   message?: string;
   duration?: number;
+  debugLogs?: string[]; // Add debugLogs to interface
 }
 
 export const pollingService = {
@@ -47,14 +48,34 @@ export const pollingService = {
    * Main polling function
    */
   async evaluateTriggers(): Promise<PollingResult> {
+    const logs: string[] = [];
+    const log = (msg: string) => {
+      console.error(msg);
+      logs.push(msg);
+    };
+
     const logPrefix = `[PollingService]`;
-    console.error(`${logPrefix} ========== STARTING TRIGGER EVALUATION ==========`);
-    console.error(`${logPrefix} Starting trigger evaluation...`);
+    log(`${logPrefix} ========== STARTING TRIGGER EVALUATION ==========`);
+    log(`${logPrefix} Starting trigger evaluation...`);
     
     const startTime = Date.now();
+
+    // Check environment variables explicitly
+    const hasUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const hasServiceKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+    log(`${logPrefix} Env check: URL=${hasUrl}, ServiceKey=${hasServiceKey}`);
+
+    if (!hasUrl || !hasServiceKey) {
+       return {
+         status: "failed",
+         message: "Missing Supabase credentials",
+         debugLogs: logs
+       };
+    }
+    
     const supabase = createServiceClient();
     
-    console.error(`${logPrefix} Supabase client created successfully`);
+    log(`${logPrefix} Supabase client created successfully`);
     
     let evaluationRunId: string | null = null;
     
@@ -74,11 +95,15 @@ export const pollingService = {
         .select()
         .single();
 
-      if (runError) throw runError;
-      evaluationRunId = runData.id;
+      if (runError) {
+        log(`${logPrefix} Error creating run record: ${runError.message}`);
+        // Continue anyway, just logging locally
+      } else {
+        evaluationRunId = runData?.id;
+      }
 
       // 2. STEP 1: Fetch ALL active triggers directly
-      console.error(`${logPrefix} Querying triggers table for status='active' (case-insensitive)...`);
+      log(`${logPrefix} Querying triggers table for status='active' (case-insensitive)...`);
       
       // using ilike to be case-insensitive safely
       const { data: activeTriggers, error: triggerError } = await supabase
@@ -86,21 +111,21 @@ export const pollingService = {
         .select("*")
         .ilike("status", "active");
 
-      console.error(`${logPrefix} Query completed. Error:`, triggerError ? triggerError.message : "none");
-      console.error(`${logPrefix} Raw data received:`, activeTriggers ? `${activeTriggers.length} records` : "null/undefined");
+      log(`${logPrefix} Query completed. Error: ${triggerError ? triggerError.message : "none"}`);
+      log(`${logPrefix} Raw data received: ${activeTriggers ? `${activeTriggers.length} records` : "null/undefined"}`);
 
       if (triggerError) throw triggerError;
 
       if (!activeTriggers || activeTriggers.length === 0) {
-        console.error(`${logPrefix} No active triggers found. (Query returned 0 rows)`);
+        log(`${logPrefix} No active triggers found. (Query returned 0 rows)`);
         
         // Debug: Check total triggers count just to be sure
         const { count } = await supabase.from("triggers").select("*", { count: 'exact', head: true });
-        console.error(`${logPrefix} DEBUG: Total triggers in table: ${count}`);
+        log(`${logPrefix} DEBUG: Total triggers in table: ${count}`);
         
         // Debug: Show sample status values to check case sensitivity
         const { data: sampleTriggers } = await supabase.from("triggers").select("id, status").limit(5);
-        console.error(`${logPrefix} DEBUG: Sample status values:`, sampleTriggers?.map(t => `${t.id}: "${t.status}"`));
+        log(`${logPrefix} DEBUG: Sample status values: ${JSON.stringify(sampleTriggers?.map(t => `${t.id}: "${t.status}"`))}`);
 
         await this.completeRun(supabase, evaluationRunId, 0, 0, 0, startTime);
         return { 
@@ -108,11 +133,12 @@ export const pollingService = {
           triggersEvaluated: 0, 
           matchesFound: 0, 
           alertsSent: 0,
-          message: "No active triggers found"
+          message: "No active triggers found",
+          debugLogs: logs
         };
       }
 
-      console.error(`${logPrefix} Found ${activeTriggers.length} active triggers directly from table.`);
+      log(`${logPrefix} Found ${activeTriggers.length} active triggers directly from table.`);
       triggersEvaluated = activeTriggers.length;
 
       // 3. STEP 2: Fetch Profile Connections for these triggers
@@ -142,6 +168,8 @@ export const pollingService = {
           });
         }
       });
+      
+      log(`${logPrefix} Mapped ${triggerProfileMap.size} triggers to profiles.`);
 
       // 4. Group triggers by Sport to minimize API calls
       const triggersBySport: Record<string, typeof activeTriggers> = {};
@@ -156,8 +184,9 @@ export const pollingService = {
       // 5. Evaluate per sport
       for (const [sport, sportTriggers] of Object.entries(triggersBySport)) {
         try {
-          console.log(`${logPrefix} Fetching odds for sport: ${sport}`);
+          log(`${logPrefix} Fetching odds for sport: ${sport}`);
           const events = await oddsApiService.getOddsForSport(sport);
+          log(`${logPrefix} Got ${events.length} events for ${sport}`);
           
           for (const trigger of sportTriggers) {
             // Get profile info from our map
@@ -165,7 +194,7 @@ export const pollingService = {
             
             // If we can't find who owns this trigger, we can't alert them, but we still evaluated the trigger logic
             if (!profileInfo) {
-              console.warn(`${logPrefix} Trigger ${trigger.id} has no valid profile/phone linked. Skipping alert check.`);
+              log(`${logPrefix} Trigger ${trigger.id} has no valid profile/phone linked. Skipping alert check.`);
               continue;
             }
 
@@ -209,7 +238,7 @@ export const pollingService = {
 
             if (match) {
               matchesFound++;
-              console.log(`${logPrefix} Match found for trigger ${trigger.id}: ${match.odds} ${trigger.odds_comparator} ${trigger.odds_value}`);
+              log(`${logPrefix} Match found for trigger ${trigger.id}: ${match.odds} ${trigger.odds_comparator} ${trigger.odds_value}`);
 
               const message = `Bet Alert! ${trigger.team_or_player} ${trigger.bet_type} odds: ${match.odds} (Target: ${trigger.odds_value}) at ${match.bookmaker}`;
               
@@ -245,8 +274,8 @@ export const pollingService = {
               alertsSent++;
             }
           }
-        } catch (err) {
-          console.error(`${logPrefix} Error processing sport ${sport}:`, err);
+        } catch (err: any) {
+          log(`${logPrefix} Error processing sport ${sport}: ${err.message}`);
         }
       }
 
@@ -265,11 +294,12 @@ export const pollingService = {
         triggersEvaluated,
         matchesFound,
         alertsSent,
-        duration: Date.now() - startTime
+        duration: Date.now() - startTime,
+        debugLogs: logs
       };
 
     } catch (error: any) {
-      console.error(`${logPrefix} Critical error:`, error.message);
+      log(`${logPrefix} Critical error: ${error.message}`);
       
       if (evaluationRunId) {
         await supabase
