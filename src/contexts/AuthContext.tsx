@@ -40,84 +40,125 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let mounted = true;
+
     const initializeAuth = async () => {
-      setLoading(true);
-      
-      // Check if we have an existing session
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        // No session exists, create anonymous user
-        console.log("[AuthContext] No session found, creating anonymous user");
-        const { user: anonUser, error } = await authService.signInAnonymously();
+      try {
+        setLoading(true);
         
-        if (error) {
-          console.error("[AuthContext] Error creating anonymous user:", error);
+        // 1. Get Session directly first
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        let sessionUser = session?.user ?? null;
+
+        // 2. If no session, try anonymous sign in
+        if (!sessionUser) {
+          console.log("[AuthContext] No session found, creating anonymous user");
+          const { user: anonUser, error } = await authService.signInAnonymously();
           
-          // Check if anonymous auth is disabled (422 error)
-          if (error.code === "422") {
-            console.warn("[AuthContext] Anonymous authentication is not enabled in Supabase project settings");
-            toast({
-              title: "Setup Required",
-              description: "Anonymous authentication is not enabled. Please enable it in Supabase Dashboard → Authentication → Providers",
-              variant: "destructive",
-            });
-          } else {
-            toast({
-              title: "Connection Error",
-              description: "Unable to initialize session. Please refresh the page.",
-              variant: "destructive",
-            });
+          if (error) {
+            console.error("[AuthContext] Error creating anonymous user:", error);
+            
+            // Check if anonymous auth is disabled (422 error)
+            if (error.code === "422") {
+              console.warn("[AuthContext] Anonymous authentication is not enabled");
+              if (mounted) {
+                toast({
+                  title: "Setup Required",
+                  description: "Anonymous authentication is not enabled. Please enable it in Supabase Dashboard.",
+                  variant: "destructive",
+                });
+              }
+            } else {
+              if (mounted) {
+                toast({
+                  title: "Connection Error",
+                  description: "Unable to initialize session. Please refresh the page.",
+                  variant: "destructive",
+                });
+              }
+            }
+            
+            // Don't block the app - user can still use it without auth
+            if (mounted) setLoading(false);
+            return;
           }
           
-          // Don't block the app - user can still use it without auth
-          setLoading(false);
-          return;
+          if (anonUser) {
+            console.log("[AuthContext] Anonymous user created:", anonUser.id);
+            sessionUser = anonUser;
+            if (mounted) {
+              toast({
+                title: "Welcome! 👋",
+                description: "Browsing anonymously - create a trigger to save your account",
+              });
+            }
+          }
+        } else {
+          console.log("[AuthContext] Existing session found:", sessionUser.id);
         }
         
-        if (anonUser) {
-          console.log("[AuthContext] Anonymous user created:", anonUser.id);
-          toast({
-            title: "Welcome! 👋",
-            description: "Browsing anonymously - create a trigger to save your account",
-          });
+        // 3. Set the user state explicitly BEFORE setting loading=false
+        if (mounted) {
+          setUser(sessionUser);
+          
+          // 4. Fetch profile if we have a user
+          if (sessionUser) {
+            try {
+              const profileData = await profileService.getProfile(sessionUser.id);
+              if (mounted) setProfile(profileData);
+            } catch (error) {
+              console.error("[AuthContext] Error fetching profile:", error);
+              // Don't set profile to null here if we want to keep partial state, 
+              // but usually safer to keep it consistent
+            }
+          }
         }
-      } else {
-        console.log("[AuthContext] Existing session found:", session.user.id);
+      } catch (error) {
+        console.error("[AuthContext] Auth init error", error);
+      } finally {
+        if (mounted) setLoading(false);
       }
-      
-      setLoading(false);
     };
 
     initializeAuth();
 
+    // 5. Setup listener for FUTURE changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        if (!mounted) return;
+        
         console.log("[AuthContext] Auth state changed:", _event, session?.user?.id || "no user");
+        
         const currentUser = session?.user ?? null;
         setUser(currentUser);
 
         if (currentUser) {
           try {
+            // Only fetch profile if it's a different user or we don't have one
+            // (Simpler to just fetch to ensure freshness)
             const profileData = await profileService.getProfile(currentUser.id);
-            setProfile(profileData);
+            if (mounted) setProfile(profileData);
           } catch (error) {
             console.error("[AuthContext] Error fetching profile on auth change:", error);
-            setProfile(null);
+            if (mounted) setProfile(null);
           }
         } else {
-          setProfile(null);
+          if (mounted) setProfile(null);
         }
       }
     );
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, [toast]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setUser(null);
+    setProfile(null);
   };
 
   return (

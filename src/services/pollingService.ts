@@ -90,7 +90,7 @@ export const pollingService = {
     try {
       // Check if polling is enabled
       const pollingEnabled = await this.isPollingEnabled(supabaseClient);
-      if (!pollingEnabled) {
+      if (!pollingEnabled && logPrefix !== "[MANUAL]") {
         console.log(`${logPrefix} Polling is disabled in admin_settings. Skipping evaluation.`);
         return {
           success: true,
@@ -103,61 +103,32 @@ export const pollingService = {
         };
       }
 
-      // 1. Fetch all active triggers with their profile info
-      const { data: profileTriggers, error: triggersError } = await supabaseClient
-        .from("profile_triggers")
+      // 1. Fetch all active triggers directly from triggers table with profile info
+      const { data: triggers, error: triggersError } = await supabaseClient
+        .from("triggers")
         .select(`
           id,
           profile_id,
-          trigger_id,
-          triggers!profile_triggers_trigger_id_fkey (
-            id,
-            sport,
-            team_or_player,
-            bet_type,
-            odds_comparator,
-            odds_value,
-            frequency,
-            status,
-            bookmaker,
-            vendor_id
-          ),
-          profiles!profile_triggers_profile_id_fkey (
+          sport,
+          team_or_player,
+          bet_type,
+          odds_comparator,
+          odds_value,
+          frequency,
+          status,
+          bookmaker,
+          vendor_id,
+          profiles!triggers_profile_id_fkey (
             phone_e164
           )
         `)
-        .eq("triggers.status", "active");
+        .eq("status", "active");
 
-      if (triggersError || !profileTriggers) {
-        throw new Error(`Failed to fetch triggers: ${triggersError?.message}`);
+      if (triggersError) {
+        throw new Error(`Failed to fetch triggers: ${triggersError.message}`);
       }
 
-      // Transform the nested structure into flat triggers array
-      const triggers: DatabaseTrigger[] = profileTriggers
-        .map((pt: any): DatabaseTrigger | null => {
-          const trigger = Array.isArray(pt.triggers) ? pt.triggers[0] : pt.triggers;
-          const profile = Array.isArray(pt.profiles) ? pt.profiles[0] : pt.profiles;
-
-          if (!trigger || !profile) return null;
-
-          return {
-            id: trigger.id,
-            profile_id: pt.profile_id,
-            sport: trigger.sport,
-            team_or_player: trigger.team_or_player,
-            bet_type: trigger.bet_type,
-            odds_comparator: trigger.odds_comparator,
-            odds_value: trigger.odds_value,
-            frequency: trigger.frequency,
-            status: trigger.status,
-            bookmaker: trigger.bookmaker,
-            vendor_id: trigger.vendor_id,
-            phone_e164: profile.phone_e164
-          };
-        })
-        .filter((t): t is DatabaseTrigger => t !== null);
-
-      if (triggers.length === 0) {
+      if (!triggers || triggers.length === 0) {
         console.log(`${logPrefix} No active triggers found`);
         return {
           success: true,
@@ -169,10 +140,32 @@ export const pollingService = {
         };
       }
 
-      console.log(`${logPrefix} Found ${triggers.length} active triggers`);
+      // Transform the data into our DatabaseTrigger format
+      const activeTriggers: DatabaseTrigger[] = triggers
+        .map((trigger: any): DatabaseTrigger | null => {
+          const profile = Array.isArray(trigger.profiles) ? trigger.profiles[0] : trigger.profiles;
+
+          return {
+            id: trigger.id,
+            profile_id: trigger.profile_id,
+            sport: trigger.sport,
+            team_or_player: trigger.team_or_player,
+            bet_type: trigger.bet_type,
+            odds_comparator: trigger.odds_comparator,
+            odds_value: trigger.odds_value,
+            frequency: trigger.frequency,
+            status: trigger.status,
+            bookmaker: trigger.bookmaker,
+            vendor_id: trigger.vendor_id,
+            phone_e164: profile?.phone_e164 || ""
+          };
+        })
+        .filter((t): t is DatabaseTrigger => t !== null);
+
+      console.log(`${logPrefix} Found ${activeTriggers.length} active triggers`);
 
       // Group triggers by sport for efficient API calls
-      const triggersBySport = triggers.reduce<Record<string, DatabaseTrigger[]>>((acc, trigger) => {
+      const triggersBySport = activeTriggers.reduce<Record<string, DatabaseTrigger[]>>((acc, trigger) => {
         const sport = trigger.sport || "Unknown";
         if (!acc[sport]) {
           acc[sport] = [];
@@ -221,7 +214,7 @@ export const pollingService = {
           // Check each trigger against the events
           for (const trigger of sportTriggers) {
             totalChecked++;
-            console.log(`${logPrefix} Checking trigger ${trigger.id} for ${trigger.team_or_player}`);
+            // console.log(`${logPrefix} Checking trigger ${trigger.id} for ${trigger.team_or_player}`);
 
             // Find matching events (team/player)
             const matchingEvents = eventsWithScores.filter(event =>
@@ -230,11 +223,11 @@ export const pollingService = {
             );
 
             if (matchingEvents.length === 0) {
-              console.log(`${logPrefix} No matching events found for ${trigger.team_or_player}`);
+              // console.log(`${logPrefix} No matching events found for ${trigger.team_or_player}`);
               continue;
             }
 
-            console.log(`${logPrefix} Found ${matchingEvents.length} matching events for ${trigger.team_or_player}`);
+            // console.log(`${logPrefix} Found ${matchingEvents.length} matching events for ${trigger.team_or_player}`);
 
             // Process each matching event
             for (const event of matchingEvents) {
