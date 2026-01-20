@@ -128,7 +128,30 @@ export const pollingService = {
       }
 
       // 2. Fetch profiles for all trigger owners
-      const profileIds = [...new Set(triggers.map(t => t.profile_id))];
+      // Filter out undefined, null, or invalid profile_ids before querying
+      const profileIds = [...new Set(
+        triggers
+          .map(t => t.profile_id)
+          .filter((id): id is string => 
+            id !== undefined && 
+            id !== null && 
+            typeof id === 'string' && 
+            id.length > 0
+          )
+      )];
+
+      if (profileIds.length === 0) {
+        console.log(`${logPrefix} No valid profile IDs found in triggers`);
+        return {
+          success: true,
+          checked: 0,
+          hit: 0,
+          matches: 0,
+          alerts: 0,
+          message: "No triggers with valid profile IDs"
+        };
+      }
+
       const { data: profiles, error: profilesError } = await supabaseClient
         .from("profiles")
         .select("id, phone_e164")
