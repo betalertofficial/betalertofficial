@@ -88,40 +88,27 @@ export const pollingService = {
     console.log(`${logPrefix} Starting trigger evaluation...`);
 
     try {
-      // Check if polling is enabled
-      const pollingEnabled = await this.isPollingEnabled(supabaseClient);
-      if (!pollingEnabled && logPrefix !== "[MANUAL]") {
-        console.log(`${logPrefix} Polling is disabled in admin_settings. Skipping evaluation.`);
-        return {
-          success: true,
-          checked: 0,
-          hit: 0,
-          matches: 0,
-          alerts: 0,
-          message: "Polling disabled in admin_settings",
-          pollingDisabled: true
-        };
+      // Check if polling is enabled (skip check for manual polls)
+      if (logPrefix !== "[MANUAL]") {
+        const pollingEnabled = await this.isPollingEnabled(supabaseClient);
+        if (!pollingEnabled) {
+          console.log(`${logPrefix} Polling is disabled in admin_settings. Skipping evaluation.`);
+          return {
+            success: true,
+            checked: 0,
+            hit: 0,
+            matches: 0,
+            alerts: 0,
+            message: "Polling disabled in admin_settings",
+            pollingDisabled: true
+          };
+        }
       }
 
-      // 1. Fetch all active triggers directly from triggers table with profile info
+      // 1. Fetch all active triggers
       const { data: triggers, error: triggersError } = await supabaseClient
         .from("triggers")
-        .select(`
-          id,
-          profile_id,
-          sport,
-          team_or_player,
-          bet_type,
-          odds_comparator,
-          odds_value,
-          frequency,
-          status,
-          bookmaker,
-          vendor_id,
-          profiles!triggers_profile_id_fkey (
-            phone_e164
-          )
-        `)
+        .select("*")
         .eq("status", "active");
 
       if (triggersError) {
@@ -140,15 +127,33 @@ export const pollingService = {
         };
       }
 
-      // Transform the data into our DatabaseTrigger format
+      // 2. Fetch profiles for all trigger owners
+      const profileIds = [...new Set(triggers.map(t => t.profile_id))];
+      const { data: profiles, error: profilesError } = await supabaseClient
+        .from("profiles")
+        .select("id, phone_e164")
+        .in("id", profileIds);
+
+      if (profilesError) {
+        throw new Error(`Failed to fetch profiles: ${profilesError.message}`);
+      }
+
+      // Create a map of profile_id -> phone_e164
+      const profileMap = new Map<string, string>();
+      (profiles || []).forEach(profile => {
+        if (profile.phone_e164) {
+          profileMap.set(profile.id, profile.phone_e164);
+        }
+      });
+
+      // Transform triggers into DatabaseTrigger format
       const activeTriggers: DatabaseTrigger[] = triggers
         .map((trigger: any): DatabaseTrigger | null => {
-          // Handle profiles - it could be an array or single object
-          const profile = Array.isArray(trigger.profiles) ? trigger.profiles[0] : trigger.profiles;
+          const phone_e164 = profileMap.get(trigger.profile_id);
           
           // Skip triggers without valid profile data
-          if (!profile || !profile.phone_e164) {
-            console.warn(`${logPrefix} Skipping trigger ${trigger.id} - missing profile or phone_e164`);
+          if (!phone_e164) {
+            console.warn(`${logPrefix} Skipping trigger ${trigger.id} - missing phone_e164 for profile ${trigger.profile_id}`);
             return null;
           }
 
@@ -164,7 +169,7 @@ export const pollingService = {
             status: trigger.status,
             bookmaker: trigger.bookmaker,
             vendor_id: trigger.vendor_id,
-            phone_e164: profile.phone_e164
+            phone_e164
           };
         })
         .filter((t): t is DatabaseTrigger => t !== null);
