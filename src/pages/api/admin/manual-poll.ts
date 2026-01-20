@@ -1,101 +1,97 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
-import { Database } from "@/integrations/supabase/types";
+import { pollingService } from "@/services/pollingService";
+
+// Use local API key
+const ODDS_API_KEY = "8fd23ab732557e3db9238fc571eddbbe";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   if (req.method !== "POST") {
-    res.setHeader("Allow", ["POST"]);
-    return res.status(405).end(`Method ${req.method} Not Allowed`);
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
-  console.error("=== MANUAL POLL STARTED ===");
-  console.error("ENV CHECK:");
-  console.error("- NEXT_PUBLIC_SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL ? "EXISTS" : "MISSING");
-  console.error("- SUPABASE_SERVICE_ROLE_KEY:", process.env.SUPABASE_SERVICE_ROLE_KEY ? "EXISTS (length: " + process.env.SUPABASE_SERVICE_ROLE_KEY.length + ")" : "MISSING");
-
   try {
-    // Create Supabase client with service role
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      console.error("ERROR: Missing credentials");
-      return res.status(500).json({
-        success: false,
-        error: "Missing Supabase credentials",
-        debug: {
-          hasUrl: !!supabaseUrl,
-          hasKey: !!serviceRoleKey
-        }
-      });
+    // Get auth token from request
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
-    console.error("Creating Supabase client...");
-    const supabase = createClient<Database>(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
+    const token = authHeader.replace("Bearer ", "");
+
+    // Create Supabase client with user's token
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
       }
-    });
-    console.error("Supabase client created successfully");
+    );
 
-    // Query triggers directly
-    console.error("Querying triggers table...");
-    const { data: triggers, error: triggerError } = await supabase
-      .from("triggers")
-      .select("*");
+    // Verify admin access
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
-    console.error("Query result:");
-    console.error("- Error:", triggerError ? triggerError.message : "none");
-    console.error("- Data:", triggers ? `${triggers.length} records` : "null");
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
 
-    if (triggerError) {
-      console.error("Database error:", triggerError);
-      return res.status(500).json({
-        success: false,
-        error: triggerError.message,
-        debug: {
-          code: triggerError.code,
-          details: triggerError.details,
-          hint: triggerError.hint
-        }
+    if (!profile || (profile.role !== "admin" && profile.role !== "super_admin")) {
+      return res.status(403).json({ error: "Forbidden: Admin access required" });
+    }
+
+    console.log("=== Starting Manual Poll ===");
+
+    // Use the shared polling service with the same logic as cron
+    const result = await pollingService.evaluateTriggers(
+      supabase,
+      ODDS_API_KEY,
+      "[MANUAL]"
+    );
+
+    // If polling is disabled, still allow manual poll to run
+    // (manual poll can override the disabled status)
+    if (result.pollingDisabled) {
+      console.log("=== Manual Poll Complete (Polling Disabled) ===");
+      return res.status(200).json({
+        success: true,
+        checked: 0,
+        hit: 0,
+        matches: 0,
+        alerts: 0,
+        message: "Polling is currently disabled in admin settings, but manual poll can still run. No triggers were evaluated.",
+        pollingDisabled: true
       });
     }
 
-    // Log first few triggers for inspection
-    if (triggers && triggers.length > 0) {
-      console.error("Sample triggers (first 3):");
-      triggers.slice(0, 3).forEach(t => {
-        console.error(`  - ID: ${t.id}, Status: "${t.status}", Team: ${t.team_or_player}`);
-      });
-    }
-
-    // Filter for active triggers (case-insensitive)
-    const activeTriggers = triggers?.filter(t => 
-      t.status?.toLowerCase() === "active"
-    ) || [];
-
-    console.error(`Active triggers found: ${activeTriggers.length}`);
+    console.log("=== Manual Poll Complete ===");
+    console.log(`Checked: ${result.checked}, Hit: ${result.hit}`);
 
     return res.status(200).json({
-      success: true,
-      data: {
-        totalTriggers: triggers?.length || 0,
-        activeTriggers: activeTriggers.length,
-        sampleStatuses: triggers?.slice(0, 5).map(t => t.status) || []
-      }
+      success: result.success,
+      checked: result.checked,
+      hit: result.hit,
+      matches: result.matches,
+      alerts: result.alerts,
+      message: result.message
     });
 
   } catch (error: any) {
-    console.error("EXCEPTION:", error.message);
-    console.error("Stack:", error.stack);
-    return res.status(500).json({
-      success: false,
-      error: error.message,
-      stack: error.stack
+    console.error("Manual poll error:", error);
+    return res.status(500).json({ 
+      error: "Internal Server Error",
+      details: error.message,
     });
   }
 }

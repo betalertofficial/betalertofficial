@@ -1,342 +1,521 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { oddsApiService } from "./oddsApiService";
-import { alertService } from "./alertService";
-import { Database } from "@/integrations/supabase/types";
+import { oddsApiService } from "@/services/oddsApiService";
+import { apiSportsService } from "@/services/apiSportsService";
 
-// Create a service-specific supabase client creator
-const createServiceClient = () => {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Zapier webhook URL for alert notifications
+const ZAPIER_WEBHOOK_URL = "https://hooks.zapier.com/hooks/catch/7723146/u140xkd/";
 
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error("Missing Supabase credentials for PollingService");
-  }
-
-  return createClient<Database>(supabaseUrl, supabaseServiceKey);
-};
-
-export interface PollingResult {
-  status: "success" | "skipped" | "failed";
-  triggersEvaluated?: number;
-  matchesFound?: number;
-  alertsSent?: number;
-  message?: string;
-  duration?: number;
-  debugLogs?: string[]; // Add debugLogs to interface
+// Database Trigger Interface
+interface DatabaseTrigger {
+  id: string;
+  profile_id: string;
+  sport: string;
+  team_or_player: string;
+  bet_type: string;
+  odds_comparator: string;
+  odds_value: number;
+  frequency: string;
+  status: string;
+  bookmaker?: string | null;
+  vendor_id?: string | null;
+  phone_e164: string;
 }
+
+interface OddsSnapshotInsert {
+  sport: string;
+  event_id: string;
+  team_or_player: string;
+  bookmaker: string;
+  bet_type: string;
+  odds_value: number;
+  deep_link_url: string | null;
+  commence_time: string;
+  event_data: any;
+}
+
+interface TriggerMatchInsert {
+  trigger_id: string;
+  odds_snapshot_id: string;
+  matched_value: number;
+}
+
+interface PollingResult {
+  success: boolean;
+  checked: number;
+  hit: number;
+  matches: number;
+  alerts: number;
+  message: string;
+  pollingDisabled?: boolean;
+}
+
+// Map our sport names to Odds API sport keys
+const SPORT_KEY_MAP: Record<string, string> = {
+  "NBA": "basketball_nba",
+  "NFL": "americanfootball_nfl",
+  "MLB": "baseball_mlb",
+  "NHL": "icehockey_nhl",
+  "Soccer": "soccer_epl"
+};
 
 export const pollingService = {
   /**
-   * Check if polling is enabled via admin settings
+   * Check if polling is enabled in admin settings
    */
-  async isPollingEnabled(supabase: SupabaseClient<Database>): Promise<boolean> {
-    const { data, error } = await supabase
+  async isPollingEnabled(supabaseClient: SupabaseClient): Promise<boolean> {
+    const { data: settings, error } = await supabaseClient
       .from("admin_settings")
       .select("setting_value")
       .eq("setting_key", "odds_polling_status")
       .single();
 
     if (error) {
-      console.error("Error checking polling status:", error);
-      return false; // Default to disabled on error
+      console.error("[POLLING] Error fetching polling status:", error.message);
+      return false;
     }
 
-    return data?.setting_value === "true";
+    return settings?.setting_value === "true";
   },
 
   /**
-   * Main polling function
+   * Main polling logic - evaluates all active triggers against current odds
    */
-  async evaluateTriggers(): Promise<PollingResult> {
-    const logs: string[] = [];
-    const log = (msg: string) => {
-      console.error(msg);
-      logs.push(msg);
-    };
-
-    const logPrefix = `[PollingService]`;
-    log(`${logPrefix} ========== STARTING TRIGGER EVALUATION ==========`);
-    log(`${logPrefix} Starting trigger evaluation...`);
-    
-    const startTime = Date.now();
-
-    // Check environment variables explicitly
-    const hasUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const hasServiceKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
-    log(`${logPrefix} Env check: URL=${hasUrl}, ServiceKey=${hasServiceKey}`);
-
-    if (!hasUrl || !hasServiceKey) {
-       return {
-         status: "failed",
-         message: "Missing Supabase credentials",
-         debugLogs: logs
-       };
-    }
-    
-    const supabase = createServiceClient();
-    
-    log(`${logPrefix} Supabase client created successfully`);
-    
-    let evaluationRunId: string | null = null;
-    
-    // Stats tracking
-    let triggersEvaluated = 0;
-    let matchesFound = 0;
-    let alertsSent = 0;
+  async evaluateTriggers(
+    supabaseClient: SupabaseClient,
+    oddsApiKey: string,
+    logPrefix: string = "[POLLING]"
+  ): Promise<PollingResult> {
+    console.log(`${logPrefix} Starting trigger evaluation...`);
 
     try {
-      // 1. Create evaluation run record
-      const { data: runData, error: runError } = await supabase
-        .from("evaluation_runs")
-        .insert({
-          status: "running",
-          started_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (runError) {
-        log(`${logPrefix} Error creating run record: ${runError.message}`);
-        // Continue anyway, just logging locally
-      } else {
-        evaluationRunId = runData?.id;
-      }
-
-      // 2. STEP 1: Fetch ALL active triggers directly
-      log(`${logPrefix} Querying triggers table for status='active' (case-insensitive)...`);
-      
-      // using ilike to be case-insensitive safely
-      const { data: activeTriggers, error: triggerError } = await supabase
-        .from("triggers")
-        .select("*")
-        .ilike("status", "active");
-
-      log(`${logPrefix} Query completed. Error: ${triggerError ? triggerError.message : "none"}`);
-      log(`${logPrefix} Raw data received: ${activeTriggers ? `${activeTriggers.length} records` : "null/undefined"}`);
-
-      if (triggerError) throw triggerError;
-
-      if (!activeTriggers || activeTriggers.length === 0) {
-        log(`${logPrefix} No active triggers found. (Query returned 0 rows)`);
-        
-        // Debug: Check total triggers count just to be sure
-        const { count } = await supabase.from("triggers").select("*", { count: 'exact', head: true });
-        log(`${logPrefix} DEBUG: Total triggers in table: ${count}`);
-        
-        // Debug: Show sample status values to check case sensitivity
-        const { data: sampleTriggers } = await supabase.from("triggers").select("id, status").limit(5);
-        log(`${logPrefix} DEBUG: Sample status values: ${JSON.stringify(sampleTriggers?.map(t => `${t.id}: "${t.status}"`))}`);
-
-        await this.completeRun(supabase, evaluationRunId, 0, 0, 0, startTime);
-        return { 
-          status: "success", 
-          triggersEvaluated: 0, 
-          matchesFound: 0, 
-          alertsSent: 0,
-          message: "No active triggers found",
-          debugLogs: logs
+      // Check if polling is enabled
+      const pollingEnabled = await this.isPollingEnabled(supabaseClient);
+      if (!pollingEnabled && logPrefix !== "[MANUAL]") {
+        console.log(`${logPrefix} Polling is disabled in admin_settings. Skipping evaluation.`);
+        return {
+          success: true,
+          checked: 0,
+          hit: 0,
+          matches: 0,
+          alerts: 0,
+          message: "Polling disabled in admin_settings",
+          pollingDisabled: true
         };
       }
 
-      log(`${logPrefix} Found ${activeTriggers.length} active triggers directly from table.`);
-      triggersEvaluated = activeTriggers.length;
-
-      // 3. STEP 2: Fetch Profile Connections for these triggers
-      const triggerIds = activeTriggers.map(t => t.id);
-      const { data: profileConnections, error: connectionError } = await supabase
-        .from("profile_triggers")
+      // 1. Fetch all active triggers directly from triggers table with profile info
+      const { data: triggers, error: triggersError } = await supabaseClient
+        .from("triggers")
         .select(`
-          trigger_id,
+          id,
           profile_id,
-          profiles (
+          sport,
+          team_or_player,
+          bet_type,
+          odds_comparator,
+          odds_value,
+          frequency,
+          status,
+          bookmaker,
+          vendor_id,
+          profiles!triggers_profile_id_fkey (
             phone_e164
           )
         `)
-        .in("trigger_id", triggerIds);
+        .eq("status", "active");
 
-      if (connectionError) throw connectionError;
+      if (triggersError) {
+        throw new Error(`Failed to fetch triggers: ${triggersError.message}`);
+      }
 
-      // Map trigger IDs to their profile data
-      const triggerProfileMap = new Map();
-      profileConnections?.forEach(pc => {
-        // Handle array or single object response for profiles
-        const profile = Array.isArray(pc.profiles) ? pc.profiles[0] : pc.profiles;
-        if (profile && profile.phone_e164) {
-          triggerProfileMap.set(pc.trigger_id, {
-            profileId: pc.profile_id,
-            phone: profile.phone_e164
-          });
-        }
-      });
-      
-      log(`${logPrefix} Mapped ${triggerProfileMap.size} triggers to profiles.`);
+      if (!triggers || triggers.length === 0) {
+        console.log(`${logPrefix} No active triggers found`);
+        return {
+          success: true,
+          checked: 0,
+          hit: 0,
+          matches: 0,
+          alerts: 0,
+          message: "No active triggers found"
+        };
+      }
 
-      // 4. Group triggers by Sport to minimize API calls
-      const triggersBySport: Record<string, typeof activeTriggers> = {};
-      activeTriggers.forEach(trigger => {
-        const sport = trigger.sport;
-        if (!triggersBySport[sport]) {
-          triggersBySport[sport] = [];
-        }
-        triggersBySport[sport].push(trigger);
-      });
-
-      // 5. Evaluate per sport
-      for (const [sport, sportTriggers] of Object.entries(triggersBySport)) {
-        try {
-          log(`${logPrefix} Fetching odds for sport: ${sport}`);
-          const events = await oddsApiService.getOddsForSport(sport);
-          log(`${logPrefix} Got ${events.length} events for ${sport}`);
+      // Transform the data into our DatabaseTrigger format
+      const activeTriggers: DatabaseTrigger[] = triggers
+        .map((trigger: any): DatabaseTrigger | null => {
+          // Handle profiles - it could be an array or single object
+          const profile = Array.isArray(trigger.profiles) ? trigger.profiles[0] : trigger.profiles;
           
+          // Skip triggers without valid profile data
+          if (!profile || !profile.phone_e164) {
+            console.warn(`${logPrefix} Skipping trigger ${trigger.id} - missing profile or phone_e164`);
+            return null;
+          }
+
+          return {
+            id: trigger.id,
+            profile_id: trigger.profile_id,
+            sport: trigger.sport,
+            team_or_player: trigger.team_or_player,
+            bet_type: trigger.bet_type,
+            odds_comparator: trigger.odds_comparator,
+            odds_value: trigger.odds_value,
+            frequency: trigger.frequency,
+            status: trigger.status,
+            bookmaker: trigger.bookmaker,
+            vendor_id: trigger.vendor_id,
+            phone_e164: profile.phone_e164
+          };
+        })
+        .filter((t): t is DatabaseTrigger => t !== null);
+
+      console.log(`${logPrefix} Found ${activeTriggers.length} active triggers with valid profiles`);
+
+      // Group triggers by sport for efficient API calls
+      const triggersBySport = activeTriggers.reduce<Record<string, DatabaseTrigger[]>>((acc, trigger) => {
+        const sport = trigger.sport || "Unknown";
+        if (!acc[sport]) {
+          acc[sport] = [];
+        }
+        acc[sport].push(trigger);
+        return acc;
+      }, {});
+
+      let totalChecked = 0;
+      let totalHit = 0;
+      const snapshotsToInsert: OddsSnapshotInsert[] = [];
+      const triggerHits: Array<{ 
+        triggerId: string; 
+        profileId: string;
+        snapshotData: OddsSnapshotInsert;
+        trigger: DatabaseTrigger;
+      }> = [];
+      const triggersToComplete: string[] = [];
+
+      // Process each sport
+      for (const [sport, sportTriggers] of Object.entries(triggersBySport)) {
+        const sportKey = SPORT_KEY_MAP[sport];
+        if (!sportKey) {
+          console.log(`${logPrefix} No sport key mapping for ${sport}, skipping`);
+          continue;
+        }
+
+        try {
+          console.log(`${logPrefix} Fetching odds for sport: ${sport} (${sportKey})`);
+          const [events, scores] = await Promise.all([
+            oddsApiService.getOddsForSport(sportKey, oddsApiKey),
+            oddsApiService.getScores(sportKey, oddsApiKey)
+          ]);
+          
+          console.log(`${logPrefix} Found ${events.length} events and ${scores.length} scores for ${sportKey}`);
+
+          // Merge score data with events
+          const eventsWithScores = events.map(event => {
+            const scoreData = scores.find(score => score.id === event.id);
+            return {
+              ...event,
+              score_data: scoreData
+            };
+          });
+
+          // Check each trigger against the events
           for (const trigger of sportTriggers) {
-            // Get profile info from our map
-            const profileInfo = triggerProfileMap.get(trigger.id);
-            
-            // If we can't find who owns this trigger, we can't alert them, but we still evaluated the trigger logic
-            if (!profileInfo) {
-              log(`${logPrefix} Trigger ${trigger.id} has no valid profile/phone linked. Skipping alert check.`);
+            totalChecked++;
+            // console.log(`${logPrefix} Checking trigger ${trigger.id} for ${trigger.team_or_player}`);
+
+            // Find matching events (team/player)
+            const matchingEvents = eventsWithScores.filter(event =>
+              trigger.team_or_player.toLowerCase().includes(event.home_team.toLowerCase()) ||
+              trigger.team_or_player.toLowerCase().includes(event.away_team.toLowerCase())
+            );
+
+            if (matchingEvents.length === 0) {
+              // console.log(`${logPrefix} No matching events found for ${trigger.team_or_player}`);
               continue;
             }
 
-            // Find matching event for team/player
-            const event = events.find(e => 
-              e.home_team.toLowerCase().includes(trigger.team_or_player.toLowerCase()) ||
-              e.away_team.toLowerCase().includes(trigger.team_or_player.toLowerCase())
-            );
+            // console.log(`${logPrefix} Found ${matchingEvents.length} matching events for ${trigger.team_or_player}`);
 
-            if (!event) continue;
+            // Process each matching event
+            for (const event of matchingEvents) {
+              const relevantMarkets = event.bookmakers
+                .flatMap((bookmaker) => {
+                  if (trigger.bookmaker && bookmaker.key !== trigger.bookmaker) {
+                    return [];
+                  }
 
-            // Check odds based on bet type
-            let relevantOdds: { bookmaker: string; odds: number; point?: number }[] = [];
-            
-            if (trigger.bet_type === 'h2h') {
-              relevantOdds = oddsApiService.extractMoneylineOdds(event, trigger.team_or_player);
-            } else if (trigger.bet_type === 'spreads') {
-              relevantOdds = oddsApiService.extractSpreadOdds(event, trigger.team_or_player);
-            } else if (trigger.bet_type === 'totals') {
-              relevantOdds = [
-                ...oddsApiService.extractTotalsOdds(event, "over"),
-                ...oddsApiService.extractTotalsOdds(event, "under")
-              ];
-            }
+                  return bookmaker.markets
+                    .filter((market) => {
+                      if (trigger.bet_type === "moneyline" && market.key === "h2h") return true;
+                      if (trigger.bet_type === "spread" && market.key === "spreads") return true;
+                      if (trigger.bet_type === "total" && market.key === "totals") return true;
+                      return false;
+                    })
+                    .map((market) => ({
+                      ...market,
+                      bookmaker_key: bookmaker.key,
+                      bookmaker_title: bookmaker.title
+                    }));
+                });
 
-            // Filter by bookmaker if specified
-            if (trigger.bookmaker) {
-              relevantOdds = relevantOdds.filter(o => 
-                o.bookmaker.toLowerCase().includes(trigger.bookmaker!.toLowerCase())
-              );
-            }
-
-            // Check comparator
-            const match = relevantOdds.find(odd => {
-              if (trigger.odds_comparator === 'greater_than') {
-                return odd.odds > trigger.odds_value;
-              } else {
-                return odd.odds < trigger.odds_value;
-              }
-            });
-
-            if (match) {
-              matchesFound++;
-              log(`${logPrefix} Match found for trigger ${trigger.id}: ${match.odds} ${trigger.odds_comparator} ${trigger.odds_value}`);
-
-              const message = `Bet Alert! ${trigger.team_or_player} ${trigger.bet_type} odds: ${match.odds} (Target: ${trigger.odds_value}) at ${match.bookmaker}`;
-              
-              const triggerMatchId = crypto.randomUUID();
-
-              // Send Alert
-              await alertService.sendWebhookAlert({
-                trigger_id: trigger.id,
-                trigger_match_id: triggerMatchId,
-                recipient_profile_id: profileInfo.profileId,
-                message: message,
-                fired_value: match.odds,
-                fired_context: match,
-                sport: sport,
-                team: trigger.team_or_player,
-                vendor: "odds-api",
-                bookmakers: [match.bookmaker],
-                timestamp: new Date().toISOString()
-              });
-
-              // Create DB Alert Record
-              try {
-                 await alertService.createAlert(
-                  profileInfo.profileId,
-                  triggerMatchId,
-                  message
+              for (const market of relevantMarkets) {
+                const outcome = market.outcomes.find(o =>
+                  o.name.toLowerCase().includes(trigger.team_or_player.toLowerCase())
                 );
-              } catch (alertError) {
-                console.error("Error creating alert record:", alertError);
-                // Don't fail the whole run just because DB record failed, webhook was sent
-              }
 
-              alertsSent++;
+                if (!outcome) continue;
+
+                const currentOdds = outcome.price;
+
+                const snapshotData: OddsSnapshotInsert = {
+                  sport: trigger.sport,
+                  event_id: event.id,
+                  team_or_player: trigger.team_or_player,
+                  bookmaker: market.bookmaker_title,
+                  bet_type: trigger.bet_type,
+                  odds_value: currentOdds,
+                  deep_link_url: null,
+                  commence_time: event.commence_time,
+                  event_data: event
+                };
+
+                snapshotsToInsert.push(snapshotData);
+
+                // Check if trigger condition is met
+                let conditionMet = false;
+                switch (trigger.odds_comparator) {
+                  case ">=":
+                    conditionMet = currentOdds >= trigger.odds_value;
+                    break;
+                  case "<=":
+                    conditionMet = currentOdds <= trigger.odds_value;
+                    break;
+                  case ">":
+                    conditionMet = currentOdds > trigger.odds_value;
+                    break;
+                  case "<":
+                    conditionMet = currentOdds < trigger.odds_value;
+                    break;
+                  case "==":
+                    conditionMet = currentOdds === trigger.odds_value;
+                    break;
+                }
+
+                if (conditionMet) {
+                  console.log(`${logPrefix} 🎯 TRIGGER HIT! ${trigger.team_or_player} ${trigger.bet_type} ${trigger.odds_comparator} ${trigger.odds_value} (current: ${currentOdds})`);
+                  totalHit++;
+
+                  triggerHits.push({
+                    triggerId: trigger.id,
+                    profileId: trigger.profile_id,
+                    snapshotData,
+                    trigger
+                  });
+
+                  if (trigger.frequency === 'once') {
+                    if (!triggersToComplete.includes(trigger.id)) {
+                      triggersToComplete.push(trigger.id);
+                    }
+                  }
+                }
+              }
             }
           }
-        } catch (err: any) {
-          log(`${logPrefix} Error processing sport ${sport}: ${err.message}`);
+        } catch (error: any) {
+          console.error(`${logPrefix} Error processing sport ${sport}:`, error);
         }
       }
 
-      // 6. Complete run
-      await this.completeRun(
-        supabase, 
-        evaluationRunId, 
-        triggersEvaluated, 
-        matchesFound, 
-        alertsSent, 
-        startTime
-      );
+      // Batch insert odds snapshots
+      const triggerMatchesToInsert: TriggerMatchInsert[] = [];
+      
+      if (snapshotsToInsert.length > 0) {
+        console.log(`${logPrefix} Inserting ${snapshotsToInsert.length} odds snapshots`);
+        const { data: insertedSnapshots, error: snapshotError } = await supabaseClient
+          .from("odds_snapshots")
+          .insert(snapshotsToInsert)
+          .select("id, sport, event_id, team_or_player, bookmaker, bet_type, odds_value");
+
+        if (snapshotError) {
+          console.error(`${logPrefix} Error inserting odds snapshots:`, snapshotError);
+        } else if (insertedSnapshots) {
+          console.log(`${logPrefix} ✅ Successfully saved ${insertedSnapshots.length} odds snapshots`);
+
+          for (const hit of triggerHits) {
+            const matchingSnapshot = insertedSnapshots.find(snapshot =>
+              snapshot.sport === hit.snapshotData.sport &&
+              snapshot.event_id === hit.snapshotData.event_id &&
+              snapshot.team_or_player === hit.snapshotData.team_or_player &&
+              snapshot.bookmaker === hit.snapshotData.bookmaker &&
+              snapshot.bet_type === hit.snapshotData.bet_type &&
+              snapshot.odds_value === hit.snapshotData.odds_value
+            );
+
+            if (matchingSnapshot) {
+              triggerMatchesToInsert.push({
+                trigger_id: hit.triggerId,
+                odds_snapshot_id: matchingSnapshot.id,
+                matched_value: hit.snapshotData.odds_value
+              });
+            }
+          }
+        }
+      }
+
+      // Insert trigger matches
+      let insertedMatches: any[] = [];
+      if (triggerMatchesToInsert.length > 0) {
+        console.log(`${logPrefix} Inserting ${triggerMatchesToInsert.length} trigger matches`);
+        const { data, error: matchError } = await supabaseClient
+          .from("trigger_matches")
+          .insert(triggerMatchesToInsert)
+          .select();
+
+        if (matchError) {
+          console.error(`${logPrefix} Error inserting trigger matches:`, matchError);
+          throw new Error(`Failed to insert trigger matches: ${matchError.message}`);
+        } else {
+          insertedMatches = data || [];
+          console.log(`${logPrefix} ✅ Successfully created ${insertedMatches.length} trigger matches`);
+        }
+      }
+
+      // Create alerts for each trigger match
+      const alertsToInsert: any[] = [];
+      if (insertedMatches.length > 0) {
+        for (let i = 0; i < insertedMatches.length; i++) {
+          const match = insertedMatches[i];
+          const hit = triggerHits[i];
+
+          if (hit) {
+            const { trigger, snapshotData } = hit;
+            
+            let scoreInfo = '';
+            const event = snapshotData.event_data;
+            
+            if (event) {
+              const eventDate = event.commence_time.split('T')[0];
+              
+              try {
+                const detailedScore = await apiSportsService.findGame(
+                  event.home_team,
+                  event.away_team,
+                  eventDate
+                );
+                
+                if (detailedScore) {
+                  const awayTeamName = detailedScore.awayTeam;
+                  const homeTeamName = detailedScore.homeTeam;
+                  const awayScore = detailedScore.awayScore;
+                  const homeScore = detailedScore.homeScore;
+                  
+                  let timeInfo = '';
+                  if (detailedScore.clock && detailedScore.clock !== 'N/A') {
+                    timeInfo = ` | Time: ${detailedScore.clock} left in Q${detailedScore.quarter}`;
+                  } else {
+                    timeInfo = ` | Time: End of Q${detailedScore.quarter}`;
+                  }
+                  
+                  scoreInfo = ` | ${awayTeamName} ${awayScore} - ${homeTeamName} ${homeScore}${timeInfo}`;
+                }
+              } catch (error) {
+                console.error(`${logPrefix} Error fetching detailed score from API-Sports:`, error);
+                if (event.score_data?.scores && event.score_data.scores.length > 0) {
+                  const homeScore = event.score_data.scores.find((s: any) => s.name === event.home_team);
+                  const awayScore = event.score_data.scores.find((s: any) => s.name === event.away_team);
+                  
+                  if (homeScore && awayScore) {
+                    const status = event.score_data.completed ? '(Final)' : '(Live)';
+                    scoreInfo = ` | Score: ${awayScore.name} ${awayScore.score} - ${homeScore.name} ${homeScore.score} ${status}`;
+                  }
+                }
+              }
+            }
+            
+            const message = `🎯 ${trigger.team_or_player} ${trigger.bet_type} ${trigger.odds_comparator} ${trigger.odds_value} HIT! Current odds: ${snapshotData.odds_value} on ${snapshotData.bookmaker}${scoreInfo}`;
+
+            alertsToInsert.push({
+              trigger_match_id: match.id,
+              profile_id: trigger.profile_id,
+              message,
+              delivery_status: 'pending'
+            });
+          }
+        }
+
+        if (alertsToInsert.length > 0) {
+          console.log(`${logPrefix} Creating ${alertsToInsert.length} alerts`);
+          const { error: alertError } = await supabaseClient
+            .from("alerts")
+            .insert(alertsToInsert);
+
+          if (alertError) {
+            console.error(`${logPrefix} Error creating alerts:`, alertError);
+            throw new Error(`Failed to create alerts: ${alertError.message}`);
+          } else {
+            console.log(`${logPrefix} ✅ Successfully created ${alertsToInsert.length} alerts`);
+            
+            console.log(`${logPrefix} Sending ${alertsToInsert.length} webhook notifications to Zapier`);
+            const webhookPromises = alertsToInsert.map(async (alert) => {
+              try {
+                const response = await fetch(ZAPIER_WEBHOOK_URL, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    profile_id: alert.profile_id,
+                    message: alert.message,
+                    trigger_match_id: alert.trigger_match_id,
+                    timestamp: new Date().toISOString()
+                  }),
+                });
+
+                if (!response.ok) {
+                  console.error(`${logPrefix} Failed to send webhook for profile ${alert.profile_id}:`, response.statusText);
+                } else {
+                  console.log(`${logPrefix} ✅ Webhook sent successfully for profile ${alert.profile_id}`);
+                }
+              } catch (error) {
+                console.error(`${logPrefix} Error sending webhook for profile ${alert.profile_id}:`, error);
+              }
+            });
+
+            await Promise.allSettled(webhookPromises);
+            console.log(`${logPrefix} ✅ All webhook notifications processed`);
+          }
+        }
+      }
+
+      // Update one-time triggers to completed status
+      if (triggersToComplete.length > 0) {
+        console.log(`${logPrefix} Marking ${triggersToComplete.length} one-time triggers as completed`);
+        const { error: updateError } = await supabaseClient
+          .from("triggers")
+          .update({ status: 'completed' })
+          .in('id', triggersToComplete);
+
+        if (updateError) {
+          console.error(`${logPrefix} Error updating trigger status:`, updateError);
+        } else {
+          console.log(`${logPrefix} ✅ Successfully marked ${triggersToComplete.length} triggers as completed`);
+        }
+      }
+
+      console.log(`${logPrefix} Evaluation complete - Checked: ${totalChecked}, Hit: ${totalHit}`);
 
       return {
-        status: "success",
-        triggersEvaluated,
-        matchesFound,
-        alertsSent,
-        duration: Date.now() - startTime,
-        debugLogs: logs
+        success: true,
+        checked: totalChecked,
+        hit: totalHit,
+        matches: triggerMatchesToInsert.length,
+        alerts: alertsToInsert.length,
+        message: `Checked ${totalChecked} triggers, ${totalHit} hits detected, ${triggerMatchesToInsert.length} matches recorded, ${alertsToInsert.length} alerts created`
       };
 
     } catch (error: any) {
-      log(`${logPrefix} Critical error: ${error.message}`);
-      
-      if (evaluationRunId) {
-        await supabase
-          .from("evaluation_runs")
-          .update({
-            status: "failed",
-            error_message: error.message,
-            completed_at: new Date().toISOString(),
-            duration_ms: Date.now() - startTime
-          })
-          .eq("id", evaluationRunId);
-      }
-      
+      console.error(`${logPrefix} Error during evaluation:`, error.message);
       throw error;
     }
-  },
-
-  async completeRun(
-    supabase: SupabaseClient<Database>, 
-    runId: string, 
-    evaluated: number, 
-    matches: number, 
-    sent: number, 
-    startTime: number
-  ) {
-    if (!runId) return;
-    
-    await supabase
-      .from("evaluation_runs")
-      .update({
-        status: "completed",
-        triggers_evaluated: evaluated,
-        matches_found: matches,
-        alerts_sent: sent,
-        completed_at: new Date().toISOString(),
-        duration_ms: Date.now() - startTime
-      })
-      .eq("id", runId);
   }
 };
