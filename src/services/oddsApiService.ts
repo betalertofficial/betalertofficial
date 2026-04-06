@@ -109,7 +109,7 @@ export const oddsApiService = {
     // Note: We run these sequentially to be gentle on the rate limit if needed, 
     // but parallel is fine for small numbers of sports.
     const promises = sports.map(sport => 
-      this.getOddsForSport(sport, apiKey)
+      oddsApiService.getOddsForSport(sport, apiKey)
         .catch(err => {
           console.error(`Error fetching odds for ${sport}:`, err);
           return [] as OddsApiEvent[];
