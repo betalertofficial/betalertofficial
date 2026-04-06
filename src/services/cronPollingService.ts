@@ -119,32 +119,50 @@ async function fetchLiveOdds(apiKey: string, sports: string[]) {
 /**
  * STEP 3: Store odds snapshots in database
  */
-async function storeOddsSnapshots(supabase: SupabaseClient, oddsSnapshots: any[]) {
-  console.log(`[CronPolling] Storing ${oddsSnapshots.length} odds snapshots...`);
+async function storeOddsSnapshots(
+  supabase: SupabaseClient,
+  oddsData: OddsSnapshot[]
+): Promise<Map<string, string>> {
+  console.log(`[CronPolling] Storing ${oddsData.length} odds snapshots...`);
 
-  if (oddsSnapshots.length === 0) {
-    return new Map<string, string>();
-  }
-
-  const { data, error } = await supabase
-    .from("odds_snapshots")
-    .insert(oddsSnapshots)
-    .select("id, event_id, team_or_player, bookmaker, bet_type");
-
-  if (error) {
-    console.error("[CronPolling] Error storing odds snapshots:", error);
-    throw new Error(`Failed to store odds snapshots: ${error.message}`);
-  }
-
-  // Create map for linking matches to snapshot IDs
   const snapshotIdMap = new Map<string, string>();
-  for (const snapshot of data || []) {
-    const key = `${snapshot.event_id}_${snapshot.team_or_player}_${snapshot.bookmaker}_${snapshot.bet_type}`;
-    snapshotIdMap.set(key, snapshot.id);
-  }
 
-  console.log(`[CronPolling] Stored ${data?.length || 0} odds snapshots`);
-  return snapshotIdMap;
+  try {
+    // Insert all odds snapshots
+    const snapshots = oddsData.map((odds) => ({
+      sport: odds.sport,
+      event_id: odds.event_id,
+      team_or_player: odds.team_or_player,
+      bookmaker: odds.bookmaker,
+      bet_type: odds.bet_type,
+      odds_value: odds.odds_value,
+      snapshot_at: new Date().toISOString(),
+    }));
+
+    const { data, error } = await supabase
+      .from("odds_snapshots")
+      .insert(snapshots)
+      .select("id, event_id, bookmaker, bet_type, team_or_player");
+
+    if (error) {
+      console.error("[CronPolling] Error storing odds snapshots:", error);
+      throw new Error(`Failed to store odds snapshots: ${error.message}`);
+    }
+
+    // Build map for quick lookup: "eventId|bookmaker|betType|team" -> snapshotId
+    if (data) {
+      for (const snapshot of data) {
+        const key = `${snapshot.event_id}|${snapshot.bookmaker}|${snapshot.bet_type}|${snapshot.team_or_player}`;
+        snapshotIdMap.set(key, snapshot.id);
+      }
+    }
+
+    console.log(`[CronPolling] Stored ${data?.length || 0} odds snapshots`);
+    return snapshotIdMap;
+  } catch (error) {
+    console.error("[CronPolling] Error in storeOddsSnapshots:", error);
+    throw error;
+  }
 }
 
 /**
