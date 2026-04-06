@@ -240,13 +240,50 @@ export default function AdminPage() {
 
       const pollPromise = adminService.manualPollAndCheckTriggers();
 
-      const result = await Promise.race([pollPromise, timeoutPromise]) as { checked: number; hit: number; message: string };
+      const result = await Promise.race([pollPromise, timeoutPromise]) as { checked: number; hit: number; message: string; debug?: any };
       
-      console.log("Manual poll result:", result);
+      console.log("=== MANUAL POLL RESULT ===");
+      console.log("Checked:", result.checked, "| Hit:", result.hit);
+      console.log("Full result:", result);
+      
+      // Log debug information if available
+      if (result.debug) {
+        console.log("\n=== DEBUG INFORMATION ===");
+        console.log("Odds Events Fetched:", result.debug.oddsEventsFetched);
+        console.log("Snapshots Stored:", result.debug.snapshotsStored);
+        
+        if (result.debug.sampleOddsEvent) {
+          console.log("\n📊 Sample Odds Event:", result.debug.sampleOddsEvent);
+        }
+        
+        if (result.debug.sampleSnapshot) {
+          console.log("\n📸 Sample Snapshot:", result.debug.sampleSnapshot);
+        }
+        
+        if (result.debug.triggerDetails && result.debug.triggerDetails.length > 0) {
+          console.log("\n🎯 Triggers Being Evaluated:");
+          result.debug.triggerDetails.forEach((trigger: any, index: number) => {
+            console.log(`  ${index + 1}. ${trigger.sport} - ${trigger.team_or_player}`);
+            console.log(`     Bet Type: ${trigger.bet_type}`);
+            console.log(`     Condition: ${trigger.odds_comparator} ${trigger.odds_value}`);
+          });
+        }
+        
+        if (result.debug.matchDetails && result.debug.matchDetails.length > 0) {
+          console.log("\n✅ MATCHES FOUND:");
+          result.debug.matchDetails.forEach((match: any, index: number) => {
+            console.log(`  ${index + 1}. Trigger ${match.trigger_id}`);
+            console.log(`     Matched: ${match.snapshot.team_or_player} (${match.snapshot.bookmaker})`);
+            console.log(`     Odds: ${match.snapshot.odds_value}`);
+          });
+        } else {
+          console.log("\n❌ No matches found");
+        }
+      }
       
       toast({
         title: "Manual Poll Complete",
-        description: `Checked ${result.checked} triggers, ${result.hit} hit. Message: ${result.message}`,
+        description: `Checked ${result.checked} triggers, ${result.hit} hit. Check browser console (F12) for details.`,
         variant: result.hit > 0 ? "default" : "default",
       });
       
