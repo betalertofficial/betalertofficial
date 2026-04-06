@@ -61,35 +61,69 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
   const matches: Match[] = [];
 
   console.log(`[MatchingEngine] Starting match process: ${triggers.length} triggers, ${oddsData.length} odds snapshots`);
+  
+  // DEBUG: Show sample odds data
+  if (oddsData.length > 0) {
+    console.log("[MatchingEngine] DEBUG - Sample odds data (first 3):");
+    oddsData.slice(0, 3).forEach(odds => {
+      console.log(`  - ${odds.sport} | ${odds.team_or_player} | ${odds.bet_type} | ${odds.bookmaker} | ${odds.odds_value}`);
+    });
+  }
 
   for (const trigger of triggers) {
-    console.log(`[MatchingEngine] Evaluating trigger ${trigger.id}: ${trigger.sport} - ${trigger.team_or_player} ${trigger.bet_type}`);
+    console.log(`\n[MatchingEngine] === Evaluating trigger ${trigger.id} ===`);
+    console.log(`[MatchingEngine] Trigger: ${trigger.sport} - ${trigger.team_or_player} ${trigger.bet_type} ${trigger.odds_comparator} ${trigger.odds_value}`);
+    if (trigger.bookmaker) {
+      console.log(`[MatchingEngine] Bookmaker filter: ${trigger.bookmaker}`);
+    }
 
     // Map sport to Odds API format
     const oddsApiSport = SPORT_MAPPING[trigger.sport] || trigger.sport.toLowerCase();
+    console.log(`[MatchingEngine] Mapped sport: ${trigger.sport} → ${oddsApiSport}`);
     
     // Map bet type to Odds API format
     const oddsApiBetType = BET_TYPE_MAPPING[trigger.bet_type.toLowerCase()] || trigger.bet_type.toLowerCase();
+    console.log(`[MatchingEngine] Mapped bet type: ${trigger.bet_type} → ${oddsApiBetType}`);
 
     // Find matching odds
     let triggerMatches = 0;
+    let sportMismatches = 0;
+    let teamMismatches = 0;
+    let betTypeMismatches = 0;
+    let bookmakerMismatches = 0;
+    let oddsMismatches = 0;
     
     for (const odds of oddsData) {
       // 1. Match sport
-      if (odds.sport !== oddsApiSport) continue;
+      if (odds.sport !== oddsApiSport) {
+        sportMismatches++;
+        continue;
+      }
 
       // 2. Match team/player (case-insensitive, partial match)
       const teamMatch = 
         odds.team_or_player.toLowerCase().includes(trigger.team_or_player.toLowerCase()) ||
         trigger.team_or_player.toLowerCase().includes(odds.team_or_player.toLowerCase());
-      if (!teamMatch) continue;
+      if (!teamMatch) {
+        teamMismatches++;
+        continue;
+      }
 
       // 3. Match bet type (using aliases)
       const oddsBetType = BET_TYPE_MAPPING[odds.bet_type.toLowerCase()] || odds.bet_type.toLowerCase();
-      if (oddsBetType !== oddsApiBetType) continue;
+      if (oddsBetType !== oddsApiBetType) {
+        betTypeMismatches++;
+        if (teamMismatches < 5) { // Only log first few for debugging
+          console.log(`[MatchingEngine] Bet type mismatch: "${odds.bet_type}" (${oddsBetType}) != "${trigger.bet_type}" (${oddsApiBetType})`);
+        }
+        continue;
+      }
 
       // 4. Match bookmaker if specified
-      if (trigger.bookmaker && trigger.bookmaker !== odds.bookmaker) continue;
+      if (trigger.bookmaker && trigger.bookmaker !== odds.bookmaker) {
+        bookmakerMismatches++;
+        continue;
+      }
 
       // 5. Check odds value meets condition
       const meetsCondition = checkOddsCondition(
@@ -98,7 +132,11 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
         trigger.odds_value
       );
 
-      if (!meetsCondition) continue;
+      if (!meetsCondition) {
+        oddsMismatches++;
+        console.log(`[MatchingEngine] Odds condition not met: ${odds.odds_value} ${trigger.odds_comparator} ${trigger.odds_value} = false`);
+        continue;
+      }
 
       // Found a match!
       triggerMatches++;
@@ -115,9 +153,13 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
       console.log(`[MatchingEngine] ✅ MATCH FOUND for trigger ${trigger.id}: ${odds.bookmaker} @ ${odds.odds_value}`);
     }
 
-    if (triggerMatches === 0) {
-      console.log(`[MatchingEngine] No matches found for trigger ${trigger.id}`);
-    }
+    console.log(`[MatchingEngine] Trigger ${trigger.id} results:`);
+    console.log(`  - Sport mismatches: ${sportMismatches}`);
+    console.log(`  - Team mismatches: ${teamMismatches}`);
+    console.log(`  - Bet type mismatches: ${betTypeMismatches}`);
+    console.log(`  - Bookmaker mismatches: ${bookmakerMismatches}`);
+    console.log(`  - Odds condition mismatches: ${oddsMismatches}`);
+    console.log(`  - Total matches: ${triggerMatches}`);
   }
 
   console.log(`[MatchingEngine] Found ${matches.length} total matches`);
