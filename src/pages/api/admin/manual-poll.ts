@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { pollingService } from "@/services/pollingService";
 
 // Use local API key
-const ODDS_API_KEY = "8fd23ab732557e3db9238fc571eddbbe";
+const ODDS_API_KEY = "39012db31f4c088f772e5eaf34a3ce8e";
 
 export default async function handler(
   req: NextApiRequest,
