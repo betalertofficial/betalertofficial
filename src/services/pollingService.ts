@@ -208,10 +208,12 @@ export const pollingService = {
       }
 
       console.log(`[PollingService] Received ${oddsData.length} events with odds data`);
+      console.log(`[PollingService] DEBUG - First odds event:`, JSON.stringify(oddsData[0], null, 2));
 
       // 5. Store odds snapshots
       const snapshots = await pollingService.storeOddsSnapshots(supabaseClient, oddsData);
       console.log(`[PollingService] Stored ${snapshots.length} odds snapshots`);
+      console.log(`[PollingService] DEBUG - First snapshot:`, JSON.stringify(snapshots[0], null, 2));
 
       // 6. Evaluate each trigger
       let matchesFound = 0;
@@ -219,7 +221,17 @@ export const pollingService = {
 
       for (const trigger of triggersWithProfiles) {
         try {
+          console.log(`[PollingService] Evaluating trigger ${trigger.id}:`, {
+            sport: trigger.sport,
+            team_or_player: trigger.team_or_player,
+            bet_type: trigger.bet_type,
+            odds_comparator: trigger.odds_comparator,
+            odds_value: trigger.odds_value
+          });
+          
           const matchingSnapshots = pollingService.findMatchingOdds(trigger, snapshots);
+          
+          console.log(`[PollingService] Found ${matchingSnapshots.length} matches for trigger ${trigger.id}`);
 
           if (matchingSnapshots.length > 0) {
             console.log(
@@ -339,8 +351,27 @@ export const pollingService = {
     const { sport, team_or_player, bet_type, odds_comparator, odds_value } = trigger;
     const matches: OddsSnapshot[] = [];
 
+    console.log(`[findMatchingOdds] Looking for matches. Trigger:`, {
+      sport,
+      team_or_player,
+      bet_type,
+      odds_comparator,
+      odds_value,
+      total_snapshots: snapshots.length
+    });
+
     for (const snapshot of snapshots) {
       const { sport: snapshotSport, team_or_player: snapshotTeam, bet_type: snapshotBetType, odds_value: snapshotOddsValue } = snapshot;
+
+      // Log first 3 snapshots for debugging
+      if (matches.length === 0 && snapshots.indexOf(snapshot) < 3) {
+        console.log(`[findMatchingOdds] Sample snapshot ${snapshots.indexOf(snapshot)}:`, {
+          snapshotSport,
+          snapshotTeam,
+          snapshotBetType,
+          snapshotOddsValue
+        });
+      }
 
       // Basic matching logic - can be expanded
       // If trigger has specific sport, it must match
@@ -360,10 +391,18 @@ export const pollingService = {
 
       // Check odds value using comparator
       if (pollingService.compareOdds(odds_comparator, snapshotOddsValue, odds_value)) {
+        console.log(`[findMatchingOdds] MATCH FOUND!`, {
+          snapshotSport,
+          snapshotTeam,
+          snapshotBetType,
+          snapshotOddsValue,
+          comparison: `${snapshotOddsValue} ${odds_comparator} ${odds_value}`
+        });
         matches.push(snapshot);
       }
     }
 
+    console.log(`[findMatchingOdds] Total matches found: ${matches.length}`);
     return matches;
   },
 
