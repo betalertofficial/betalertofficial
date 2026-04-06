@@ -88,6 +88,7 @@ export default async function handler(
 
     console.log("=== Manual Poll Complete ===");
     console.log(`Checked: ${stats.triggersEvaluated}, Hit: ${stats.matchesFound}`);
+    console.log("Debug data being returned:", stats.debug);
 
     return res.status(200).json({
       success: result.success,
