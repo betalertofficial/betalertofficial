@@ -95,7 +95,8 @@ export default async function handler(
       hit: stats.matchesFound,
       matches: stats.matchesFound,
       alerts: stats.alertsSent,
-      message: result.error || "Manual poll completed successfully"
+      message: result.error || "Manual poll completed successfully",
+      debug: stats.debug // Include debug information
     });
 
   } catch (error: any) {

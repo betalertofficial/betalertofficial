@@ -11,6 +11,14 @@ export interface EvaluationResult {
   matchesFound: number;
   alertsSent: number;
   durationMs: number;
+  debug?: {
+    oddsEventsFetched: number;
+    snapshotsStored: number;
+    sampleOddsEvent?: any;
+    sampleSnapshot?: any;
+    triggerDetails?: any[];
+    matchDetails?: any[];
+  };
 }
 
 // Database Trigger Interface
@@ -218,10 +226,22 @@ export const pollingService = {
       // 6. Evaluate each trigger
       let matchesFound = 0;
       let alertsSent = 0;
+      const debugTriggerDetails: any[] = [];
+      const debugMatchDetails: any[] = [];
 
       for (const trigger of triggersWithProfiles) {
         try {
           console.log(`[PollingService] Evaluating trigger ${trigger.id}:`, {
+            sport: trigger.sport,
+            team_or_player: trigger.team_or_player,
+            bet_type: trigger.bet_type,
+            odds_comparator: trigger.odds_comparator,
+            odds_value: trigger.odds_value
+          });
+          
+          // Collect trigger details for debug
+          debugTriggerDetails.push({
+            id: trigger.id,
             sport: trigger.sport,
             team_or_player: trigger.team_or_player,
             bet_type: trigger.bet_type,
@@ -240,6 +260,17 @@ export const pollingService = {
 
             // Store trigger matches
             for (const snapshot of matchingSnapshots) {
+              debugMatchDetails.push({
+                trigger_id: trigger.id,
+                snapshot: {
+                  sport: snapshot.sport,
+                  team_or_player: snapshot.team_or_player,
+                  bet_type: snapshot.bet_type,
+                  odds_value: snapshot.odds_value,
+                  bookmaker: snapshot.bookmaker
+                }
+              });
+              
               const { data: matchData, error: matchError } = await supabaseClient
                 .from("trigger_matches")
                 .insert({
@@ -285,6 +316,14 @@ export const pollingService = {
           matchesFound,
           alertsSent,
           durationMs,
+          debug: {
+            oddsEventsFetched: oddsData.length,
+            snapshotsStored: snapshots.length,
+            sampleOddsEvent: oddsData[0],
+            sampleSnapshot: snapshots[0],
+            triggerDetails: debugTriggerDetails,
+            matchDetails: debugMatchDetails
+          }
         },
       };
     } catch (error) {
