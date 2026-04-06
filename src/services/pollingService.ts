@@ -174,11 +174,26 @@ export const pollingService = {
       
       // DEBUG: Log raw data structure
       console.log(`[PollingService] DEBUG - First profile trigger structure:`, JSON.stringify(profileTriggers[0], null, 2));
+      console.log(`[PollingService] DEBUG - Sample of first 3 profile triggers:`, profileTriggers.slice(0, 3).map((pt: any) => ({
+        profile_id: pt.profile_id,
+        trigger_id: pt.trigger_id,
+        triggers_type: typeof pt.triggers,
+        triggers_is_array: Array.isArray(pt.triggers),
+        triggers_value: pt.triggers
+      })));
 
       // 3. Transform the data into a usable format
       // Supabase returns joined relations as arrays, so we need to extract the first item
       const triggersWithProfiles = profileTriggers.flatMap((pt: any, index: number) => {
+        console.log(`[PollingService] DEBUG - Processing profile trigger ${index}:`, {
+          profile_id: pt.profile_id,
+          trigger_id: pt.trigger_id,
+          triggers_raw: pt.triggers
+        });
+        
         const triggerData = Array.isArray(pt.triggers) ? pt.triggers[0] : pt.triggers;
+        
+        console.log(`[PollingService] DEBUG - Extracted trigger data for index ${index}:`, triggerData);
         
         if (!triggerData) {
           console.log(`[PollingService] DEBUG - Skipping profile trigger at index ${index}: triggerData is ${triggerData}`);
@@ -186,13 +201,18 @@ export const pollingService = {
           return [];
         }
         
-        return [{
+        const processedTrigger = {
           ...triggerData,
           profile_id: pt.profile_id,
-        }];
+        };
+        
+        console.log(`[PollingService] DEBUG - Processed trigger ${index}:`, processedTrigger);
+        
+        return [processedTrigger];
       });
 
       console.log(`[PollingService] Processing ${triggersWithProfiles.length} triggers (started with ${profileTriggers.length} associations)`);
+      console.log(`[PollingService] DEBUG - First processed trigger:`, triggersWithProfiles[0]);
       
       if (triggersWithProfiles.length < profileTriggers.length) {
         console.warn(`[PollingService] WARNING: Lost ${profileTriggers.length - triggersWithProfiles.length} triggers during transformation!`);
