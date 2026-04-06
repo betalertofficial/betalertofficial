@@ -35,7 +35,6 @@ interface DatabaseTrigger {
   status: string;
   bookmaker?: string | null;
   vendor_id?: string | null;
-  phone_e164?: string;
 }
 
 interface OddsSnapshotInsert {
@@ -135,9 +134,10 @@ export const pollingService = {
       const { data: profileTriggers, error: profileTriggersError } = await supabaseClient
         .from("profile_triggers")
         .select(`
+          id,
           profile_id,
           trigger_id,
-          triggers!inner (
+          triggers!profile_triggers_trigger_id_fkey (
             id,
             sport,
             team_or_player,
@@ -184,32 +184,42 @@ export const pollingService = {
 
       // 3. Transform the data into a usable format
       // Supabase returns joined relations as arrays, so we need to extract the first item
-      const triggersWithProfiles = profileTriggers.flatMap((pt: any, index: number) => {
-        console.log(`[PollingService] DEBUG - Processing profile trigger ${index}:`, {
-          profile_id: pt.profile_id,
-          trigger_id: pt.trigger_id,
-          triggers_raw: pt.triggers
-        });
-        
-        const triggerData = Array.isArray(pt.triggers) ? pt.triggers[0] : pt.triggers;
-        
-        console.log(`[PollingService] DEBUG - Extracted trigger data for index ${index}:`, triggerData);
-        
-        if (!triggerData) {
-          console.log(`[PollingService] DEBUG - Skipping profile trigger at index ${index}: triggerData is ${triggerData}`);
-          console.log(`[PollingService] DEBUG - Raw pt.triggers:`, pt.triggers);
-          return [];
-        }
-        
-        const processedTrigger = {
-          ...triggerData,
-          profile_id: pt.profile_id,
-        };
-        
-        console.log(`[PollingService] DEBUG - Processed trigger ${index}:`, processedTrigger);
-        
-        return [processedTrigger];
-      });
+      const triggersWithProfiles = profileTriggers
+        .map((pt: any, index: number): DatabaseTrigger | null => {
+          console.log(`[PollingService] DEBUG - Processing profile trigger ${index}:`, {
+            profile_id: pt.profile_id,
+            trigger_id: pt.trigger_id,
+            triggers_raw: pt.triggers
+          });
+          
+          const trigger = Array.isArray(pt.triggers) ? pt.triggers[0] : pt.triggers;
+          
+          console.log(`[PollingService] DEBUG - Extracted trigger data for index ${index}:`, trigger);
+          
+          if (!trigger) {
+            console.log(`[PollingService] DEBUG - Skipping profile trigger at index ${index}: trigger is ${trigger}`);
+            return null;
+          }
+          
+          const processedTrigger: DatabaseTrigger = {
+            id: trigger.id,
+            profile_id: pt.profile_id,
+            sport: trigger.sport,
+            team_or_player: trigger.team_or_player,
+            bet_type: trigger.bet_type,
+            odds_comparator: trigger.odds_comparator,
+            odds_value: trigger.odds_value,
+            frequency: trigger.frequency,
+            status: trigger.status,
+            bookmaker: trigger.bookmaker || null,
+            vendor_id: trigger.vendor_id || null,
+          };
+          
+          console.log(`[PollingService] DEBUG - Processed trigger ${index}:`, processedTrigger);
+          
+          return processedTrigger;
+        })
+        .filter((t): t is DatabaseTrigger => t !== null);
 
       console.log(`[PollingService] Processing ${triggersWithProfiles.length} triggers (started with ${profileTriggers.length} associations)`);
       console.log(`[PollingService] DEBUG - First processed trigger:`, triggersWithProfiles[0]);
