@@ -78,39 +78,53 @@ async function fetchActiveTriggers(supabase: SupabaseClient) {
 /**
  * STEP 2: Fetch live odds from Odds API
  */
-async function fetchLiveOdds(apiKey: string, sports: string[]) {
+async function fetchLiveOdds(apiKey: string, sports: string[]): Promise<OddsSnapshot[]> {
   console.log(`[CronPolling] Fetching live odds for sports: ${sports.join(", ")}`);
 
-  const oddsSnapshots: any[] = [];
+  const allOdds: OddsSnapshot[] = [];
+
+  // Bookmaker name normalization: API lowercase -> Database capitalized
+  const normalizeBookmaker = (bookmaker: string): string => {
+    const mapping: Record<string, string> = {
+      'fanduel': 'FanDuel',
+      'draftkings': 'DraftKings',
+      'betmgm': 'BetMGM',
+      'caesars': 'Caesars',
+      'pointsbet': 'PointsBet',
+    };
+    return mapping[bookmaker.toLowerCase()] || bookmaker;
+  };
 
   for (const sport of sports) {
     try {
+      console.log(`[CronPolling] Fetching odds for ${sport}...`);
+      
       const response = await fetch(
-        `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`,
-        { method: "GET" }
+        `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=fanduel,draftkings&oddsFormat=american`
       );
 
       if (!response.ok) {
-        console.error(`[CronPolling] Failed to fetch odds for ${sport}: ${response.statusText}`);
+        console.error(`[CronPolling] Odds API error for ${sport}: ${response.statusText}`);
         continue;
       }
 
       const events = await response.json();
-      console.log(`[CronPolling] Fetched ${events.length} events for ${sport}`);
+      console.log(`[CronPolling] Received ${events.length} events for ${sport}`);
 
-      // Parse events into odds snapshots
+      // Parse odds data into normalized format
       for (const event of events) {
         for (const bookmaker of event.bookmakers || []) {
+          const normalizedBookmaker = normalizeBookmaker(bookmaker.key);
+          
           for (const market of bookmaker.markets || []) {
             for (const outcome of market.outcomes || []) {
-              oddsSnapshots.push({
+              allOdds.push({
                 sport,
                 event_id: event.id,
                 team_or_player: outcome.name,
-                bookmaker: bookmaker.key,
+                bookmaker: normalizedBookmaker,
                 bet_type: market.key,
                 odds_value: outcome.price,
-                fetched_at: new Date().toISOString(),
               });
             }
           }
@@ -121,8 +135,8 @@ async function fetchLiveOdds(apiKey: string, sports: string[]) {
     }
   }
 
-  console.log(`[CronPolling] Total odds snapshots: ${oddsSnapshots.length}`);
-  return oddsSnapshots;
+  console.log(`[CronPolling] Total odds fetched: ${allOdds.length}`);
+  return allOdds;
 }
 
 /**
