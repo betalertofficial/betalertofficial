@@ -5,6 +5,15 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { findMatches, deduplicateMatches, formatAlertMessage, type Match } from "./matchingEngine";
 
+interface OddsSnapshot {
+  sport: string;
+  event_id: string;
+  team_or_player: string;
+  bookmaker: string;
+  bet_type: string;
+  odds_value: number;
+}
+
 interface RunCronPollOptions {
   skipPollingCheck?: boolean;
   dryRun?: boolean;
