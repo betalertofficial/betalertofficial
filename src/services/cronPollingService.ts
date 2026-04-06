@@ -33,6 +33,11 @@ async function fetchActiveTriggers(supabase: SupabaseClient) {
     .select("*")
     .eq("status", "active");
 
+  console.log("[CronPolling] DEBUG - Triggers query result:");
+  console.log("[CronPolling] DEBUG - Error:", triggersError);
+  console.log("[CronPolling] DEBUG - Data:", triggers);
+  console.log("[CronPolling] DEBUG - Data length:", triggers?.length || 0);
+
   if (triggersError) {
     console.error("[CronPolling] Error fetching triggers:", triggersError);
     throw new Error(`Failed to fetch triggers: ${triggersError.message}`);
@@ -42,6 +47,11 @@ async function fetchActiveTriggers(supabase: SupabaseClient) {
   const { data: profileTriggers, error: profileTriggersError } = await supabase
     .from("profile_triggers")
     .select("profile_id, trigger_id");
+
+  console.log("[CronPolling] DEBUG - Profile triggers query result:");
+  console.log("[CronPolling] DEBUG - Error:", profileTriggersError);
+  console.log("[CronPolling] DEBUG - Data:", profileTriggers);
+  console.log("[CronPolling] DEBUG - Data length:", profileTriggers?.length || 0);
 
   if (profileTriggersError) {
     console.error("[CronPolling] Error fetching profile_triggers:", profileTriggersError);
