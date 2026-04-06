@@ -137,6 +137,11 @@ async function storeOddsSnapshots(
   const snapshotIdMap = new Map<string, string>();
 
   try {
+    // DEBUG: Log unique bookmaker names
+    const uniqueBookmakers = [...new Set(oddsData.map(o => o.bookmaker))];
+    console.log("[CronPolling] DEBUG - Unique bookmaker names from Odds API:", uniqueBookmakers);
+    console.log("[CronPolling] DEBUG - Sample odds data:", oddsData.slice(0, 3));
+
     // Insert all odds snapshots
     const snapshots = oddsData.map((odds) => ({
       sport: odds.sport,
