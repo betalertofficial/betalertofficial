@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/router";
 import { adminService, type AdminStats } from "@/services/adminService";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -233,58 +234,35 @@ export default function AdminPage() {
     setIsManualPolling(true);
     
     try {
-      // Add a timeout to prevent hanging forever
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Request timed out after 60 seconds")), 60000)
-      );
+      const response = await fetch("/api/admin/manual-poll-v2", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        },
+        body: JSON.stringify({ dryRun: false }),
+      });
 
-      const pollPromise = adminService.manualPollAndCheckTriggers();
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
 
-      const result = await Promise.race([pollPromise, timeoutPromise]) as { checked: number; hit: number; message: string; debug?: any };
+      const result = await response.json();
       
       console.log("=== MANUAL POLL RESULT ===");
-      console.log("Checked:", result.checked, "| Hit:", result.hit);
+      console.log("Evaluation Run ID:", result.evaluation_run_id);
+      console.log("Triggers Checked:", result.triggers_checked);
+      console.log("Matches Found:", result.matches_found);
+      console.log("Alerts Created:", result.alerts_created);
+      console.log("Webhooks Sent:", result.webhooks_sent);
+      console.log("Duration (ms):", result.duration_ms);
       console.log("Full result:", result);
-      
-      // Log debug information if available
-      if (result.debug) {
-        console.log("\n=== DEBUG INFORMATION ===");
-        console.log("Odds Events Fetched:", result.debug.oddsEventsFetched);
-        console.log("Snapshots Stored:", result.debug.snapshotsStored);
-        
-        if (result.debug.sampleOddsEvent) {
-          console.log("\n📊 Sample Odds Event:", result.debug.sampleOddsEvent);
-        }
-        
-        if (result.debug.sampleSnapshot) {
-          console.log("\n📸 Sample Snapshot:", result.debug.sampleSnapshot);
-        }
-        
-        if (result.debug.triggerDetails && result.debug.triggerDetails.length > 0) {
-          console.log("\n🎯 Triggers Being Evaluated:");
-          result.debug.triggerDetails.forEach((trigger: any, index: number) => {
-            console.log(`  ${index + 1}. ${trigger.sport} - ${trigger.team_or_player}`);
-            console.log(`     Bet Type: ${trigger.bet_type}`);
-            console.log(`     Condition: ${trigger.odds_comparator} ${trigger.odds_value}`);
-          });
-        }
-        
-        if (result.debug.matchDetails && result.debug.matchDetails.length > 0) {
-          console.log("\n✅ MATCHES FOUND:");
-          result.debug.matchDetails.forEach((match: any, index: number) => {
-            console.log(`  ${index + 1}. Trigger ${match.trigger_id}`);
-            console.log(`     Matched: ${match.snapshot.team_or_player} (${match.snapshot.bookmaker})`);
-            console.log(`     Odds: ${match.snapshot.odds_value}`);
-          });
-        } else {
-          console.log("\n❌ No matches found");
-        }
-      }
       
       toast({
         title: "Manual Poll Complete",
-        description: `Checked ${result.checked} triggers, ${result.hit} hit. Check browser console (F12) for details.`,
-        variant: result.hit > 0 ? "default" : "default",
+        description: `Checked ${result.triggers_checked} triggers, found ${result.matches_found} matches, sent ${result.webhooks_sent} alerts. Check browser console (F12) for details.`,
+        variant: result.matches_found > 0 ? "default" : "default",
       });
       
       await loadAdminData();
@@ -292,15 +270,14 @@ export default function AdminPage() {
       console.error("Error running manual poll:", error);
       
       const errorMessage = error.message || "Unknown error occurred";
-      const errorDetails = error.response?.data || { message: errorMessage };
 
       toast({
         title: "Manual Poll Failed",
         description: (
           <div className="mt-2 w-[340px] md:w-[500px] overflow-auto">
-            <p className="text-sm font-medium mb-2">The API returned the following error:</p>
+            <p className="text-sm font-medium mb-2">Error:</p>
             <pre className="rounded-md bg-slate-950 p-4">
-              <code className="text-white text-xs">{JSON.stringify(errorDetails, null, 2)}</code>
+              <code className="text-white text-xs">{errorMessage}</code>
             </pre>
           </div>
         ),
@@ -308,7 +285,6 @@ export default function AdminPage() {
         duration: 10000,
       });
     } finally {
-      // ALWAYS reset loading state, no matter what
       console.log("Resetting manual poll loading state");
       setIsManualPolling(false);
     }
