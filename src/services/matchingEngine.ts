@@ -119,8 +119,8 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
         continue;
       }
 
-      // 4. Match bookmaker if specified
-      if (trigger.bookmaker && trigger.bookmaker !== odds.bookmaker) {
+      // 4. Match bookmaker if specified (case-insensitive)
+      if (trigger.bookmaker && trigger.bookmaker.toLowerCase() !== odds.bookmaker.toLowerCase()) {
         bookmakerMismatches++;
         continue;
       }
