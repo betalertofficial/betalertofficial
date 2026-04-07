@@ -13,6 +13,7 @@ interface OddsSnapshot {
   bookmaker: string;
   bet_type: string;
   odds_value: number;
+  event_data?: any; // Store full event object from Odds API
 }
 
 interface RunCronPollOptions {
@@ -114,6 +115,16 @@ async function fetchLiveOdds(apiKey: string, sports: string[]): Promise<OddsSnap
 
       // Parse odds data into normalized format
       for (const event of events) {
+        // Store event data for ESPN score lookup
+        const eventData = {
+          id: event.id,
+          sport_key: event.sport_key,
+          sport_title: event.sport_title,
+          commence_time: event.commence_time,
+          home_team: event.home_team,
+          away_team: event.away_team,
+        };
+
         for (const bookmaker of event.bookmakers || []) {
           const normalizedBookmaker = normalizeBookmaker(bookmaker.key);
           
@@ -126,6 +137,7 @@ async function fetchLiveOdds(apiKey: string, sports: string[]): Promise<OddsSnap
                 bookmaker: normalizedBookmaker,
                 bet_type: market.key,
                 odds_value: outcome.price,
+                event_data: eventData, // Include event data for later use
               });
             }
           }
@@ -157,7 +169,7 @@ async function storeOddsSnapshots(
     console.log("[CronPolling] DEBUG - Unique bookmaker names from Odds API:", uniqueBookmakers);
     console.log("[CronPolling] DEBUG - Sample odds data:", oddsData.slice(0, 3));
 
-    // Insert all odds snapshots
+    // Insert all odds snapshots with event_data
     const snapshots = oddsData.map((odds) => ({
       sport: odds.sport,
       event_id: odds.event_id,
@@ -165,6 +177,7 @@ async function storeOddsSnapshots(
       bookmaker: odds.bookmaker,
       bet_type: odds.bet_type,
       odds_value: odds.odds_value,
+      event_data: odds.event_data, // Store full event data
       snapshot_at: new Date().toISOString(),
     }));
 
@@ -186,7 +199,7 @@ async function storeOddsSnapshots(
       }
     }
 
-    console.log(`[CronPolling] Stored ${data?.length || 0} odds snapshots`);
+    console.log(`[CronPolling] Stored ${data?.length || 0} odds snapshots with event data`);
     return snapshotIdMap;
   } catch (error) {
     console.error("[CronPolling] Error in storeOddsSnapshots:", error);
