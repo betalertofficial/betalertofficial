@@ -208,16 +208,25 @@ async function storeTriggerMatches(
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   for (const match of matches) {
+    console.log(`[CronPolling] Processing match for trigger ${match.triggerId}...`);
+    
     // Check for existing match in last 24 hours
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from("trigger_matches")
       .select("id")
       .eq("trigger_id", match.triggerId)
       .gte("matched_at", twentyFourHoursAgo)
       .limit(1);
 
+    console.log(`[CronPolling] DEBUG - Existing match check for trigger ${match.triggerId}:`, { existing, existingError, twentyFourHoursAgo });
+
+    if (existingError) {
+      console.error(`[CronPolling] Error checking for existing match:`, existingError);
+      continue;
+    }
+
     if (existing && existing.length > 0) {
-      console.log(`[CronPolling] Skipping duplicate match for trigger ${match.triggerId}`);
+      console.log(`[CronPolling] Skipping duplicate match for trigger ${match.triggerId} (last matched: ${existing[0].id})`);
       continue;
     }
 
@@ -228,6 +237,11 @@ async function storeTriggerMatches(
         s.bookmaker === match.bookmaker &&
         s.bet_type === match.betType
     );
+
+    console.log(`[CronPolling] DEBUG - Snapshot lookup:`, {
+      searching_for: { team: match.teamOrPlayer, bookmaker: match.bookmaker, betType: match.betType },
+      found: matchingSnapshot?.id || null
+    });
 
     const snapshotId = matchingSnapshot?.id || null;
 
@@ -244,6 +258,8 @@ async function storeTriggerMatches(
       })
       .select("id");
 
+    console.log(`[CronPolling] DEBUG - Insert result for trigger ${match.triggerId}:`, { data, error });
+
     if (error) {
       console.error(`[CronPolling] Error storing match for trigger ${match.triggerId}:`, error);
       continue;
@@ -251,7 +267,7 @@ async function storeTriggerMatches(
 
     if (data && data.length > 0) {
       storedMatches.push({ match_id: data[0].id, trigger_id: match.triggerId });
-      console.log(`[CronPolling] Stored match ${data[0].id} for trigger ${match.triggerId}`);
+      console.log(`[CronPolling] ✅ Stored match ${data[0].id} for trigger ${match.triggerId}`);
     }
   }
 
