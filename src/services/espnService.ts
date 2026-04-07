@@ -87,6 +87,7 @@ function fuzzyMatch(str1: string, str2: string, threshold: number = 0.6): boolea
   }
   
   const ratio = matches / maxLen;
+  console.log(`[ESPN] Fuzzy match: "${str1}" vs "${str2}" = ${ratio.toFixed(2)} (threshold: ${threshold})`);
   return ratio >= threshold;
 }
 
@@ -94,22 +95,27 @@ function fuzzyMatch(str1: string, str2: string, threshold: number = 0.6): boolea
  * Check if two team names match using multiple strategies
  */
 function teamsMatch(name1: string, name2: string): boolean {
-  // Direct substring match
-  if (name1.toLowerCase().includes(name2.toLowerCase()) || 
-      name2.toLowerCase().includes(name1.toLowerCase())) {
+  console.log(`[ESPN] Matching teams: "${name1}" vs "${name2}"`);
+  
+  // Direct substring match (matching Python example logic)
+  if (name1.toLowerCase().includes(name2.toLowerCase())) {
+    console.log(`[ESPN] ✅ Match found: "${name1}" includes "${name2}"`);
     return true;
   }
   
-  // Normalized match (without city prefixes)
-  const norm1 = normalizeTeamName(name1);
-  const norm2 = normalizeTeamName(name2);
-  
-  if (norm1.includes(norm2) || norm2.includes(norm1)) {
+  if (name2.toLowerCase().includes(name1.toLowerCase())) {
+    console.log(`[ESPN] ✅ Match found: "${name2}" includes "${name1}"`);
     return true;
   }
   
   // Fuzzy match as fallback
-  return fuzzyMatch(name1, name2, 0.7);
+  const fuzzyResult = fuzzyMatch(name1, name2, 0.6);
+  if (fuzzyResult) {
+    console.log(`[ESPN] ✅ Match found via fuzzy matching`);
+  } else {
+    console.log(`[ESPN] ❌ No match found`);
+  }
+  return fuzzyResult;
 }
 
 export const espnService = {
@@ -143,7 +149,20 @@ export const espnService = {
    */
   async findGameScore(homeTeam: string, awayTeam: string, date?: string): Promise<ESPNScore> {
     try {
+      // If no date provided, use current date in Pacific timezone
+      if (!date) {
+        const now = new Date();
+        // Convert to Pacific timezone (UTC-8 or UTC-7 depending on DST)
+        const pacificOffset = -8 * 60; // PST offset in minutes
+        const pacificDate = new Date(now.getTime() + (pacificOffset + now.getTimezoneOffset()) * 60000);
+        date = pacificDate.toISOString().split('T')[0].replace(/-/g, ''); // Format: YYYYMMDD
+        console.log(`[ESPN] Using Pacific date: ${date}`);
+      }
+      
+      console.log(`[ESPN] Searching for game: ${awayTeam} @ ${homeTeam} on date ${date}`);
+      
       const scoreboard = await this.getScoreboard(date);
+      console.log(`[ESPN] Found ${scoreboard.events?.length || 0} total events`);
       
       for (const event of scoreboard.events || []) {
         const competition = event.competitions[0];
@@ -157,12 +176,18 @@ export const espnService = {
         const espnHomeName = espnHome.team.displayName;
         const espnAwayName = espnAway.team.displayName;
         
-        // Check if both teams match
+        console.log(`[ESPN] Checking event: ${espnAwayName} @ ${espnHomeName}`);
+        
+        // Check if both teams match (using same logic as Python example)
         const homeMatch = teamsMatch(homeTeam, espnHomeName);
         const awayMatch = teamsMatch(awayTeam, espnAwayName);
         
         if (homeMatch && awayMatch) {
           const status = competition.status;
+          
+          console.log(`[ESPN] ✅✅✅ MATCH FOUND! ${espnAwayName} @ ${espnHomeName}`);
+          console.log(`[ESPN] Score: ${espnAway.score} - ${espnHome.score}`);
+          console.log(`[ESPN] Status: ${status.type.detail}`);
           
           return {
             found: true,
@@ -179,10 +204,10 @@ export const espnService = {
         }
       }
       
-      console.log(`No ESPN game found for ${homeTeam} vs ${awayTeam}`);
+      console.log(`[ESPN] ❌ No ESPN game found for ${homeTeam} vs ${awayTeam} on ${date}`);
       return { found: false };
     } catch (error) {
-      console.error("Error finding game score:", error);
+      console.error("[ESPN] Error finding game score:", error);
       return { found: false };
     }
   },
