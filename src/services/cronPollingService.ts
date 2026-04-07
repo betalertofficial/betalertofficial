@@ -205,31 +205,10 @@ async function storeTriggerMatches(
   console.log(`[CronPolling] Storing ${matches.length} trigger matches...`);
 
   const storedMatches: { match_id: string; trigger_id: string }[] = [];
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   for (const match of matches) {
     console.log(`[CronPolling] Processing match for trigger ${match.triggerId}...`);
     
-    // Check for existing match in last 24 hours
-    const { data: existing, error: existingError } = await supabase
-      .from("trigger_matches")
-      .select("id")
-      .eq("trigger_id", match.triggerId)
-      .gte("matched_at", twentyFourHoursAgo)
-      .limit(1);
-
-    console.log(`[CronPolling] DEBUG - Existing match check for trigger ${match.triggerId}:`, { existing, existingError, twentyFourHoursAgo });
-
-    if (existingError) {
-      console.error(`[CronPolling] Error checking for existing match:`, existingError);
-      continue;
-    }
-
-    if (existing && existing.length > 0) {
-      console.log(`[CronPolling] Skipping duplicate match for trigger ${match.triggerId} (last matched: ${existing[0].id})`);
-      continue;
-    }
-
     // Find matching odds snapshot
     const matchingSnapshot = oddsSnapshots.find(
       (s) =>
@@ -245,7 +224,7 @@ async function storeTriggerMatches(
 
     const snapshotId = matchingSnapshot?.id || null;
 
-    // Insert new match
+    // Insert new match (no deduplication - every match creates a new entry)
     const { data, error } = await supabase
       .from("trigger_matches")
       .insert({
