@@ -364,7 +364,7 @@ async function sendWebhookAlerts(
       // Fetch additional details for the webhook payload
       const { data: triggerData } = await supabase
         .from("triggers")
-        .select("sport, team_or_player, bet_type, odds_comparator, odds_value, home_team, away_team")
+        .select("sport, team_or_player, bet_type, odds_comparator, odds_value")
         .eq("id", alert.trigger_id)
         .single();
 
@@ -376,19 +376,31 @@ async function sendWebhookAlerts(
         .limit(1)
         .single();
 
-      // Fetch live score from ESPN if we have team data
+      // Fetch live score from ESPN if we have odds snapshot data
       let espnScore = null;
-      if (triggerData?.home_team && triggerData?.away_team) {
-        console.log(`[CronPolling] Fetching ESPN score for ${triggerData.away_team} @ ${triggerData.home_team}...`);
-        espnScore = await espnService.findGameScore(
-          triggerData.home_team,
-          triggerData.away_team
-        );
-        
-        if (espnScore.found) {
-          console.log(`[CronPolling] ✅ ESPN score found: ${espnService.formatScore(espnScore)}`);
-        } else {
-          console.log(`[CronPolling] ⚠️ No ESPN score found for this game`);
+      if (matchData?.odds_snapshot_id) {
+        // Get the odds snapshot to extract event data
+        const { data: snapshotData } = await supabase
+          .from("odds_snapshots")
+          .select("event_data")
+          .eq("id", matchData.odds_snapshot_id)
+          .single();
+
+        if (snapshotData?.event_data) {
+          const eventData = snapshotData.event_data as any;
+          const homeTeam = eventData.home_team;
+          const awayTeam = eventData.away_team;
+
+          if (homeTeam && awayTeam) {
+            console.log(`[CronPolling] Fetching ESPN score for ${awayTeam} @ ${homeTeam}...`);
+            espnScore = await espnService.findGameScore(homeTeam, awayTeam);
+            
+            if (espnScore.found) {
+              console.log(`[CronPolling] ✅ ESPN score found: ${espnService.formatScore(espnScore)}`);
+            } else {
+              console.log(`[CronPolling] ⚠️ No ESPN score found for this game`);
+            }
+          }
         }
       }
 
