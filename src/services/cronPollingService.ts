@@ -690,7 +690,7 @@ export async function runCronPoll(
     }
 
     // Store matches
-    const storedMatches = await storeTriggerMatches(supabase, matches, snapshotIdMap, oddsSnapshots);
+    const storedMatches = await storeTriggerMatches(supabase, matches, snapshotIdMap);
 
     // Create alerts
     const alerts = await createAlerts(supabase, storedMatches, matchMap, profileTriggers);
