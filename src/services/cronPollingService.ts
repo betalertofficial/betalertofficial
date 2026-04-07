@@ -298,7 +298,7 @@ async function createAlerts(
     .select("id, user_id, sport, team_or_player, bet_type, odds_comparator, odds_value")
     .in("id", triggerIds);
 
-  console.log(`[CronPolling] DEBUG - Triggers query result:`, { error: triggersError, count: triggers?.length });
+  console.log(`[CronPolling] DEBUG - Triggers query result:`, { error: triggersError, count: triggers?.length, triggers: triggers });
   if (triggers) {
     console.log(`[CronPolling] DEBUG - Fetched trigger IDs:`, triggers.map(t => t.id));
   }
