@@ -158,10 +158,8 @@ async function fetchLiveOdds(apiKey: string, sports: string[]): Promise<OddsSnap
 async function storeOddsSnapshots(
   supabase: SupabaseClient,
   oddsData: OddsSnapshot[]
-): Promise<Map<string, string>> {
+): Promise<{ id: string; team_or_player: string; bookmaker: string; bet_type: string; event_data: any }[]> {
   console.log(`[CronPolling] Storing ${oddsData.length} odds snapshots...`);
-
-  const snapshotIdMap = new Map<string, string>();
 
   try {
     // DEBUG: Log unique bookmaker names
@@ -184,23 +182,15 @@ async function storeOddsSnapshots(
     const { data, error } = await supabase
       .from("odds_snapshots")
       .insert(snapshots)
-      .select("id, event_id, bookmaker, bet_type, team_or_player");
+      .select("id, event_id, bookmaker, bet_type, team_or_player, event_data");
 
     if (error) {
       console.error("[CronPolling] Error storing odds snapshots:", error);
       throw new Error(`Failed to store odds snapshots: ${error.message}`);
     }
 
-    // Build map for quick lookup: "eventId|bookmaker|betType|team" -> snapshotId
-    if (data) {
-      for (const snapshot of data) {
-        const key = `${snapshot.event_id}|${snapshot.bookmaker}|${snapshot.bet_type}|${snapshot.team_or_player}`;
-        snapshotIdMap.set(key, snapshot.id);
-      }
-    }
-
     console.log(`[CronPolling] Stored ${data?.length || 0} odds snapshots with event data`);
-    return snapshotIdMap;
+    return data || [];
   } catch (error) {
     console.error("[CronPolling] Error in storeOddsSnapshots:", error);
     throw error;
@@ -213,8 +203,7 @@ async function storeOddsSnapshots(
 async function storeTriggerMatches(
   supabase: SupabaseClient,
   matches: Match[],
-  snapshotIdMap: Map<string, string>,
-  oddsSnapshots: any[]
+  storedSnapshots: { id: string; team_or_player: string; bookmaker: string; bet_type: string; event_data: any }[]
 ) {
   console.log(`[CronPolling] Storing ${matches.length} trigger matches...`);
 
@@ -223,8 +212,8 @@ async function storeTriggerMatches(
   for (const match of matches) {
     console.log(`[CronPolling] Processing match for trigger ${match.triggerId}...`);
 
-    // Find matching odds snapshot
-    const matchingSnapshot = oddsSnapshots.find(
+    // Find matching odds snapshot (now with database ID!)
+    const matchingSnapshot = storedSnapshots.find(
       (s) =>
         s.team_or_player === match.teamOrPlayer &&
         s.bookmaker === match.bookmaker &&
@@ -234,12 +223,12 @@ async function storeTriggerMatches(
     console.log(`[CronPolling] DEBUG - Snapshot lookup:`, {
       searching_for: { team: match.teamOrPlayer, bookmaker: match.bookmaker, betType: match.betType },
       found: matchingSnapshot?.id || null,
-      total_snapshots: oddsSnapshots.length
+      total_snapshots: storedSnapshots.length
     });
 
     if (!matchingSnapshot) {
       console.log(`[CronPolling] ⚠️ WARNING: No matching snapshot found!`);
-      console.log(`[CronPolling] DEBUG - Sample snapshots:`, oddsSnapshots.slice(0, 3).map(s => ({
+      console.log(`[CronPolling] DEBUG - Sample snapshots:`, storedSnapshots.slice(0, 3).map(s => ({
         id: s.id,
         team: s.team_or_player,
         bookmaker: s.bookmaker,
