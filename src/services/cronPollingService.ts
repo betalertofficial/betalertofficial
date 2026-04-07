@@ -284,7 +284,7 @@ async function createAlerts(
 ) {
   console.log(`[CronPolling] Creating alerts for ${storedMatches.length} matches...`);
 
-  const alerts: { alert_id: string; profile_id: string; message: string }[] = [];
+  const alerts: { alert_id: string; profile_id: string; trigger_id: string; phone_number: string }[] = [];
 
   for (const stored of storedMatches) {
     const match = matchMap.get(stored.trigger_id);
@@ -295,6 +295,15 @@ async function createAlerts(
 
     for (const owner of owners) {
       const message = formatAlertMessage(match);
+
+      // Fetch profile phone number
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("phone")
+        .eq("id", owner.profile_id)
+        .single();
+
+      const phoneNumber = profile?.phone || "";
 
       const { data, error } = await supabase
         .from("alerts")
@@ -315,7 +324,8 @@ async function createAlerts(
         alerts.push({
           alert_id: data[0].id,
           profile_id: owner.profile_id,
-          message,
+          trigger_id: stored.trigger_id,
+          phone_number: phoneNumber,
         });
         console.log(`[CronPolling] Created alert ${data[0].id} for profile ${owner.profile_id}`);
       }
@@ -373,17 +383,10 @@ async function sendWebhookAlerts(
 
       console.log(`[CronPolling] Sending webhook for alert ${alert.alert_id} to ${webhookUrl}`);
 
-      // Use https module for better SSL control in development
-      const https = require('https');
-      const agent = new https.Agent({
-        rejectUnauthorized: process.env.NODE_ENV === 'production'
-      });
-
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-        agent: process.env.NODE_ENV !== 'production' ? agent : undefined,
       });
 
       if (!response.ok) {
@@ -593,7 +596,7 @@ export async function runCronPoll(
     const alerts = await createAlerts(supabase, storedMatches, matchMap, profileTriggers);
 
     // Send webhooks
-    const { sent } = await sendWebhookAlerts(supabase, alerts, webhookUrl, options.dryRun);
+    const webhooksSent = await sendWebhookAlerts(supabase, alerts, webhookUrl, options.dryRun);
 
     // Update 'once' triggers
     await updateMatchedTriggers(
@@ -606,7 +609,7 @@ export async function runCronPoll(
     await completeEvaluationRun(supabase, runId, {
       triggersEvaluated: triggers.length,
       matchesFound: matches.length,
-      alertsSent: sent,
+      alertsSent: webhooksSent,
       durationMs: Date.now() - startTime,
     });
 
@@ -618,7 +621,7 @@ export async function runCronPoll(
       triggersChecked: triggers.length,
       matchesFound: matches.length,
       alertsCreated: alerts.length,
-      webhooksSent: sent,
+      webhooksSent: webhooksSent,
       durationMs: Date.now() - startTime,
     };
   } catch (error) {
