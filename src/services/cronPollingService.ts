@@ -349,7 +349,7 @@ async function createAlerts(
 
       // Build formatted message with score summary
       const message = `🚨 ${match.teamOrPlayer} ${match.betType} hit ${
-        match.oddsComparator
+        trigger.odds_comparator
       } ${match.oddsValue > 0 ? "+" : ""}${match.oddsValue} on ${match.bookmaker}! Current: ${
         match.oddsValue > 0 ? "+" : ""
       }${match.oddsValue}${scoreSummary}`;
