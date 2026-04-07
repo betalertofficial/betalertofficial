@@ -353,6 +353,13 @@ async function sendWebhookAlerts(
     }
 
     try {
+      // Fetch alert details including the message
+      const { data: alertData } = await supabase
+        .from("alerts")
+        .select("message")
+        .eq("id", alert.alert_id)
+        .single();
+
       // Fetch additional details for the webhook payload
       const { data: triggerData } = await supabase
         .from("triggers")
@@ -373,6 +380,11 @@ async function sendWebhookAlerts(
       params.append("alert_id", alert.alert_id);
       params.append("phone_number", alert.phone_number);
       params.append("timestamp", new Date().toISOString());
+      
+      // Add the alert message
+      if (alertData?.message) {
+        params.append("message", alertData.message);
+      }
       
       if (triggerData) {
         params.append("sport", triggerData.sport || "");
