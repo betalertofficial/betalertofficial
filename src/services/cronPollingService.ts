@@ -331,61 +331,91 @@ async function createAlerts(
  */
 async function sendWebhookAlerts(
   supabase: SupabaseClient,
-  alerts: { alert_id: string; profile_id: string; message: string }[],
+  alerts: { alert_id: string; profile_id: string; trigger_id: string; phone_number: string }[],
   webhookUrl: string,
   dryRun: boolean = false
-) {
+): Promise<number> {
   console.log(`[CronPolling] Sending ${alerts.length} webhook alerts (dryRun: ${dryRun})...`);
 
-  let sent = 0;
-  let failed = 0;
+  let successCount = 0;
+  let failedCount = 0;
 
   for (const alert of alerts) {
     if (dryRun) {
       console.log(`[CronPolling] [DRY RUN] Would send webhook for alert ${alert.alert_id}`);
-      sent++;
+      successCount++;
       continue;
     }
 
     try {
+      // Fetch additional details for the webhook payload
+      const { data: triggerData } = await supabase
+        .from("triggers")
+        .select("sport, team_or_player, bet_type, odds_comparator, odds_value")
+        .eq("id", alert.trigger_id)
+        .single();
+
+      const { data: matchData } = await supabase
+        .from("trigger_matches")
+        .select("matched_value, odds_snapshot_id")
+        .eq("trigger_id", alert.trigger_id)
+        .order("matched_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      const payload = {
+        alert_id: alert.alert_id,
+        phone_number: alert.phone_number,
+        trigger: triggerData,
+        matched_odds: matchData?.matched_value,
+        timestamp: new Date().toISOString(),
+      };
+
+      console.log(`[CronPolling] Sending webhook for alert ${alert.alert_id} to ${webhookUrl}`);
+
+      // Use https module for better SSL control in development
+      const https = require('https');
+      const agent = new https.Agent({
+        rejectUnauthorized: process.env.NODE_ENV === 'production'
+      });
+
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          profile_id: alert.profile_id,
-          message: alert.message,
-          timestamp: new Date().toISOString(),
-        }),
+        body: JSON.stringify(payload),
+        agent: process.env.NODE_ENV !== 'production' ? agent : undefined,
       });
 
-      if (response.ok) {
-        await supabase
-          .from("alerts")
-          .update({
-            delivery_status: "sent",
-            webhook_response: await response.text(),
-          })
-          .eq("id", alert.alert_id);
-        sent++;
-        console.log(`[CronPolling] Sent webhook for alert ${alert.alert_id}`);
-      } else {
-        throw new Error(`Webhook returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Webhook returned status ${response.status}: ${response.statusText}`);
       }
-    } catch (error) {
+
+      console.log(`[CronPolling] ✅ Webhook sent successfully for alert ${alert.alert_id}`);
+
+      // Update alert delivery status
       await supabase
         .from("alerts")
-        .update({
+        .update({ delivery_status: "sent" })
+        .eq("id", alert.alert_id);
+
+      successCount++;
+    } catch (error) {
+      console.error(`[CronPolling] Failed to send webhook for alert ${alert.alert_id}:`, error);
+      failedCount++;
+
+      // Update alert delivery status to failed
+      await supabase
+        .from("alerts")
+        .update({ 
           delivery_status: "failed",
-          webhook_response: error instanceof Error ? error.message : "Unknown error",
+          delivery_error: error instanceof Error ? error.message : "Unknown error"
         })
         .eq("id", alert.alert_id);
-      failed++;
-      console.error(`[CronPolling] Failed to send webhook for alert ${alert.alert_id}:`, error);
     }
   }
 
-  console.log(`[CronPolling] Webhooks sent: ${sent}, failed: ${failed}`);
-  return { sent, failed };
+  console.log(`[CronPolling] Webhooks sent: ${successCount}, failed: ${failedCount}`);
+  return successCount;
 }
 
 /**
