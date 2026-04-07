@@ -283,16 +283,25 @@ async function createAlerts(
   matchMap: Map<string, Match>
 ): Promise<{ alert_id: string; profile_id: string; trigger_id: string; phone_number: string }[]> {
   console.log(`[CronPolling] Creating alerts for ${storedMatches.length} matches...`);
+  console.log(`[CronPolling] DEBUG - storedMatches:`, storedMatches);
+  console.log(`[CronPolling] DEBUG - matchMap size:`, matchMap.size);
+  console.log(`[CronPolling] DEBUG - matchMap keys:`, Array.from(matchMap.keys()));
 
   const alertsData: { alert_id: string; profile_id: string; trigger_id: string; phone_number: string }[] = [];
 
   // Fetch all triggers and profiles in one query
   const triggerIds = [...new Set(storedMatches.map((m) => m.trigger_id))];
+  console.log(`[CronPolling] DEBUG - triggerIds to fetch:`, triggerIds);
 
-  const { data: triggers } = await supabase
+  const { data: triggers, error: triggersError } = await supabase
     .from("triggers")
     .select("id, user_id, sport, team_or_player, bet_type, odds_comparator, odds_value")
     .in("id", triggerIds);
+
+  console.log(`[CronPolling] DEBUG - Triggers query result:`, { error: triggersError, count: triggers?.length });
+  if (triggers) {
+    console.log(`[CronPolling] DEBUG - Fetched trigger IDs:`, triggers.map(t => t.id));
+  }
 
   const userIds = [...new Set(triggers?.map((t) => t.user_id) || [])];
 
@@ -302,13 +311,19 @@ async function createAlerts(
     .in("id", userIds);
 
   const profileMap = new Map(profiles?.map((p) => [p.id, p.phone]) || []);
+  console.log(`[CronPolling] DEBUG - profileMap size:`, profileMap.size);
 
   for (const storedMatch of storedMatches) {
+    console.log(`[CronPolling] DEBUG - Processing storedMatch:`, storedMatch);
+    
     const trigger = triggers?.find((t) => t.id === storedMatch.trigger_id);
+    console.log(`[CronPolling] DEBUG - Found trigger:`, trigger ? `Yes (${trigger.id})` : 'No');
+    
     const match = matchMap.get(storedMatch.trigger_id);
+    console.log(`[CronPolling] DEBUG - Found match in matchMap:`, match ? 'Yes' : 'No');
 
     if (!trigger || !match) {
-      console.log(`[CronPolling] Skipping alert: no trigger or match data found`);
+      console.log(`[CronPolling] Skipping alert: no trigger or match data found (trigger: ${!!trigger}, match: ${!!match})`);
       continue;
     }
 
