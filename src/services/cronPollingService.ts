@@ -368,20 +368,30 @@ async function sendWebhookAlerts(
         .limit(1)
         .single();
 
-      const payload = {
-        alert_id: alert.alert_id,
-        phone_number: alert.phone_number,
-        trigger: triggerData,
-        matched_odds: matchData?.matched_value,
-        timestamp: new Date().toISOString(),
-      };
+      // Build query parameters for GET request (Zapier-friendly approach)
+      const params = new URLSearchParams();
+      params.append("alert_id", alert.alert_id);
+      params.append("phone_number", alert.phone_number);
+      params.append("timestamp", new Date().toISOString());
+      
+      if (triggerData) {
+        params.append("sport", triggerData.sport || "");
+        params.append("team_or_player", triggerData.team_or_player || "");
+        params.append("bet_type", triggerData.bet_type || "");
+        params.append("odds_comparator", triggerData.odds_comparator || "");
+        params.append("odds_value", String(triggerData.odds_value || ""));
+      }
+      
+      if (matchData) {
+        params.append("matched_odds", String(matchData.matched_value || ""));
+      }
 
-      console.log(`[CronPolling] Sending webhook for alert ${alert.alert_id} to ${webhookUrl}`);
+      const fullUrl = `${webhookUrl}?${params.toString()}`;
+      console.log(`[CronPolling] Sending GET webhook for alert ${alert.alert_id} to ${webhookUrl.substring(0, 50)}...`);
 
-      const response = await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      // Use GET request with query parameters (avoids CORS preflight and SSL issues)
+      const response = await fetch(fullUrl, {
+        method: "GET",
       });
 
       if (!response.ok) {
