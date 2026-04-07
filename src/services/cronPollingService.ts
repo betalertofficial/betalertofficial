@@ -283,15 +283,28 @@ async function createAlerts(
   profileTriggers: any[]
 ) {
   console.log(`[CronPolling] Creating alerts for ${storedMatches.length} matches...`);
+  console.log(`[CronPolling] DEBUG - storedMatches:`, storedMatches);
+  console.log(`[CronPolling] DEBUG - matchMap size:`, matchMap.size);
+  console.log(`[CronPolling] DEBUG - profileTriggers:`, profileTriggers);
 
   const alerts: { alert_id: string; profile_id: string; trigger_id: string; phone_number: string }[] = [];
 
   for (const stored of storedMatches) {
+    console.log(`[CronPolling] Processing stored match: ${stored.match_id} for trigger ${stored.trigger_id}`);
+    
     const match = matchMap.get(stored.trigger_id);
-    if (!match) continue;
+    if (!match) {
+      console.log(`[CronPolling] ⚠️ No match found in matchMap for trigger ${stored.trigger_id}`);
+      continue;
+    }
 
     // Find profile owners of this trigger
     const owners = profileTriggers.filter((pt) => pt.trigger_id === stored.trigger_id);
+    console.log(`[CronPolling] Found ${owners.length} profile owners for trigger ${stored.trigger_id}`);
+
+    if (owners.length === 0) {
+      console.log(`[CronPolling] ⚠️ No profile owners found for trigger ${stored.trigger_id}`);
+    }
 
     for (const owner of owners) {
       const message = formatAlertMessage(match);
@@ -304,6 +317,7 @@ async function createAlerts(
         .single();
 
       const phoneNumber = profile?.phone || "";
+      console.log(`[CronPolling] Profile ${owner.profile_id} phone: ${phoneNumber || '(none)'}`);
 
       const { data, error } = await supabase
         .from("alerts")
@@ -327,7 +341,9 @@ async function createAlerts(
           trigger_id: stored.trigger_id,
           phone_number: phoneNumber,
         });
-        console.log(`[CronPolling] Created alert ${data[0].id} for profile ${owner.profile_id}`);
+        console.log(`[CronPolling] ✅ Created alert ${data[0].id} for profile ${owner.profile_id}`);
+      } else {
+        console.log(`[CronPolling] ⚠️ Alert insert returned no data for profile ${owner.profile_id}`);
       }
     }
   }
