@@ -281,10 +281,10 @@ async function createAlerts(
   supabase: SupabaseClient,
   storedMatches: { match_id: string; trigger_id: string }[],
   matchMap: Map<string, Match>
-): Promise<{ alert_id: string; trigger_id: string; phone_number: string }[]> {
+): Promise<{ alert_id: string; profile_id: string; trigger_id: string; phone_number: string }[]> {
   console.log(`[CronPolling] Creating alerts for ${storedMatches.length} matches...`);
 
-  const alertsData: { alert_id: string; trigger_id: string; phone_number: string }[] = [];
+  const alertsData: { alert_id: string; profile_id: string; trigger_id: string; phone_number: string }[] = [];
 
   // Fetch all triggers and profiles in one query
   const triggerIds = [...new Set(storedMatches.map((m) => m.trigger_id))];
@@ -381,6 +381,7 @@ async function createAlerts(
     if (data && data.length > 0) {
       alertsData.push({
         alert_id: data[0].id,
+        profile_id: trigger.user_id,
         trigger_id: storedMatch.trigger_id,
         phone_number: phoneNumber,
       });
