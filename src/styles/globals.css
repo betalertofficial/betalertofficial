@@ -1,28 +1,27 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Sportsbook Dark Theme - Deep Navy/Charcoal */
-    --background: 210 20% 6%;
-    --foreground: 210 6% 95%;
+    /* White Theme - Clean & Modern */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
     
-    --card: 210 16% 11%;
-    --card-foreground: 210 6% 95%;
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 10%;
     
-    --popover: 210 20% 8%;
-    --popover-foreground: 210 6% 95%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
     
-    --primary: 142 76% 39%;
+    --primary: 142 73% 42%;
     --primary-foreground: 0 0% 100%;
     
-    --secondary: 210 14% 15%;
-    --secondary-foreground: 210 6% 95%;
+    --secondary: 0 0% 90%;
+    --secondary-foreground: 0 0% 10%;
     
-    --muted: 210 14% 17%;
-    --muted-foreground: 210 4% 65%;
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 40%;
     
     --accent: 15 82% 56%;
     --accent-foreground: 0 0% 100%;
@@ -30,20 +29,19 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     
-    --border: 210 14% 15%;
-    --input: 210 14% 17%;
-    --ring: 142 76% 39%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 142 73% 42%;
     
     --radius: 0.5rem;
     
     /* Custom Brand Colors */
-    --brand-green: 142 100% 39%;
+    --brand-green: 142 73% 42%;
     --brand-orange: 15 82% 56%;
-    --brand-navy: 210 20% 6%;
-    --brand-charcoal: 210 16% 11%;
-    --brand-surface: 210 14% 15%;
-    --brand-text: 210 6% 95%;
-    --brand-muted: 210 4% 65%;
+    --brand-gray: 0 0% 90%;
+    --brand-surface: 0 0% 98%;
+    --brand-text: 0 0% 10%;
+    --brand-muted: 0 0% 40%;
   }
 }
 
