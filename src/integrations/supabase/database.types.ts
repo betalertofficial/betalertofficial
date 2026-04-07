@@ -1,4 +1,4 @@
- 
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 export type Json =
   | string
   | number
@@ -38,31 +38,58 @@ export type Database = {
       }
       alerts: {
         Row: {
+          away_score: number | null
+          away_team: string | null
+          clock: string | null
           created_at: string | null
           delivery_status: string | null
+          game_detail: string | null
+          game_status: string | null
+          home_score: number | null
+          home_team: string | null
           id: string
           message: string
+          period: number | null
           profile_id: string | null
+          score_summary: string | null
           sent_at: string | null
           trigger_match_id: string | null
           webhook_response: Json | null
         }
         Insert: {
+          away_score?: number | null
+          away_team?: string | null
+          clock?: string | null
           created_at?: string | null
           delivery_status?: string | null
+          game_detail?: string | null
+          game_status?: string | null
+          home_score?: number | null
+          home_team?: string | null
           id?: string
           message: string
+          period?: number | null
           profile_id?: string | null
+          score_summary?: string | null
           sent_at?: string | null
           trigger_match_id?: string | null
           webhook_response?: Json | null
         }
         Update: {
+          away_score?: number | null
+          away_team?: string | null
+          clock?: string | null
           created_at?: string | null
           delivery_status?: string | null
+          game_detail?: string | null
+          game_status?: string | null
+          home_score?: number | null
+          home_team?: string | null
           id?: string
           message?: string
+          period?: number | null
           profile_id?: string | null
+          score_summary?: string | null
           sent_at?: string | null
           trigger_match_id?: string | null
           webhook_response?: Json | null
