@@ -146,8 +146,8 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
         bookmaker: odds.bookmaker,
         eventDetails: `${odds.team_or_player} ${odds.bet_type}`,
         sport: trigger.sport,
-        teamOrPlayer: trigger.team_or_player,
-        betType: trigger.bet_type,
+        teamOrPlayer: odds.team_or_player,  // Use actual odds team name
+        betType: odds.bet_type,              // Use actual odds bet type
       });
 
       console.log(`[MatchingEngine] ✅ MATCH FOUND for trigger ${trigger.id}: ${odds.bookmaker} @ ${odds.odds_value}`);
