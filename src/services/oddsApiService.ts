@@ -1,6 +1,6 @@
 const BASE_URL = "https://api.the-odds-api.com/v4";
 const BOOKMAKERS = ["fanduel", "draftkings"];
-const DEFAULT_API_KEY = "39012db31f4c088f772e5eaf34a3ce8e";
+const DEFAULT_API_KEY = "1c4cf509a237efe8afb4342c676c999f";
 
 export interface OddsApiEvent {
   id: string;
