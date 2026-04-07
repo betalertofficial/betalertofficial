@@ -250,9 +250,7 @@ async function storeTriggerMatches(
       .from("trigger_matches")
       .insert({
         trigger_id: match.triggerId,
-        odds_value: match.oddsValue,
-        bookmaker: match.bookmaker,
-        event_details: match.eventDetails,
+        matched_value: match.oddsValue,
         odds_snapshot_id: snapshotId,
         matched_at: new Date().toISOString(),
       })
