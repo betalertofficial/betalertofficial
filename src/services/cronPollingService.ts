@@ -392,6 +392,8 @@ async function sendWebhookAlerts(
       // Fetch live score from ESPN if we have odds snapshot data
       let espnScore = null;
       if (matchData?.odds_snapshot_id) {
+        console.log(`[CronPolling] DEBUG - Match data:`, matchData);
+        
         // Get the odds snapshot to extract event data
         const { data: snapshotData } = await supabase
           .from("odds_snapshots")
@@ -399,22 +401,36 @@ async function sendWebhookAlerts(
           .eq("id", matchData.odds_snapshot_id)
           .single();
 
+        console.log(`[CronPolling] DEBUG - Snapshot data:`, snapshotData);
+
         if (snapshotData?.event_data) {
           const eventData = snapshotData.event_data as any;
+          console.log(`[CronPolling] DEBUG - Event data from snapshot:`, eventData);
+          
           const homeTeam = eventData.home_team;
           const awayTeam = eventData.away_team;
+
+          console.log(`[CronPolling] DEBUG - Extracted teams: home="${homeTeam}", away="${awayTeam}"`);
 
           if (homeTeam && awayTeam) {
             console.log(`[CronPolling] Fetching ESPN score for ${awayTeam} @ ${homeTeam}...`);
             espnScore = await espnService.findGameScore(homeTeam, awayTeam);
+            
+            console.log(`[CronPolling] DEBUG - ESPN score result:`, espnScore);
             
             if (espnScore.found) {
               console.log(`[CronPolling] ✅ ESPN score found: ${espnService.formatScore(espnScore)}`);
             } else {
               console.log(`[CronPolling] ⚠️ No ESPN score found for this game`);
             }
+          } else {
+            console.log(`[CronPolling] ⚠️ Missing home or away team in event_data`);
           }
+        } else {
+          console.log(`[CronPolling] ⚠️ No event_data in snapshot`);
         }
+      } else {
+        console.log(`[CronPolling] ⚠️ No odds_snapshot_id in match data`);
       }
 
       // Build query parameters for GET request (Zapier-friendly approach)
@@ -442,6 +458,7 @@ async function sendWebhookAlerts(
 
       // Add ESPN score data if available
       if (espnScore?.found) {
+        console.log(`[CronPolling] ✅ Adding ESPN score to webhook payload`);
         params.append("game_status", espnScore.state || "");
         params.append("game_detail", espnScore.detail || "");
         params.append("home_team", espnScore.homeTeam || "");
@@ -451,10 +468,13 @@ async function sendWebhookAlerts(
         params.append("period", String(espnScore.period || 0));
         params.append("clock", espnScore.clock || "");
         params.append("score_summary", espnService.formatScore(espnScore));
+      } else {
+        console.log(`[CronPolling] ⚠️ No ESPN score to add to webhook (espnScore.found = ${espnScore?.found})`);
       }
 
       const fullUrl = `${webhookUrl}?${params.toString()}`;
       console.log(`[CronPolling] Sending GET webhook for alert ${alert.alert_id} to ${webhookUrl.substring(0, 50)}...`);
+      console.log(`[CronPolling] DEBUG - Full webhook URL params:`, params.toString());
 
       // Use GET request with query parameters (avoids CORS preflight and SSL issues)
       const response = await fetch(fullUrl, {
