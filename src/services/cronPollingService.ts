@@ -4,6 +4,7 @@
 
 import { SupabaseClient } from "@supabase/supabase-js";
 import { findMatches, deduplicateMatches, formatAlertMessage, type Match } from "./matchingEngine";
+import { espnService } from "@/services/espnService";
 
 interface OddsSnapshot {
   sport: string;
@@ -363,7 +364,7 @@ async function sendWebhookAlerts(
       // Fetch additional details for the webhook payload
       const { data: triggerData } = await supabase
         .from("triggers")
-        .select("sport, team_or_player, bet_type, odds_comparator, odds_value")
+        .select("sport, team_or_player, bet_type, odds_comparator, odds_value, home_team, away_team")
         .eq("id", alert.trigger_id)
         .single();
 
@@ -374,6 +375,22 @@ async function sendWebhookAlerts(
         .order("matched_at", { ascending: false })
         .limit(1)
         .single();
+
+      // Fetch live score from ESPN if we have team data
+      let espnScore = null;
+      if (triggerData?.home_team && triggerData?.away_team) {
+        console.log(`[CronPolling] Fetching ESPN score for ${triggerData.away_team} @ ${triggerData.home_team}...`);
+        espnScore = await espnService.findGameScore(
+          triggerData.home_team,
+          triggerData.away_team
+        );
+        
+        if (espnScore.found) {
+          console.log(`[CronPolling] ✅ ESPN score found: ${espnService.formatScore(espnScore)}`);
+        } else {
+          console.log(`[CronPolling] ⚠️ No ESPN score found for this game`);
+        }
+      }
 
       // Build query parameters for GET request (Zapier-friendly approach)
       const params = new URLSearchParams();
@@ -396,6 +413,19 @@ async function sendWebhookAlerts(
       
       if (matchData) {
         params.append("matched_odds", String(matchData.matched_value || ""));
+      }
+
+      // Add ESPN score data if available
+      if (espnScore?.found) {
+        params.append("game_status", espnScore.state || "");
+        params.append("game_detail", espnScore.detail || "");
+        params.append("home_team", espnScore.homeTeam || "");
+        params.append("away_team", espnScore.awayTeam || "");
+        params.append("home_score", String(espnScore.homeScore || 0));
+        params.append("away_score", String(espnScore.awayScore || 0));
+        params.append("period", String(espnScore.period || 0));
+        params.append("clock", espnScore.clock || "");
+        params.append("score_summary", espnService.formatScore(espnScore));
       }
 
       const fullUrl = `${webhookUrl}?${params.toString()}`;
