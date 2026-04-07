@@ -308,7 +308,72 @@ async function createAlerts(
     }
 
     for (const owner of owners) {
-      const message = formatAlertMessage(match);
+      // Fetch ESPN score for this match
+      let scoreSummary = "";
+      let espnScore = null;
+      try {
+        // Get the odds snapshot to extract event data
+        const { data: matchData } = await supabase
+          .from("trigger_matches")
+          .select("odds_snapshot_id")
+          .eq("id", stored.match_id)
+          .single();
+
+        if (matchData?.odds_snapshot_id) {
+          const { data: snapshotData } = await supabase
+            .from("odds_snapshots")
+            .select("event_data")
+            .eq("id", matchData.odds_snapshot_id)
+            .single();
+
+          if (snapshotData?.event_data) {
+            const eventData = snapshotData.event_data as any;
+            const homeTeam = eventData.home_team;
+            const awayTeam = eventData.away_team;
+
+            if (homeTeam && awayTeam) {
+              console.log(`[CronPolling] Fetching ESPN score for alert message: ${awayTeam} @ ${homeTeam}`);
+              espnScore = await espnService.findGameScore(homeTeam, awayTeam);
+
+              if (espnScore.found) {
+                scoreSummary = `\n📊 ${espnService.formatScore(espnScore)}`;
+                console.log(`[CronPolling] ✅ Added score to alert message: ${scoreSummary.trim()}`);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`[CronPolling] Error fetching ESPN score for alert:`, error);
+        // Continue without score - don't block alert creation
+      }
+
+      // Build formatted message with score summary
+      const message = `🚨 ${match.teamOrPlayer} ${match.betType} hit ${
+        match.oddsComparator
+      } ${match.oddsValue > 0 ? "+" : ""}${match.oddsValue} on ${match.bookmaker}! Current: ${
+        match.oddsValue > 0 ? "+" : ""
+      }${match.oddsValue}${scoreSummary}`;
+
+      // Build alert data with ESPN fields
+      const alertData: any = {
+        trigger_id: stored.trigger_id,
+        match_id: stored.match_id,
+        message,
+        delivery_status: "pending",
+      };
+
+      // Add ESPN score fields if available
+      if (espnScore?.found) {
+        alertData.game_status = espnScore.state;
+        alertData.game_detail = espnScore.detail;
+        alertData.home_team = espnScore.homeTeam;
+        alertData.away_team = espnScore.awayTeam;
+        alertData.home_score = espnScore.homeScore;
+        alertData.away_score = espnScore.awayScore;
+        alertData.period = espnScore.period;
+        alertData.clock = espnScore.clock;
+        alertData.score_summary = espnService.formatScore(espnScore);
+      }
 
       // Fetch profile phone number
       const { data: profile } = await supabase
@@ -320,29 +385,24 @@ async function createAlerts(
       const phoneNumber = profile?.phone || "";
       console.log(`[CronPolling] Profile ${owner.profile_id} phone: ${phoneNumber || '(none)'}`);
 
-      const { data, error } = await supabase
+      const { data: alertResult, error: alertError } = await supabase
         .from("alerts")
-        .insert({
-          trigger_match_id: stored.match_id,
-          profile_id: owner.profile_id,
-          message,
-          delivery_status: "pending",
-        })
+        .insert(alertData)
         .select("id");
 
-      if (error) {
-        console.error(`[CronPolling] Error creating alert:`, error);
+      if (alertError) {
+        console.error(`[CronPolling] Error creating alert:`, alertError);
         continue;
       }
 
-      if (data && data.length > 0) {
+      if (alertResult && alertResult.length > 0) {
         alerts.push({
-          alert_id: data[0].id,
+          alert_id: alertResult[0].id,
           profile_id: owner.profile_id,
           trigger_id: stored.trigger_id,
           phone_number: phoneNumber,
         });
-        console.log(`[CronPolling] ✅ Created alert ${data[0].id} for profile ${owner.profile_id}`);
+        console.log(`[CronPolling] ✅ Created alert ${alertResult[0].id} for profile ${owner.profile_id}`);
       } else {
         console.log(`[CronPolling] ⚠️ Alert insert returned no data for profile ${owner.profile_id}`);
       }
