@@ -265,7 +265,6 @@ export default function AdminPage() {
         variant: result.matches_found > 0 ? "default" : "default",
       });
       
-      await loadAdminData();
     } catch (error: any) {
       console.error("Error running manual poll:", error);
       
@@ -287,6 +286,11 @@ export default function AdminPage() {
     } finally {
       console.log("Resetting manual poll loading state");
       setIsManualPolling(false);
+      
+      // Reload admin data in the background (don't block the finally)
+      loadAdminData().catch((error) => {
+        console.error("Error reloading admin data:", error);
+      });
     }
   };
 
