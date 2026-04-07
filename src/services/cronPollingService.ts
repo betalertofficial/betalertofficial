@@ -222,7 +222,7 @@ async function storeTriggerMatches(
 
   for (const match of matches) {
     console.log(`[CronPolling] Processing match for trigger ${match.triggerId}...`);
-    
+
     // Find matching odds snapshot
     const matchingSnapshot = oddsSnapshots.find(
       (s) =>
@@ -233,8 +233,27 @@ async function storeTriggerMatches(
 
     console.log(`[CronPolling] DEBUG - Snapshot lookup:`, {
       searching_for: { team: match.teamOrPlayer, bookmaker: match.bookmaker, betType: match.betType },
-      found: matchingSnapshot?.id || null
+      found: matchingSnapshot?.id || null,
+      total_snapshots: oddsSnapshots.length
     });
+
+    if (!matchingSnapshot) {
+      console.log(`[CronPolling] ⚠️ WARNING: No matching snapshot found!`);
+      console.log(`[CronPolling] DEBUG - Sample snapshots:`, oddsSnapshots.slice(0, 3).map(s => ({
+        id: s.id,
+        team: s.team_or_player,
+        bookmaker: s.bookmaker,
+        bet_type: s.bet_type
+      })));
+    } else {
+      console.log(`[CronPolling] ✅ Found matching snapshot:`, {
+        id: matchingSnapshot.id,
+        team: matchingSnapshot.team_or_player,
+        bookmaker: matchingSnapshot.bookmaker,
+        bet_type: matchingSnapshot.bet_type,
+        has_event_data: !!matchingSnapshot.event_data
+      });
+    }
 
     const snapshotId = matchingSnapshot?.id || null;
 
@@ -249,7 +268,7 @@ async function storeTriggerMatches(
       })
       .select("id");
 
-    console.log(`[CronPolling] DEBUG - Insert result for trigger ${match.triggerId}:`, { data, error });
+    console.log(`[CronPolling] DEBUG - Insert result for trigger ${match.triggerId}:`, { data, error, snapshotId });
 
     if (error) {
       console.error(`[CronPolling] Error storing match for trigger ${match.triggerId}:`, error);
@@ -258,7 +277,7 @@ async function storeTriggerMatches(
 
     if (data && data.length > 0) {
       storedMatches.push({ match_id: data[0].id, trigger_id: match.triggerId });
-      console.log(`[CronPolling] ✅ Stored match ${data[0].id} for trigger ${match.triggerId}`);
+      console.log(`[CronPolling] ✅ Stored match ${data[0].id} for trigger ${match.triggerId} with snapshot ${snapshotId}`);
     }
   }
 
