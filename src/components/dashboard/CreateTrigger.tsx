@@ -352,7 +352,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-[#1B2229] border-border">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-background border-border">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-foreground">Create Trigger</DialogTitle>
           </DialogHeader>
@@ -379,12 +379,12 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
             )}
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-muted-foreground">Subject Type</Label>
+              <Label className="text-sm font-medium text-foreground">Subject Type</Label>
               <div className="grid grid-cols-2 gap-3">
                 <Button
                   type="button"
                   variant={subjectType === "team" ? "default" : "outline"}
-                  className={subjectType === "team" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                  className={subjectType === "team" ? "btn-primary" : "bg-card hover:bg-muted"}
                   onClick={() => setSubjectType("team")}
                 >
                   Team
@@ -392,7 +392,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                 <Button
                   type="button"
                   variant={subjectType === "player" ? "default" : "outline"}
-                  className={subjectType === "player" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                  className={subjectType === "player" ? "btn-primary" : "bg-card hover:bg-muted"}
                   onClick={() => setSubjectType("player")}
                   disabled
                 >
@@ -402,7 +402,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-300">League</Label>
+              <Label className="text-sm font-medium text-foreground">League</Label>
               <Select value={selectedSport} onValueChange={(v) => {
                 setSelectedSport(v);
                 const sport = sports.find(s => s.key === v);
@@ -410,11 +410,11 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                 setSelectedTeam("");
                 setSearchQuery("");
               }}>
-                <SelectTrigger className="w-full bg-gray-800 border-gray-700 text-white">
+                <SelectTrigger className="w-full bg-card border-border text-foreground">
                   <SelectValue placeholder="Select league" />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-800 border-gray-700">
-                  <SelectItem value="basketball_nba" className="text-white hover:bg-gray-700">
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="basketball_nba" className="text-foreground hover:bg-muted">
                     NBA
                   </SelectItem>
                 </SelectContent>
@@ -422,12 +422,12 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-muted-foreground">Sportsbook</Label>
+              <Label className="text-sm font-medium text-foreground">Sportsbook</Label>
               <div className="grid grid-cols-2 gap-3">
                 <Button
                   type="button"
                   variant={sportsbook === "fanduel" ? "default" : "outline"}
-                  className={sportsbook === "fanduel" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                  className={sportsbook === "fanduel" ? "btn-primary" : "bg-card hover:bg-muted"}
                   onClick={() => setSportsbook("fanduel")}
                 >
                   FanDuel
@@ -435,7 +435,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                 <Button
                   type="button"
                   variant={sportsbook === "draftkings" ? "default" : "outline"}
-                  className={sportsbook === "draftkings" ? "btn-primary" : "bg-[#242B33] hover:bg-[#2A3139]"}
+                  className={sportsbook === "draftkings" ? "btn-primary" : "bg-card hover:bg-muted"}
                   onClick={() => setSportsbook("draftkings")}
                 >
                   DraftKings
@@ -444,7 +444,7 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-300">Team</Label>
+              <Label className="text-sm font-medium text-foreground">Team</Label>
               <div className="relative">
                 <input
                   type="text"
@@ -452,37 +452,37 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   disabled={loading || !selectedSport}
-                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="w-full px-4 py-2 bg-card border border-border rounded-md text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
                 />
                 {searchQuery && filteredTeams.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
+                  <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-md shadow-lg max-h-60 overflow-auto">
                     {filteredTeams.map((team) => (
                       <button
                         key={team.id}
                         type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-gray-700 rounded-md transition-colors"
+                        className="w-full text-left px-3 py-2 hover:bg-muted rounded-md transition-colors"
                         onClick={() => {
                           setSelectedTeam(team.name);
                           setSelectedTeamId(team.id);
                           setSearchQuery("");
                         }}
                       >
-                        <div className="font-medium">{team.name}</div>
-                        <div className="text-sm text-gray-400">{team.abbrev}</div>
+                        <div className="font-medium text-foreground">{team.name}</div>
+                        <div className="text-sm text-muted-foreground">{team.abbrev}</div>
                       </button>
                     ))}
                   </div>
                 )}
               </div>
               {selectedTeam && (
-                <div className="text-sm text-gray-400">
-                  Selected: <span className="text-white font-medium">{selectedTeam}</span>
+                <div className="text-sm text-muted-foreground">
+                  Selected: <span className="text-foreground font-medium">{selectedTeam}</span>
                 </div>
               )}
             </div>
 
             {selectedEvent && teamOdds && (
-              <div className="bg-[#242B33] border border-border rounded-lg p-4 space-y-4">
+              <div className="bg-card border border-border rounded-lg p-4 space-y-4">
                 <div className="flex items-center gap-2 mb-3">
                   <TrendingUp className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-foreground">Current Market Context</h3>
@@ -503,11 +503,11 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                     <p className="text-sm text-muted-foreground">
                       Live moneyline odds for {selectedTeam} on {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}:
                     </p>
-                    <div className="bg-[#1B2229] rounded-lg p-3">
-                      <Badge className="bg-[#2A3139] text-foreground mb-2">
+                    <div className="bg-muted rounded-lg p-3">
+                      <Badge className="bg-secondary text-secondary-foreground mb-2">
                         {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}: {formatOdds(teamOdds.moneyline)}
                       </Badge>
-                      <p className="text-sm">
+                      <p className="text-sm text-foreground">
                         Current {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} odds:{" "}
                         <span className="text-primary font-bold">{formatOdds(teamOdds.moneyline)}</span>
                       </p>
@@ -520,11 +520,11 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                     <p className="text-sm text-muted-foreground">
                       Live spread odds for {selectedTeam} on {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}:
                     </p>
-                    <div className="bg-[#1B2229] rounded-lg p-3">
-                      <Badge className="bg-[#2A3139] text-foreground mb-2">
+                    <div className="bg-muted rounded-lg p-3">
+                      <Badge className="bg-secondary text-secondary-foreground mb-2">
                         {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}: {formatOdds(teamOdds.spread.point)} ({formatOdds(teamOdds.spread.odds)})
                       </Badge>
-                      <p className="text-sm">
+                      <p className="text-sm text-foreground">
                         Current {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} odds:{" "}
                         <span className="text-primary font-bold">{formatOdds(teamOdds.spread.point)}</span>
                       </p>
@@ -535,9 +535,9 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
             )}
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-muted-foreground">Bet Type</Label>
+              <Label className="text-sm font-medium text-foreground">Bet Type</Label>
               <Select value={betType} onValueChange={(v) => setBetType(v as BetType)}>
-                <SelectTrigger className="bg-[#242B33] border-border">
+                <SelectTrigger className="bg-card border-border">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -548,10 +548,10 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-muted-foreground">Odds Threshold</Label>
+              <Label className="text-sm font-medium text-foreground">Odds Threshold</Label>
               <div className="grid grid-cols-7 gap-3">
                 <Select value={oddsSign} onValueChange={(v) => setOddsSign(v as "+" | "-")}>
-                  <SelectTrigger className="col-span-1 bg-[#242B33] border-border">
+                  <SelectTrigger className="col-span-1 bg-card border-border">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -564,10 +564,10 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
                   placeholder="200"
                   value={oddsValue}
                   onChange={(e) => setOddsValue(e.target.value)}
-                  className="col-span-3 bg-[#242B33] border-border"
+                  className="col-span-3 bg-card border-border"
                 />
                 <Select value={oddsDirection} onValueChange={(v) => setOddsDirection(v as "higher" | "lower")}>
-                  <SelectTrigger className="col-span-3 bg-[#242B33] border-border">
+                  <SelectTrigger className="col-span-3 bg-card border-border">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -579,9 +579,9 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-muted-foreground">Game Time Context</Label>
+              <Label className="text-sm font-medium text-foreground">Game Time Context</Label>
               <Select value={gameTimeContext} onValueChange={setGameTimeContext}>
-                <SelectTrigger className="bg-[#242B33] border-border">
+                <SelectTrigger className="bg-card border-border">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -595,8 +595,8 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-muted-foreground">Notification Frequency</Label>
-              <div className="bg-[#242B33] border border-border rounded-lg p-4">
+              <Label className="text-sm font-medium text-foreground">Notification Frequency</Label>
+              <div className="bg-card border border-border rounded-lg p-4">
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <p className="font-semibold text-foreground">Once</p>
