@@ -271,36 +271,66 @@ async function createAlerts(
 
   const alertsData: { alert_id: string; profile_id: string; phone_number: string }[] = [];
 
-  // Fetch all triggers and profiles in one query
+  // Fetch all triggers through profile_triggers junction table
   const triggerIds = [...new Set(storedMatches.map((m) => m.trigger_id))];
   console.log(`[CronPolling] DEBUG - triggerIds to fetch:`, triggerIds);
 
-  const { data: triggers, error: triggersError } = await supabase
-    .from("triggers")
-    .select("id, user_id, sport, team_or_player, bet_type, odds_comparator, odds_value, bookmaker")
-    .in("id", triggerIds);
+  // Join through profile_triggers to get the profile_id for each trigger
+  const { data: profileTriggers, error: profileTriggersError } = await supabase
+    .from("profile_triggers")
+    .select(`
+      profile_id,
+      trigger_id,
+      triggers!inner (
+        id,
+        sport,
+        team_or_player,
+        bet_type,
+        odds_comparator,
+        odds_value,
+        bookmaker
+      )
+    `)
+    .in("trigger_id", triggerIds);
 
-  console.log(`[CronPolling] DEBUG - Triggers query result:`, { error: triggersError, count: triggers?.length, triggers: triggers });
-  if (triggers) {
-    console.log(`[CronPolling] DEBUG - Fetched trigger IDs:`, triggers.map(t => t.id));
+  console.log(`[CronPolling] DEBUG - ProfileTriggers query result:`, { 
+    error: profileTriggersError, 
+    count: profileTriggers?.length 
+  });
+
+  if (!profileTriggers || profileTriggers.length === 0) {
+    console.log(`[CronPolling] No profile_triggers found for these trigger IDs`);
+    return alertsData;
   }
 
-  const userIds = [...new Set(triggers?.map((t) => t.user_id) || [])];
+  // Extract unique profile IDs
+  const profileIds = [...new Set(profileTriggers.map((pt) => pt.profile_id))];
 
+  // Fetch phone numbers for all profiles
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("id, phone")
-    .in("id", userIds);
+    .select("id, phone_e164")
+    .in("id", profileIds);
 
-  const profileMap = new Map(profiles?.map((p) => [p.id, p.phone]) || []);
+  const profileMap = new Map(profiles?.map((p) => [p.id, p.phone_e164]) || []);
   console.log(`[CronPolling] DEBUG - profileMap size:`, profileMap.size);
 
   for (const storedMatch of storedMatches) {
     console.log(`[CronPolling] DEBUG - Processing storedMatch:`, storedMatch);
     
-    const trigger = triggers?.find((t) => t.id === storedMatch.trigger_id);
-    console.log(`[CronPolling] DEBUG - Found trigger:`, trigger ? `Yes (${trigger.id})` : 'No');
-    
+    // Find the profile_trigger record for this trigger
+    const profileTrigger = profileTriggers.find((pt) => pt.trigger_id === storedMatch.trigger_id);
+    console.log(`[CronPolling] DEBUG - Found profileTrigger:`, profileTrigger ? 'Yes' : 'No');
+
+    if (!profileTrigger) {
+      console.log(`[CronPolling] Skipping alert: no profile_trigger found for trigger ${storedMatch.trigger_id}`);
+      continue;
+    }
+
+    const trigger = Array.isArray(profileTrigger.triggers) 
+      ? profileTrigger.triggers[0] 
+      : profileTrigger.triggers;
+
     const match = matchMap.get(storedMatch.trigger_id);
     console.log(`[CronPolling] DEBUG - Found match in matchMap:`, match ? 'Yes' : 'No');
 
@@ -309,9 +339,9 @@ async function createAlerts(
       continue;
     }
 
-    const phoneNumber = profileMap.get(trigger.user_id);
+    const phoneNumber = profileMap.get(profileTrigger.profile_id);
     if (!phoneNumber) {
-      console.log(`[CronPolling] Skipping alert: no phone number for user ${trigger.user_id}`);
+      console.log(`[CronPolling] Skipping alert: no phone number for profile ${profileTrigger.profile_id}`);
       continue;
     }
 
@@ -364,7 +394,7 @@ async function createAlerts(
     // Build alert data with ESPN fields
     const alertData: any = {
       trigger_match_id: storedMatch.match_id,
-      profile_id: trigger.user_id,
+      profile_id: profileTrigger.profile_id,
       message,
       delivery_status: "pending",
     };
@@ -395,7 +425,7 @@ async function createAlerts(
     if (data && data.length > 0) {
       alertsData.push({
         alert_id: data[0].id,
-        profile_id: trigger.user_id,
+        profile_id: profileTrigger.profile_id,
         phone_number: phoneNumber,
       });
       console.log(`[CronPolling] ✅ Created alert ${data[0].id} with ESPN score data`);
