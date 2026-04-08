@@ -15,6 +15,8 @@ import { PhoneAuth } from "@/components/auth/PhoneAuth";
 import type { BetType, TriggerFrequency } from "@/types/database";
 
 export interface CreateTriggerProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onBack?: () => void;
   onSuccess?: () => void;
 }
@@ -75,7 +77,7 @@ const SPORT_DISPLAY_NAMES: Record<string, string> = {
   "baseball_mlb": "MLB"
 };
 
-export function CreateTrigger({ onBack, onSuccess }: CreateTriggerProps) {
+export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateTriggerProps) {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
