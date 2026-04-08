@@ -54,27 +54,9 @@ async function fetchActiveTriggers(supabase: SupabaseClient) {
     throw new Error(`Failed to fetch triggers: ${triggersError.message}`);
   }
 
-  // Fetch profile associations
-  const { data: profileTriggers, error: profileTriggersError } = await supabase
-    .from("profile_triggers")
-    .select("profile_id, trigger_id");
+  console.log(`[CronPolling] Found ${triggers?.length || 0} active triggers`);
 
-  console.log("[CronPolling] DEBUG - Profile triggers query result:");
-  console.log("[CronPolling] DEBUG - Error:", profileTriggersError);
-  console.log("[CronPolling] DEBUG - Data:", profileTriggers);
-  console.log("[CronPolling] DEBUG - Data length:", profileTriggers?.length || 0);
-
-  if (profileTriggersError) {
-    console.error("[CronPolling] Error fetching profile_triggers:", profileTriggersError);
-    throw new Error(`Failed to fetch profile triggers: ${profileTriggersError.message}`);
-  }
-
-  console.log(`[CronPolling] Found ${triggers?.length || 0} active triggers, ${profileTriggers?.length || 0} profile associations`);
-
-  return {
-    triggers: triggers || [],
-    profileTriggers: profileTriggers || [],
-  };
+  return triggers || [];
 }
 
 /**
@@ -288,6 +270,30 @@ async function createAlerts(
   console.log(`[CronPolling] DEBUG - matchMap keys:`, Array.from(matchMap.keys()));
 
   const alertsData: { alert_id: string; profile_id: string; phone_number: string }[] = [];
+
+  // Fetch all triggers and profiles in one query
+  const triggerIds = [...new Set(storedMatches.map((m) => m.trigger_id))];
+  console.log(`[CronPolling] DEBUG - triggerIds to fetch:`, triggerIds);
+
+  const { data: triggers, error: triggersError } = await supabase
+    .from("triggers")
+    .select("id, user_id, sport, team_or_player, bet_type, odds_comparator, odds_value, bookmaker")
+    .in("id", triggerIds);
+
+  console.log(`[CronPolling] DEBUG - Triggers query result:`, { error: triggersError, count: triggers?.length, triggers: triggers });
+  if (triggers) {
+    console.log(`[CronPolling] DEBUG - Fetched trigger IDs:`, triggers.map(t => t.id));
+  }
+
+  const userIds = [...new Set(triggers?.map((t) => t.user_id) || [])];
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, phone")
+    .in("id", userIds);
+
+  const profileMap = new Map(profiles?.map((p) => [p.id, p.phone]) || []);
+  console.log(`[CronPolling] DEBUG - profileMap size:`, profileMap.size);
 
   for (const storedMatch of storedMatches) {
     console.log(`[CronPolling] DEBUG - Processing storedMatch:`, storedMatch);
@@ -707,7 +713,7 @@ export async function runCronPoll(
     runId = await createEvaluationRun(supabase);
 
     // Fetch active triggers
-    const { triggers, profileTriggers } = await fetchActiveTriggers(supabase);
+    const triggers = await fetchActiveTriggers(supabase);
 
     if (triggers.length === 0) {
       await completeEvaluationRun(supabase, runId, {
@@ -762,7 +768,7 @@ export async function runCronPoll(
     const alerts = await createAlerts(supabase, storedMatches, matchMap);
 
     // Send webhooks
-    const webhooksSent = await sendWebhookAlerts(supabase, alerts, webhookUrl, options.dryRun);
+    const webhooksSent = await sendWebhookAlerts(supabase, alerts, webhookUrl, options.dryRun || false);
 
     // Update 'once' triggers
     await updateMatchedTriggers(
