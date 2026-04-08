@@ -107,8 +107,21 @@
   }
 }
 
+@keyframes pulseFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
 .animate-slide-in {
   animation: slideIn 0.3s ease-out;
+}
+
+.animate-pulse-float {
+  animation: pulseFloat 2s ease-in-out infinite;
 }
 
 /* Custom scrollbar */
