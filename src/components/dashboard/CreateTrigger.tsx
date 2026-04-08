@@ -596,15 +596,35 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
 
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">Notification Frequency</Label>
-              <div className="bg-card border border-border rounded-lg p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-semibold text-foreground">Once</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      You'll be notified the first time the odds threshold is met
-                    </p>
-                  </div>
-                </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  className={`flex flex-col items-start p-4 rounded-lg border-2 transition-all ${
+                    frequency === "once"
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-card hover:bg-muted"
+                  }`}
+                  onClick={() => setFrequency("once")}
+                >
+                  <p className="font-semibold text-foreground mb-1">One Time</p>
+                  <p className="text-sm text-muted-foreground text-left">
+                    Get notified once when the threshold is met
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  className={`flex flex-col items-start p-4 rounded-lg border-2 transition-all ${
+                    frequency === "recurring"
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-card hover:bg-muted"
+                  }`}
+                  onClick={() => setFrequency("recurring")}
+                >
+                  <p className="font-semibold text-foreground mb-1">Once Per Game</p>
+                  <p className="text-sm text-muted-foreground text-left">
+                    Get notified each game the threshold is met
+                  </p>
+                </button>
               </div>
             </div>
 
