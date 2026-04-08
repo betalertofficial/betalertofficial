@@ -49,9 +49,6 @@ export default function LandingPage() {
               <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-8 py-6 text-lg">
                 Create My Alert
               </Button>
-              <Button variant="outline" className="rounded-full px-8 py-6 text-lg">
-                How it Works
-              </Button>
             </div>
           </div>
 
@@ -111,8 +108,8 @@ export default function LandingPage() {
               </div>
             </Card>
 
-            {/* SMS Notification Mockup */}
-            <div className="absolute -bottom-8 -right-8 bg-gray-900 text-white rounded-2xl p-4 shadow-2xl max-w-xs">
+            {/* SMS Notification Mockup with Pulse Animation */}
+            <div className="absolute -bottom-8 -right-8 bg-gray-900 text-white rounded-2xl p-4 shadow-2xl max-w-xs animate-pulse">
               <div className="flex items-start gap-3">
                 <div className="bg-green-500 rounded-lg p-2 flex-shrink-0">
                   <Bell className="h-4 w-4" />
@@ -146,7 +143,7 @@ export default function LandingPage() {
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           {/* Step 1 */}
           <div className="relative">
-            <div className="absolute -top-4 -left-4 bg-green-500 text-white rounded-full w-12 h-12 flex items-center justify-center font-bold text-xl">
+            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
               1
             </div>
             <Card className="p-8 h-full bg-gray-50 border-gray-200">
@@ -162,7 +159,7 @@ export default function LandingPage() {
 
           {/* Step 2 */}
           <div className="relative">
-            <div className="absolute -top-4 -left-4 bg-green-500 text-white rounded-full w-12 h-12 flex items-center justify-center font-bold text-xl">
+            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
               2
             </div>
             <Card className="p-8 h-full bg-gray-50 border-gray-200">
@@ -178,7 +175,7 @@ export default function LandingPage() {
 
           {/* Step 3 */}
           <div className="relative">
-            <div className="absolute -top-4 -left-4 bg-green-500 text-white rounded-full w-12 h-12 flex items-center justify-center font-bold text-xl">
+            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
               3
             </div>
             <Card className="p-8 h-full bg-gray-50 border-gray-200">
