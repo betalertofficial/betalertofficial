@@ -138,6 +138,59 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* How It Works Section */}
+      <section className="container mx-auto px-4 py-20">
+        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          {/* Step 1 */}
+          <div className="relative">
+            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-7 h-7 flex items-center justify-center font-bold text-sm">
+              1
+            </div>
+            <Card className="p-8 h-full bg-gray-50 border-gray-200">
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Set Parameters</h3>
+              <p className="text-gray-600 mb-6">
+                Set the parameters you want to watch for.
+              </p>
+              <div className="flex justify-center">
+                <Sliders className="h-16 w-16 text-gray-300" />
+              </div>
+            </Card>
+          </div>
+
+          {/* Step 2 */}
+          <div className="relative">
+            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-7 h-7 flex items-center justify-center font-bold text-sm">
+              2
+            </div>
+            <Card className="p-8 h-full bg-gray-50 border-gray-200">
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Live Monitoring</h3>
+              <p className="text-gray-600 mb-6">
+                We monitor that game or team for you and shoot you a text when it hits.
+              </p>
+              <div className="flex justify-center">
+                <Radio className="h-16 w-16 text-gray-300" />
+              </div>
+            </Card>
+          </div>
+
+          {/* Step 3 */}
+          <div className="relative">
+            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-7 h-7 flex items-center justify-center font-bold text-sm">
+              3
+            </div>
+            <Card className="p-8 h-full bg-gray-50 border-gray-200">
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Secure the Win</h3>
+              <p className="text-gray-600 mb-6">
+                Lock it in and cross your fingers.
+              </p>
+              <div className="flex justify-center">
+                <Wallet className="h-16 w-16 text-gray-300" />
+              </div>
+            </Card>
+          </div>
+        </div>
+      </section>
+
       {/* Final CTA Section */}
       <section className="container mx-auto px-4 py-20 mb-20">
         <div className="bg-gradient-to-br from-gray-100 to-gray-50 rounded-3xl p-16 text-center max-w-5xl mx-auto">
