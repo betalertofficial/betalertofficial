@@ -27,12 +27,16 @@ export default function LandingPage() {
               </nav>
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="ghost" className="text-sm">
-                Login
-              </Button>
-              <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-6">
-                Sign Up
-              </Button>
+              <Link href="/dashboard">
+                <Button variant="ghost" className="text-sm">
+                  Login
+                </Button>
+              </Link>
+              <Link href="/dashboard">
+                <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-6">
+                  Sign Up
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
@@ -49,9 +53,11 @@ export default function LandingPage() {
 
             </p>
             <div className="flex flex-wrap gap-4">
-              <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-8 py-6 text-lg">Create Free Alert
-
-              </Button>
+              <Link href="/dashboard">
+                <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-8 py-6 text-lg">
+                  Create My Alert
+                </Button>
+              </Link>
             </div>
           </div>
 
@@ -188,12 +194,14 @@ export default function LandingPage() {
       {/* Final CTA Section */}
       <section className="container mx-auto px-4 py-20 mb-20">
         <div className="bg-gradient-to-br from-gray-100 to-gray-50 rounded-3xl p-16 text-center max-w-5xl mx-auto">
-          <h2 className="text-5xl md:text-6xl font-bold text-gray-900 mb-8">Set it and forget it.
-
+          <h2 className="text-5xl md:text-6xl font-bold text-gray-900 mb-8">
+            Just Set it and forget it.
           </h2>
-          <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-10 py-7 text-xl font-semibold shadow-lg hover:shadow-xl transition-all">
-            Create Your First Trigger
-          </Button>
+          <Link href="/dashboard">
+            <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-10 py-7 text-xl font-semibold shadow-lg hover:shadow-xl transition-all">
+              Create Your First Trigger
+            </Button>
+          </Link>
         </div>
       </section>
 
