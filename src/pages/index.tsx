@@ -11,8 +11,8 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-8">
-              <Link href="/" className="text-xl font-bold tracking-tight">
-                BETALERT
+              <Link href="/" className="text-xl font-bold tracking-tight">HAMMER
+
               </Link>
               <nav className="hidden md:flex items-center gap-6">
                 <Link href="#features" className="text-sm text-gray-600 hover:text-gray-900">
@@ -39,15 +39,15 @@ export default function LandingPage() {
       <section className="container mx-auto px-4 py-20 md:py-32">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           <div>
-            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-6">
-              We watch the games when you can't.
+            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-6">We monitor the games when you can't.
+
             </h1>
-            <p className="text-lg text-gray-600 mb-8">
-              Set highly specific triggers and get an SMS the moment it hits.
+            <p className="text-lg text-gray-600 mb-8">Set highly customized alert conditions and get a text the moment it hits.
+
             </p>
             <div className="flex flex-wrap gap-4">
-              <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-8 py-6 text-lg">
-                Create My Alert
+              <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-8 py-6 text-lg">Create Free Alert
+
               </Button>
             </div>
           </div>
@@ -56,7 +56,7 @@ export default function LandingPage() {
           <div className="relative">
             <Card className="p-6 shadow-xl bg-white rounded-2xl">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="font-semibold text-lg">Create Trigger</h3>
+                <h3 className="font-semibold text-lg">Create Alert</h3>
                 <Settings className="h-5 w-5 text-gray-400" />
               </div>
 
@@ -129,11 +129,11 @@ export default function LandingPage() {
       {/* Problem Statement Section */}
       <section className="container mx-auto px-4 py-20">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6" style={{ textDecoration: "none" }}>
             Always finding yourself hammering the comeback when a favored team gives up an early lead?
           </h2>
-          <p className="text-lg text-gray-600">
-            Let us monitor those situations and shoot you a text on any game or team you want so you don't have to obsessively check your phone.
+          <p className="text-lg text-gray-600">Tell us what to look for, and we will monitor and shoot you a text on any game or team you want so you don't have to obsessively check your phone.
+
           </p>
         </div>
       </section>
@@ -161,8 +161,8 @@ export default function LandingPage() {
             </div>
             <Card className="p-8 h-full bg-gray-50 border-gray-200">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Live Monitoring</h3>
-              <p className="text-gray-600">
-                We monitor that game or team for you and shoot you a text when it hits.
+              <p className="text-gray-600">We monitor the game for you and shoot you a text when it hits.
+
               </p>
             </Card>
           </div>
@@ -185,8 +185,8 @@ export default function LandingPage() {
       {/* Final CTA Section */}
       <section className="container mx-auto px-4 py-20 mb-20">
         <div className="bg-gradient-to-br from-gray-100 to-gray-50 rounded-3xl p-16 text-center max-w-5xl mx-auto">
-          <h2 className="text-5xl md:text-6xl font-bold text-gray-900 mb-8">
-            Just Set it and forget it.
+          <h2 className="text-5xl md:text-6xl font-bold text-gray-900 mb-8">Set it and forget it.
+
           </h2>
           <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-10 py-7 text-xl font-semibold shadow-lg hover:shadow-xl transition-all">
             Create Your First Trigger
@@ -229,6 +229,6 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
-    </div>
-  );
+    </div>);
+
 }
