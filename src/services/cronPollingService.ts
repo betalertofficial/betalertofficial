@@ -311,6 +311,14 @@ async function createAlerts(
       // Fetch ESPN score for this match
       let scoreSummary = "";
       let espnScore = null;
+      
+      // Fetch trigger data for the alert message
+      const { data: triggerData } = await supabase
+        .from("triggers")
+        .select("odds_comparator, team_or_player, bet_type, sport")
+        .eq("id", stored.trigger_id)
+        .single();
+
       try {
         // Get the odds snapshot to extract event data
         const { data: matchData } = await supabase
@@ -349,7 +357,7 @@ async function createAlerts(
 
       // Build formatted message with score summary
       const message = `🚨 ${match.teamOrPlayer} ${match.betType} hit ${
-        triggerData.odds_comparator
+        triggerData?.odds_comparator || "at"
       } ${match.oddsValue > 0 ? "+" : ""}${match.oddsValue} on ${match.bookmaker}! Current: ${
         match.oddsValue > 0 ? "+" : ""
       }${match.oddsValue}${scoreSummary}`;
