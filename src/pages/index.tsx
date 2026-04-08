@@ -69,7 +69,7 @@ export default function LandingPage() {
                     Team
                   </label>
                   <div className="bg-gray-100 rounded-lg px-4 py-3 flex items-center justify-between">
-                    <span className="text-gray-900">Lakers</span>
+                    <span className="text-gray-900">Boston Celtics</span>
                     <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
@@ -100,7 +100,7 @@ export default function LandingPage() {
                     Game Context
                   </label>
                   <div className="bg-gray-100 rounded-lg px-4 py-3">
-                    <span className="text-gray-900">3rd Quarter or later</span>
+                    <span className="text-gray-900">2nd Quarter</span>
                   </div>
                 </div>
 
