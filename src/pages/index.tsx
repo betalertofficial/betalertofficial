@@ -148,12 +148,9 @@ export default function LandingPage() {
             </div>
             <Card className="p-8 h-full bg-gray-50 border-gray-200">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Set Parameters</h3>
-              <p className="text-gray-600 mb-6">
-                Set the parameters you want to watch for.
+              <p className="text-gray-600">
+                Set specific time and target odds for your favorite teams.
               </p>
-              <div className="flex justify-center">
-                <Sliders className="h-16 w-16 text-gray-300" />
-              </div>
             </Card>
           </div>
 
@@ -164,12 +161,9 @@ export default function LandingPage() {
             </div>
             <Card className="p-8 h-full bg-gray-50 border-gray-200">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Live Monitoring</h3>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600">
                 We monitor that game or team for you and shoot you a text when it hits.
               </p>
-              <div className="flex justify-center">
-                <Radio className="h-16 w-16 text-gray-300" />
-              </div>
             </Card>
           </div>
 
@@ -180,12 +174,9 @@ export default function LandingPage() {
             </div>
             <Card className="p-8 h-full bg-gray-50 border-gray-200">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Secure the Win</h3>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600">
                 Lock it in and cross your fingers.
               </p>
-              <div className="flex justify-center">
-                <Wallet className="h-16 w-16 text-gray-300" />
-              </div>
             </Card>
           </div>
         </div>
