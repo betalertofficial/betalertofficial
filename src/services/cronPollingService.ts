@@ -289,134 +289,110 @@ async function createAlerts(
 
   const alertsData: { alert_id: string; profile_id: string; phone_number: string }[] = [];
 
-  for (const stored of storedMatches) {
-    console.log(`[CronPolling] Processing stored match: ${stored.match_id} for trigger ${stored.trigger_id}`);
+  for (const storedMatch of storedMatches) {
+    console.log(`[CronPolling] DEBUG - Processing storedMatch:`, storedMatch);
     
-    const match = matchMap.get(stored.trigger_id);
-    if (!match) {
-      console.log(`[CronPolling] ⚠️ No match found in matchMap for trigger ${stored.trigger_id}`);
+    const trigger = triggers?.find((t) => t.id === storedMatch.trigger_id);
+    console.log(`[CronPolling] DEBUG - Found trigger:`, trigger ? `Yes (${trigger.id})` : 'No');
+    
+    const match = matchMap.get(storedMatch.trigger_id);
+    console.log(`[CronPolling] DEBUG - Found match in matchMap:`, match ? 'Yes' : 'No');
+
+    if (!trigger || !match) {
+      console.log(`[CronPolling] Skipping alert: no trigger or match data found (trigger: ${!!trigger}, match: ${!!match})`);
       continue;
     }
 
-    // Find profile owners of this trigger
-    const owners = profileTriggers.filter((pt) => pt.trigger_id === stored.trigger_id);
-    console.log(`[CronPolling] Found ${owners.length} profile owners for trigger ${stored.trigger_id}`);
-
-    if (owners.length === 0) {
-      console.log(`[CronPolling] ⚠️ No profile owners found for trigger ${stored.trigger_id}`);
+    const phoneNumber = profileMap.get(trigger.user_id);
+    if (!phoneNumber) {
+      console.log(`[CronPolling] Skipping alert: no phone number for user ${trigger.user_id}`);
+      continue;
     }
 
-    for (const owner of owners) {
-      // Fetch ESPN score for this match
-      let scoreSummary = "";
-      let espnScore = null;
-      
-      // Fetch trigger data for the alert message
-      const { data: triggerData } = await supabase
-        .from("triggers")
-        .select("odds_comparator, team_or_player, bet_type, sport, odds_value")
-        .eq("id", stored.trigger_id)
+    // Fetch ESPN score for this match
+    let scoreSummary = "";
+    let espnScore = null;
+    try {
+      // Get the odds snapshot to extract event data
+      const { data: matchData } = await supabase
+        .from("trigger_matches")
+        .select("odds_snapshot_id")
+        .eq("id", storedMatch.match_id)
         .single();
 
-      if (!triggerData) {
-        console.log(`[CronPolling] ⚠️ Could not fetch trigger data for trigger ${stored.trigger_id}`);
-        continue;
-      }
-
-      try {
-        // Get the odds snapshot to extract event data
-        const { data: matchData } = await supabase
-          .from("trigger_matches")
-          .select("odds_snapshot_id")
-          .eq("id", stored.match_id)
+      if (matchData?.odds_snapshot_id) {
+        const { data: snapshotData } = await supabase
+          .from("odds_snapshots")
+          .select("event_data")
+          .eq("id", matchData.odds_snapshot_id)
           .single();
 
-        if (matchData?.odds_snapshot_id) {
-          const { data: snapshotData } = await supabase
-            .from("odds_snapshots")
-            .select("event_data")
-            .eq("id", matchData.odds_snapshot_id)
-            .single();
+        if (snapshotData?.event_data) {
+          const eventData = snapshotData.event_data as any;
+          const homeTeam = eventData.home_team;
+          const awayTeam = eventData.away_team;
 
-          if (snapshotData?.event_data) {
-            const eventData = snapshotData.event_data as any;
-            const homeTeam = eventData.home_team;
-            const awayTeam = eventData.away_team;
+          if (homeTeam && awayTeam) {
+            console.log(`[CronPolling] Fetching ESPN score for alert message: ${awayTeam} @ ${homeTeam}`);
+            espnScore = await espnService.findGameScore(homeTeam, awayTeam);
 
-            if (homeTeam && awayTeam) {
-              console.log(`[CronPolling] Fetching ESPN score for alert message: ${awayTeam} @ ${homeTeam}`);
-              espnScore = await espnService.findGameScore(homeTeam, awayTeam);
-
-              if (espnScore.found) {
-                scoreSummary = `\n📊 ${espnService.formatScore(espnScore)}`;
-                console.log(`[CronPolling] ✅ Added score to alert message: ${scoreSummary.trim()}`);
-              }
+            if (espnScore.found) {
+              scoreSummary = `\n📊 ${espnService.formatScore(espnScore)}`;
+              console.log(`[CronPolling] ✅ Added score to alert message: ${scoreSummary.trim()}`);
             }
           }
         }
-      } catch (error) {
-        console.error(`[CronPolling] Error fetching ESPN score for alert:`, error);
-        // Continue without score - don't block alert creation
       }
+    } catch (error) {
+      console.error(`[CronPolling] Error fetching ESPN score for alert:`, error);
+      // Continue without score - don't block alert creation
+    }
 
-      // Build formatted message with score summary
-      const message = `🚨 ${triggerData.team_or_player} ${triggerData.bet_type} hit ${
-        triggerData.odds_comparator
-      } ${triggerData.odds_value > 0 ? "+" : ""}${triggerData.odds_value} on ${match.bookmaker}! Current: ${
-        match.oddsValue > 0 ? "+" : ""
-      }${match.oddsValue}${scoreSummary}`;
+    // Build formatted message with score summary
+    const message = `🚨 ${trigger.team_or_player} ${trigger.bet_type} hit ${
+      trigger.odds_comparator
+    } ${trigger.odds_value > 0 ? "+" : ""}${trigger.odds_value} on ${match.bookmaker}! Current: ${
+      match.oddsValue > 0 ? "+" : ""
+    }${match.oddsValue}${scoreSummary}`;
 
-      // Build alert data with ESPN fields
-      const alertData: any = {
-        trigger_match_id: stored.match_id,
-        profile_id: owner.profile_id,
-        message,
-        delivery_status: "pending",
-      };
+    // Build alert data with ESPN fields
+    const alertData: any = {
+      trigger_match_id: storedMatch.match_id,
+      profile_id: trigger.user_id,
+      message,
+      delivery_status: "pending",
+    };
 
-      // Add ESPN score fields if available
-      if (espnScore?.found) {
-        alertData.game_status = espnScore.state;
-        alertData.game_detail = espnScore.detail;
-        alertData.home_team = espnScore.homeTeam;
-        alertData.away_team = espnScore.awayTeam;
-        alertData.home_score = espnScore.homeScore;
-        alertData.away_score = espnScore.awayScore;
-        alertData.period = espnScore.period;
-        alertData.clock = espnScore.clock;
-        alertData.score_summary = espnService.formatScore(espnScore);
-      }
+    // Add ESPN score fields if available
+    if (espnScore?.found) {
+      alertData.game_status = espnScore.state;
+      alertData.game_detail = espnScore.detail;
+      alertData.home_team = espnScore.homeTeam;
+      alertData.away_team = espnScore.awayTeam;
+      alertData.home_score = espnScore.homeScore;
+      alertData.away_score = espnScore.awayScore;
+      alertData.period = espnScore.period;
+      alertData.clock = espnScore.clock;
+      alertData.score_summary = espnService.formatScore(espnScore);
+    }
 
-      // Fetch profile phone number
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("phone")
-        .eq("id", owner.profile_id)
-        .single();
+    const { data, error } = await supabase
+      .from("alerts")
+      .insert(alertData)
+      .select("id");
 
-      const phoneNumber = profile?.phone || "";
-      console.log(`[CronPolling] Profile ${owner.profile_id} phone: ${phoneNumber || '(none)'}`);
+    if (error) {
+      console.error(`[CronPolling] Error creating alert:`, error);
+      continue;
+    }
 
-      const { data: alertResult, error: alertError } = await supabase
-        .from("alerts")
-        .insert(alertData)
-        .select("id");
-
-      if (alertError) {
-        console.error(`[CronPolling] Error creating alert:`, alertError);
-        continue;
-      }
-
-      if (alertResult && alertResult.length > 0) {
-        alertsData.push({
-          alert_id: alertResult[0].id,
-          profile_id: trigger.user_id,
-          phone_number: phoneNumber,
-        });
-        console.log(`[CronPolling] ✅ Created alert ${alertResult[0].id} with ESPN score data`);
-      } else {
-        console.log(`[CronPolling] ⚠️ Alert insert returned no data for profile ${owner.profile_id}`);
-      }
+    if (data && data.length > 0) {
+      alertsData.push({
+        alert_id: data[0].id,
+        profile_id: trigger.user_id,
+        phone_number: phoneNumber,
+      });
+      console.log(`[CronPolling] ✅ Created alert ${data[0].id} with ESPN score data`);
     }
   }
 
@@ -483,10 +459,8 @@ async function sendWebhookAlerts(
       // Fetch additional details for the webhook payload
       const { data: matchData } = await supabase
         .from("trigger_matches")
-        .select("matched_value, odds_snapshot_id")
-        .eq("trigger_id", alert.trigger_id)
-        .order("matched_at", { ascending: false })
-        .limit(1)
+        .select("matched_value, odds_snapshot_id, trigger_id")
+        .eq("id", alertData.trigger_match_id)
         .single();
 
       // Fetch live score from ESPN if we have odds snapshot data
@@ -785,7 +759,7 @@ export async function runCronPoll(
     const storedMatches = await storeTriggerMatches(supabase, matches, snapshotIdMap);
 
     // Create alerts
-    const alerts = await createAlerts(supabase, storedMatches, matchMap, profileTriggers);
+    const alerts = await createAlerts(supabase, storedMatches, matchMap);
 
     // Send webhooks
     const webhooksSent = await sendWebhookAlerts(supabase, alerts, webhookUrl, options.dryRun);
