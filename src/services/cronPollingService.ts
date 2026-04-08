@@ -280,15 +280,14 @@ async function storeTriggerMatches(
 async function createAlerts(
   supabase: SupabaseClient,
   storedMatches: { match_id: string; trigger_id: string }[],
-  matchMap: Map<string, Match>,
-  profileTriggers: any[]
-) {
+  matchMap: Map<string, Match>
+): Promise<{ alert_id: string; profile_id: string; phone_number: string }[]> {
   console.log(`[CronPolling] Creating alerts for ${storedMatches.length} matches...`);
   console.log(`[CronPolling] DEBUG - storedMatches:`, storedMatches);
   console.log(`[CronPolling] DEBUG - matchMap size:`, matchMap.size);
-  console.log(`[CronPolling] DEBUG - profileTriggers:`, profileTriggers);
+  console.log(`[CronPolling] DEBUG - matchMap keys:`, Array.from(matchMap.keys()));
 
-  const alerts: { alert_id: string; profile_id: string; trigger_id: string; phone_number: string }[] = [];
+  const alertsData: { alert_id: string; profile_id: string; phone_number: string }[] = [];
 
   for (const stored of storedMatches) {
     console.log(`[CronPolling] Processing stored match: ${stored.match_id} for trigger ${stored.trigger_id}`);
@@ -369,8 +368,8 @@ async function createAlerts(
 
       // Build alert data with ESPN fields
       const alertData: any = {
-        trigger_id: stored.trigger_id,
-        match_id: stored.match_id,
+        trigger_match_id: stored.match_id,
+        profile_id: owner.profile_id,
         message,
         delivery_status: "pending",
       };
@@ -409,21 +408,20 @@ async function createAlerts(
       }
 
       if (alertResult && alertResult.length > 0) {
-        alerts.push({
+        alertsData.push({
           alert_id: alertResult[0].id,
-          profile_id: owner.profile_id,
-          trigger_id: stored.trigger_id,
+          profile_id: trigger.user_id,
           phone_number: phoneNumber,
         });
-        console.log(`[CronPolling] ✅ Created alert ${alertResult[0].id} for profile ${owner.profile_id}`);
+        console.log(`[CronPolling] ✅ Created alert ${alertResult[0].id} with ESPN score data`);
       } else {
         console.log(`[CronPolling] ⚠️ Alert insert returned no data for profile ${owner.profile_id}`);
       }
     }
   }
 
-  console.log(`[CronPolling] Created ${alerts.length} alerts`);
-  return alerts;
+  console.log(`[CronPolling] Created ${alertsData.length} alerts`);
+  return alertsData;
 }
 
 /**
@@ -431,16 +429,16 @@ async function createAlerts(
  */
 async function sendWebhookAlerts(
   supabase: SupabaseClient,
-  alerts: { alert_id: string; profile_id: string; trigger_id: string; phone_number: string }[],
+  alertsData: { alert_id: string; profile_id: string; phone_number: string }[],
   webhookUrl: string,
-  dryRun: boolean = false
+  dryRun: boolean
 ): Promise<number> {
-  console.log(`[CronPolling] Sending ${alerts.length} webhook alerts (dryRun: ${dryRun})...`);
+  console.log(`[CronPolling] Sending ${alertsData.length} webhook alerts (dryRun: ${dryRun})...`);
 
   let successCount = 0;
   let failedCount = 0;
 
-  for (const alert of alerts) {
+  for (const alert of alertsData) {
     if (dryRun) {
       console.log(`[CronPolling] [DRY RUN] Would send webhook for alert ${alert.alert_id}`);
       successCount++;
@@ -448,20 +446,41 @@ async function sendWebhookAlerts(
     }
 
     try {
-      // Fetch alert details including the message
+      // Fetch alert with trigger_match relationship
       const { data: alertData } = await supabase
         .from("alerts")
-        .select("message")
+        .select(`
+          *,
+          trigger_matches!inner (
+            trigger_id,
+            matched_value
+          )
+        `)
         .eq("id", alert.alert_id)
         .single();
 
-      // Fetch additional details for the webhook payload
+      if (!alertData || !alertData.trigger_matches) {
+        console.log(`[CronPolling] ⚠️ Could not fetch alert or trigger match data for alert ${alert.alert_id}`);
+        continue;
+      }
+
+      const triggerMatchData = Array.isArray(alertData.trigger_matches) 
+        ? alertData.trigger_matches[0] 
+        : alertData.trigger_matches;
+
+      // Fetch trigger data
       const { data: triggerData } = await supabase
         .from("triggers")
-        .select("sport, team_or_player, bet_type, odds_comparator, odds_value")
-        .eq("id", alert.trigger_id)
+        .select("odds_comparator, team_or_player, bet_type, sport, odds_value, bookmaker")
+        .eq("id", triggerMatchData.trigger_id)
         .single();
 
+      if (!triggerData) {
+        console.log(`[CronPolling] ⚠️ Could not fetch trigger data for trigger ${triggerMatchData.trigger_id}`);
+        continue;
+      }
+
+      // Fetch additional details for the webhook payload
       const { data: matchData } = await supabase
         .from("trigger_matches")
         .select("matched_value, odds_snapshot_id")
