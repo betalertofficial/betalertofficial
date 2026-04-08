@@ -109,7 +109,7 @@ export default function LandingPage() {
             </Card>
 
             {/* SMS Notification Mockup with Pulse Animation */}
-            <div className="absolute -bottom-8 -right-8 bg-gray-900 text-white rounded-2xl p-4 shadow-2xl max-w-xs animate-pulse">
+            <div className="absolute -bottom-8 -right-8 bg-gray-900 text-white rounded-2xl p-4 shadow-2xl max-w-xs animate-pulse-float">
               <div className="flex items-start gap-3">
                 <div className="bg-green-500 rounded-lg p-2 flex-shrink-0">
                   <Bell className="h-4 w-4" />
@@ -135,59 +135,6 @@ export default function LandingPage() {
           <p className="text-lg text-gray-600">
             Let us monitor those situations and shoot you a text on any game or team you want so you don't have to obsessively check your phone.
           </p>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section className="container mx-auto px-4 py-20">
-        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {/* Step 1 */}
-          <div className="relative">
-            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
-              1
-            </div>
-            <Card className="p-8 h-full bg-gray-50 border-gray-200">
-              <div className="mb-6">
-                <Sliders className="h-12 w-12 text-gray-400" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Set Parameters</h3>
-              <p className="text-gray-600">
-                Set the parameters you want to watch for.
-              </p>
-            </Card>
-          </div>
-
-          {/* Step 2 */}
-          <div className="relative">
-            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
-              2
-            </div>
-            <Card className="p-8 h-full bg-gray-50 border-gray-200">
-              <div className="mb-6">
-                <Radio className="h-12 w-12 text-gray-400" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Live Monitoring</h3>
-              <p className="text-gray-600">
-                We monitor that game or team for you and shoot you a text when it hits.
-              </p>
-            </Card>
-          </div>
-
-          {/* Step 3 */}
-          <div className="relative">
-            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
-              3
-            </div>
-            <Card className="p-8 h-full bg-gray-50 border-gray-200">
-              <div className="mb-6">
-                <Wallet className="h-12 w-12 text-gray-400" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Secure the Win</h3>
-              <p className="text-gray-600">
-                Lock it in and cross your fingers.
-              </p>
-            </Card>
-          </div>
         </div>
       </section>
 
