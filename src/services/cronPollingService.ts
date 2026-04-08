@@ -315,9 +315,14 @@ async function createAlerts(
       // Fetch trigger data for the alert message
       const { data: triggerData } = await supabase
         .from("triggers")
-        .select("odds_comparator, team_or_player, bet_type, sport")
+        .select("odds_comparator, team_or_player, bet_type, sport, odds_value")
         .eq("id", stored.trigger_id)
         .single();
+
+      if (!triggerData) {
+        console.log(`[CronPolling] ⚠️ Could not fetch trigger data for trigger ${stored.trigger_id}`);
+        continue;
+      }
 
       try {
         // Get the odds snapshot to extract event data
@@ -356,9 +361,9 @@ async function createAlerts(
       }
 
       // Build formatted message with score summary
-      const message = `🚨 ${match.teamOrPlayer} ${match.betType} hit ${
-        triggerData?.odds_comparator || "at"
-      } ${match.oddsValue > 0 ? "+" : ""}${match.oddsValue} on ${match.bookmaker}! Current: ${
+      const message = `🚨 ${triggerData.team_or_player} ${triggerData.bet_type} hit ${
+        triggerData.odds_comparator
+      } ${triggerData.odds_value > 0 ? "+" : ""}${triggerData.odds_value} on ${match.bookmaker}! Current: ${
         match.oddsValue > 0 ? "+" : ""
       }${match.oddsValue}${scoreSummary}`;
 
