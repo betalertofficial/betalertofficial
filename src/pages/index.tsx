@@ -11,8 +11,11 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-8">
-              <Link href="/" className="text-xl font-bold tracking-tight">HAMMER
-
+              <Link href="/" className="flex items-center gap-2">
+                <img src="/hammer-icon.png" alt="Hammer" className="w-8 h-8" />
+                <span className="text-xl font-bold tracking-tight" style={{ color: "#1DB954" }}>
+                  HAMMER
+                </span>
               </Link>
               <nav className="hidden md:flex items-center gap-6">
                 <Link href="#features" className="text-sm text-gray-600 hover:text-gray-900">
