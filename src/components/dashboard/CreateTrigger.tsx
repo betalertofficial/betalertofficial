@@ -14,10 +14,9 @@ import { teamsService, type Team } from "@/services/teamsService";
 import { PhoneAuth } from "@/components/auth/PhoneAuth";
 import type { BetType, TriggerFrequency } from "@/types/database";
 
-interface CreateTriggerProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+export interface CreateTriggerProps {
+  onBack?: () => void;
+  onSuccess?: () => void;
 }
 
 interface TeamOdds {
@@ -76,7 +75,7 @@ const SPORT_DISPLAY_NAMES: Record<string, string> = {
   "baseball_mlb": "MLB"
 };
 
-export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerProps) {
+export function CreateTrigger({ onBack, onSuccess }: CreateTriggerProps) {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -109,10 +108,8 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
   const needsPhoneAuth = !profile?.phone_e164 || user?.is_anonymous;
 
   useEffect(() => {
-    if (open) {
-      loadSports();
-    }
-  }, [open]);
+    loadSports();
+  }, []);
 
   useEffect(() => {
     if (selectedSport) {
@@ -312,8 +309,9 @@ export function CreateTrigger({ open, onOpenChange, onSuccess }: CreateTriggerPr
         description: "Trigger created successfully",
       });
 
-      onSuccess();
-      onOpenChange(false);
+      if (onSuccess) {
+        onSuccess();
+      }
       
       setSearchQuery("");
       setSelectedTeam("");

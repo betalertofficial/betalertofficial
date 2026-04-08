@@ -8,7 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Loader2 } from "lucide-react";
 import type { ProfileTrigger } from "@/types/database";
 
-export function MyTriggers() {
+interface MyTriggersProps {
+  onCreateNew?: () => void;
+}
+
+export function MyTriggers({ onCreateNew }: MyTriggersProps) {
   const { user, profile, loading: authLoading } = useAuth();
   const [triggers, setTriggers] = useState<ProfileTrigger[]>([]);
   const [loading, setLoading] = useState(true);
