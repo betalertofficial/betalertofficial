@@ -102,6 +102,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
   const [selectedEvent, setSelectedEvent] = useState<OddsApiEvent | null>(null);
   const [teamOdds, setTeamOdds] = useState<TeamOdds | null>(null);
   const [gameScores, setGameScores] = useState<Map<string, GameScore>>(new Map());
+  const [showNextDay, setShowNextDay] = useState(false);
   
   const [betType, setBetType] = useState<BetType>("moneyline");
   const [oddsSign, setOddsSign] = useState<"+" | "-">("+");
@@ -379,6 +380,19 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
     return diffHours > 0 && diffHours < 3;
   };
 
+  const isGameToday = (commenceTime: string) => {
+    const gameTime = new Date(commenceTime);
+    const now = new Date();
+    return gameTime.toDateString() === now.toDateString();
+  };
+
+  const isGameTomorrow = (commenceTime: string) => {
+    const gameTime = new Date(commenceTime);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return gameTime.toDateString() === tomorrow.toDateString();
+  };
+
   const formatGameTime = (commenceTime: string) => {
     const gameTime = new Date(commenceTime);
     const now = new Date();
@@ -418,6 +432,17 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
     const outcome = h2hMarket.outcomes.find(o => o.name === teamName);
     return outcome ? outcome.price : null;
   };
+
+  // Filter events into today's and tomorrow's games
+  const todayEvents = events.filter(event => {
+    const gameTime = new Date(event.commence_time);
+    const now = new Date();
+    const diffHours = (now.getTime() - gameTime.getTime()) / (1000 * 60 * 60);
+    const isLive = diffHours > 0 && diffHours < 3;
+    return isLive || isGameToday(event.commence_time);
+  });
+
+  const tomorrowEvents = events.filter(event => isGameTomorrow(event.commence_time));
 
   return (
     <>
@@ -522,11 +547,11 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                 <div className="flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-primary" />
                   <Label className="text-sm font-medium text-foreground">
-                    Available Games ({events.length})
+                    Available Games ({showNextDay ? events.length : todayEvents.length})
                   </Label>
                 </div>
                 <div className="grid grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
-                  {events.map((event) => {
+                  {(showNextDay ? events : todayEvents).map((event) => {
                     const gameTime = formatGameTime(event.commence_time);
                     const isLive = isGameLive(event.commence_time);
                     const score = gameScores.get(event.id);
@@ -593,6 +618,28 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                     );
                   })}
                 </div>
+                
+                {!showNextDay && tomorrowEvents.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full bg-card hover:bg-muted"
+                    onClick={() => setShowNextDay(true)}
+                  >
+                    Show next day's available odds ({tomorrowEvents.length} games)
+                  </Button>
+                )}
+                
+                {showNextDay && tomorrowEvents.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full bg-card hover:bg-muted"
+                    onClick={() => setShowNextDay(false)}
+                  >
+                    Hide next day's games
+                  </Button>
+                )}
               </div>
             )}
 
