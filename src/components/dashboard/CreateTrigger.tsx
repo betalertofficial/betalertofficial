@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Bell, TrendingUp, Phone } from "lucide-react";
+import { Loader2, Search, Bell, TrendingUp, Phone, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
@@ -350,6 +350,33 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
     return diffHours > 0 && diffHours < 3;
   };
 
+  const formatGameTime = (commenceTime: string) => {
+    const gameTime = new Date(commenceTime);
+    const now = new Date();
+    const diffHours = (now.getTime() - gameTime.getTime()) / (1000 * 60 * 60);
+    
+    if (diffHours > 0 && diffHours < 3) {
+      return "LIVE";
+    }
+    
+    const today = new Date();
+    const isToday = gameTime.toDateString() === today.toDateString();
+    
+    if (isToday) {
+      return gameTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    }
+    
+    return gameTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + 
+           gameTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
+  const handleGameSelect = (event: OddsApiEvent, team: string) => {
+    const selectedTeamData = teams.find(t => t.name === team);
+    setSelectedTeam(team);
+    setSelectedTeamId(selectedTeamData?.id || "");
+    setSearchQuery("");
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -446,6 +473,59 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                 </Button>
               </div>
             </div>
+
+            {/* Game Selection Grid */}
+            {selectedSport && events.length > 0 && !selectedTeam && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-primary" />
+                  <Label className="text-sm font-medium text-foreground">
+                    Available Games ({events.length})
+                  </Label>
+                </div>
+                <div className="grid grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
+                  {events.map((event) => {
+                    const gameTime = formatGameTime(event.commence_time);
+                    const isLive = isGameLive(event.commence_time);
+                    
+                    return (
+                      <div key={event.id} className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary transition-colors">
+                        <div className="p-3 space-y-2">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-muted-foreground">{gameTime}</span>
+                            {isLive && (
+                              <Badge className="bg-red-600 text-white text-xs">LIVE</Badge>
+                            )}
+                          </div>
+                          
+                          <button
+                            type="button"
+                            className="w-full text-left space-y-1 hover:bg-muted/50 p-2 rounded transition-colors"
+                            onClick={() => handleGameSelect(event, event.away_team)}
+                          >
+                            <div className="text-sm font-medium text-foreground truncate">
+                              {event.away_team}
+                            </div>
+                          </button>
+                          
+                          <div className="text-xs text-muted-foreground text-center">@</div>
+                          
+                          <button
+                            type="button"
+                            className="w-full text-left space-y-1 hover:bg-muted/50 p-2 rounded transition-colors"
+                            onClick={() => handleGameSelect(event, event.home_team)}
+                          >
+                            <div className="text-sm font-medium text-foreground truncate">
+                              {event.home_team}
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">Team</Label>
