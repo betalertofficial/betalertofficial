@@ -135,7 +135,8 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
         setLoading(true);
         // Map sport key to league name in database
         const leagueMap: Record<string, string> = {
-          "basketball_nba": "nba"
+          "basketball_nba": "nba",
+          "baseball_mlb": "mlb"
         };
         
         const league = leagueMap[selectedSport];
@@ -416,6 +417,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                 <SelectContent className="bg-card border-border">
                   <SelectItem value="basketball_nba" className="text-foreground hover:bg-muted">
                     NBA
+                  </SelectItem>
+                  <SelectItem value="baseball_mlb" className="text-foreground hover:bg-muted">
+                    MLB
                   </SelectItem>
                 </SelectContent>
               </Select>
