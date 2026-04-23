@@ -26,6 +26,11 @@ interface TeamOdds {
   spread?: { point: number; odds: number };
 }
 
+interface GameScore {
+  home_score?: string;
+  away_score?: string;
+}
+
 const GAME_TIME_CONTEXTS = {
   basketball_nba: [
     { value: "anytime", label: "Anytime" },
@@ -96,6 +101,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
   const [events, setEvents] = useState<OddsApiEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<OddsApiEvent | null>(null);
   const [teamOdds, setTeamOdds] = useState<TeamOdds | null>(null);
+  const [gameScores, setGameScores] = useState<Map<string, GameScore>>(new Map());
   
   const [betType, setBetType] = useState<BetType>("moneyline");
   const [oddsSign, setOddsSign] = useState<"+" | "-">("+");
@@ -189,6 +195,29 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
       setLoading(true);
       const data = await oddsApiService.getOddsForSport(selectedSport);
       setEvents(data);
+      
+      // Also load scores for the sport
+      try {
+        const scores = await oddsApiService.getScores(selectedSport);
+        const scoresMap = new Map<string, GameScore>();
+        
+        scores.forEach(scoreData => {
+          if (scoreData.scores && Array.isArray(scoreData.scores)) {
+            const homeScore = scoreData.scores.find(s => s.name === scoreData.home_team);
+            const awayScore = scoreData.scores.find(s => s.name === scoreData.away_team);
+            
+            scoresMap.set(scoreData.id, {
+              home_score: homeScore?.score,
+              away_score: awayScore?.score
+            });
+          }
+        });
+        
+        setGameScores(scoresMap);
+      } catch (scoreError) {
+        console.error("Error loading scores:", scoreError);
+        // Continue even if scores fail
+      }
     } catch (error) {
       console.error("Error loading odds:", error);
     } finally {
@@ -377,6 +406,19 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
     setSearchQuery("");
   };
 
+  const getTeamOddsForGame = (event: OddsApiEvent, teamName: string): number | null => {
+    const bookmakerKey = sportsbook === "fanduel" ? "fanduel" : "draftkings";
+    const bookmaker = event.bookmakers.find(b => b.key === bookmakerKey);
+    
+    if (!bookmaker) return null;
+    
+    const h2hMarket = bookmaker.markets.find(m => m.key === "h2h");
+    if (!h2hMarket) return null;
+    
+    const outcome = h2hMarket.outcomes.find(o => o.name === teamName);
+    return outcome ? outcome.price : null;
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -487,6 +529,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                   {events.map((event) => {
                     const gameTime = formatGameTime(event.commence_time);
                     const isLive = isGameLive(event.commence_time);
+                    const score = gameScores.get(event.id);
+                    const awayOdds = getTeamOddsForGame(event, event.away_team);
+                    const homeOdds = getTeamOddsForGame(event, event.home_team);
                     
                     return (
                       <div key={event.id} className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary transition-colors">
@@ -500,24 +545,48 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                           
                           <button
                             type="button"
-                            className="w-full text-left space-y-1 hover:bg-muted/50 p-2 rounded transition-colors"
+                            className="w-full text-left hover:bg-muted/50 p-2 rounded transition-colors"
                             onClick={() => handleGameSelect(event, event.away_team)}
                           >
-                            <div className="text-sm font-medium text-foreground truncate">
-                              {event.away_team}
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="text-sm font-medium text-foreground truncate">
+                                {event.away_team}
+                              </div>
+                              {score?.away_score && (
+                                <div className="text-sm font-bold text-foreground ml-2">
+                                  {score.away_score}
+                                </div>
+                              )}
                             </div>
+                            {awayOdds !== null && (
+                              <div className="text-xs text-muted-foreground">
+                                {formatOdds(awayOdds)}
+                              </div>
+                            )}
                           </button>
                           
                           <div className="text-xs text-muted-foreground text-center">@</div>
                           
                           <button
                             type="button"
-                            className="w-full text-left space-y-1 hover:bg-muted/50 p-2 rounded transition-colors"
+                            className="w-full text-left hover:bg-muted/50 p-2 rounded transition-colors"
                             onClick={() => handleGameSelect(event, event.home_team)}
                           >
-                            <div className="text-sm font-medium text-foreground truncate">
-                              {event.home_team}
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="text-sm font-medium text-foreground truncate">
+                                {event.home_team}
+                              </div>
+                              {score?.home_score && (
+                                <div className="text-sm font-bold text-foreground ml-2">
+                                  {score.home_score}
+                                </div>
+                              )}
                             </div>
+                            {homeOdds !== null && (
+                              <div className="text-xs text-muted-foreground">
+                                {formatOdds(homeOdds)}
+                              </div>
+                            )}
                           </button>
                         </div>
                       </div>
