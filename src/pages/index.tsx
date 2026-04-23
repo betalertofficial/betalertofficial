@@ -194,8 +194,8 @@ export default function LandingPage() {
       {/* Final CTA Section */}
       <section className="container mx-auto px-4 py-20 mb-20">
         <div className="bg-gradient-to-br from-gray-100 to-gray-50 rounded-3xl p-16 text-center max-w-5xl mx-auto">
-          <h2 className="text-5xl md:text-6xl font-bold text-gray-900 mb-8">
-            Just Set it and forget it.
+          <h2 className="text-5xl md:text-6xl font-bold text-gray-900 mb-8">Just set it and forget it.
+
           </h2>
           <Link href="/dashboard">
             <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-10 py-7 text-xl font-semibold shadow-lg hover:shadow-xl transition-all">
