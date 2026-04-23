@@ -2,45 +2,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Bell, Settings, CheckCircle2, Sliders, Radio, Wallet, Mail, Globe } from "lucide-react";
 import Link from "next/link";
+import SEO from "@/components/SEO";
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      {/* Header */}
-      <header className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-8">
-              <Link href="/" className="flex items-center gap-2">
-                <img src="/hammer-icon.png" alt="Hammer" className="w-8 h-8" />
-                <span className="text-xl font-bold tracking-tight" style={{ color: "#1DB954" }}>
-                  HAMMER
-                </span>
-              </Link>
-              <nav className="hidden md:flex items-center gap-6">
-                <Link href="#features" className="text-sm text-gray-600 hover:text-gray-900">
-                  Features
-                </Link>
-                <Link href="#pricing" className="text-sm text-gray-600 hover:text-gray-900">
-                  Pricing
-                </Link>
-              </nav>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link href="/dashboard">
-                <Button variant="ghost" className="text-sm">
-                  Login
-                </Button>
-              </Link>
-              <Link href="/dashboard">
-                <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-6">
-                  Sign Up
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
+      <SEO 
+        title="Hammer - Sports Betting Alerts"
+        description="Set highly specific triggers and get an SMS the moment it hits."
+      />
 
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-20 md:py-32">
@@ -136,7 +106,7 @@ export default function LandingPage() {
       </section>
 
       {/* Problem Statement Section */}
-      <section className="container mx-auto px-4 py-20">
+      <section className="bg-white py-20">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6" style={{ textDecoration: "none" }}>
             Always finding yourself hammering the comeback when a favored team gives up an early lead?
@@ -204,42 +174,6 @@ export default function LandingPage() {
           </Link>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="border-t border-gray-200 bg-white">
-        <div className="container mx-auto px-4 py-12">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
-            <div>
-              <div className="text-xl font-bold mb-4">BETALERT</div>
-              <p className="text-sm text-gray-500">
-                © 2026 Bet Alert. Elite Sports Analytics.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-6 text-sm">
-              <Link href="#" className="text-gray-600 hover:text-gray-900 uppercase tracking-wide">
-                Privacy Policy
-              </Link>
-              <Link href="#" className="text-gray-600 hover:text-gray-900 uppercase tracking-wide">
-                Terms of Service
-              </Link>
-              <Link href="#" className="text-gray-600 hover:text-gray-900 uppercase tracking-wide">
-                Responsible Gaming
-              </Link>
-              <Link href="#" className="text-gray-600 hover:text-gray-900 uppercase tracking-wide">
-                Contact
-              </Link>
-            </div>
-            <div className="flex gap-4">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Globe className="h-5 w-5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Mail className="h-5 w-5" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>);
 
 }
