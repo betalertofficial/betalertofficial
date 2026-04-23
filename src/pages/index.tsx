@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Bell, Settings, CheckCircle2, Sliders, Radio, Wallet, Mail, Globe } from "lucide-react";
 import Link from "next/link";
-import SEO from "@/components/SEO";
+import { SEO } from "@/components/SEO";
 
 export default function LandingPage() {
   return (
