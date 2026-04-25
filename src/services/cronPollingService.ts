@@ -3,8 +3,11 @@
  */
 
 import { SupabaseClient } from "@supabase/supabase-js";
-import { findMatches, deduplicateMatches, formatAlertMessage, type Match } from "./matchingEngine";
-import { espnService } from "@/services/espnService";
+import { Database } from "@/integrations/supabase/types";
+import { fetchOddsForSport } from "./oddsApiService";
+import { evaluateTriggersForOdds } from "./matchingEngine";
+import { createAlert } from "./alertService";
+import { getActiveSports, markEventsAsLive, markEventsAsCompleted } from "./scheduleService";
 
 interface OddsSnapshot {
   sport: string;
@@ -919,6 +922,227 @@ export async function runCronPoll(
       alertsCreated: 0,
       webhooksSent: 0,
       durationMs: Date.now() - startTime,
+    };
+  }
+}
+
+/**
+ * Main cron polling function - runs scheduled trigger evaluation
+ * 
+ * SCHEDULE-AWARE OPTIMIZATION:
+ * 1. Updates event statuses (scheduled → live → completed)
+ * 2. Queries for leagues with live events
+ * 3. Only fetches odds for leagues with active games
+ * 4. Skips Odds API entirely if no live events
+ */
+export async function runCronPoll(
+  supabase: SupabaseClient<Database>,
+  oddsApiKey: string,
+  webhookUrl: string
+): Promise<CronPollResult> {
+  const startTime = Date.now();
+  console.log("[CronPoll] Starting scheduled poll");
+
+  try {
+    // Step 1: Update event statuses based on commence_time
+    console.log("[CronPoll] Updating event statuses...");
+    const markedLive = await markEventsAsLive(supabase);
+    const markedCompleted = await markEventsAsCompleted(supabase);
+    console.log(`[CronPoll] Status updates: ${markedLive} → live, ${markedCompleted} → completed`);
+
+    // Step 2: Get sports with live events
+    const activeSports = await getActiveSports(supabase);
+    
+    if (activeSports.length === 0) {
+      console.log("[CronPoll] No live events found - skipping Odds API");
+      const durationMs = Date.now() - startTime;
+      
+      // Create evaluation run showing skip
+      const { data: evalRun } = await supabase
+        .from("evaluation_runs")
+        .insert({
+          status: "completed",
+          triggers_checked: 0,
+          matches_found: 0,
+          alerts_created: 0,
+          duration_ms: durationMs,
+          error_message: "No live events - skipped polling",
+        })
+        .select()
+        .single();
+
+      return {
+        success: true,
+        evaluationRunId: evalRun?.id,
+        triggersChecked: 0,
+        matchesFound: 0,
+        alertsCreated: 0,
+        webhooksSent: 0,
+        durationMs,
+        skippedReason: "No live events",
+      };
+    }
+
+    console.log(`[CronPoll] Found ${activeSports.length} sports with live events:`, activeSports);
+
+    // Step 3: Create evaluation run
+    const { data: evalRun, error: evalError } = await supabase
+      .from("evaluation_runs")
+      .insert({
+        status: "running",
+      })
+      .select()
+      .single();
+
+    if (evalError || !evalRun) {
+      throw new Error(`Failed to create evaluation run: ${evalError?.message}`);
+    }
+
+    console.log(`[CronPoll] Created evaluation run: ${evalRun.id}`);
+
+    // Step 4: Fetch active triggers
+    const { data: triggers, error: triggersError } = await supabase
+      .from("triggers")
+      .select("*")
+      .eq("status", "active");
+
+    if (triggersError) {
+      throw new Error(`Failed to fetch triggers: ${triggersError.message}`);
+    }
+
+    if (!triggers || triggers.length === 0) {
+      console.log("[CronPoll] No active triggers found");
+      await supabase
+        .from("evaluation_runs")
+        .update({ status: "completed", triggers_checked: 0 })
+        .eq("id", evalRun.id);
+
+      return {
+        success: true,
+        evaluationRunId: evalRun.id,
+        triggersChecked: 0,
+        matchesFound: 0,
+        alertsCreated: 0,
+        webhooksSent: 0,
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    console.log(`[CronPoll] Loaded ${triggers.length} active triggers`);
+
+    // Step 5: Fetch odds ONLY for sports with live events
+    const allOdds: OddsSnapshot[] = [];
+    
+    for (const sport of activeSports) {
+      console.log(`[CronPoll] Fetching odds for ${sport} (live events detected)`);
+      const odds = await fetchOddsForSport(oddsApiKey, sport);
+      
+      // Filter to only include games that have started (commence_time <= now)
+      const now = new Date();
+      const liveOdds = odds.filter(odd => {
+        const commenceTime = new Date(odd.event_data.commence_time);
+        return commenceTime <= now;
+      });
+      
+      console.log(`[CronPoll] ${sport}: ${odds.length} total odds, ${liveOdds.length} live games`);
+      allOdds.push(...liveOdds);
+    }
+
+    console.log(`[CronPoll] Total live odds collected: ${allOdds.length}`);
+
+    // Step 6: Evaluate triggers
+    let totalMatches = 0;
+    let totalAlerts = 0;
+    let webhooksSent = 0;
+
+    for (const trigger of triggers) {
+      const matches = evaluateTriggersForOdds(trigger, allOdds);
+
+      if (matches.length > 0) {
+        console.log(`[CronPoll] Trigger ${trigger.id} matched ${matches.length} events`);
+        totalMatches += matches.length;
+
+        // Create alerts for each match
+        for (const match of matches) {
+          const alert = await createAlert(supabase, {
+            trigger_id: trigger.id,
+            user_id: trigger.user_id,
+            event_id: match.event_id,
+            sport: match.sport,
+            home_team: match.home_team,
+            away_team: match.away_team,
+            triggered_odds: match.odds,
+            threshold: trigger.odds_threshold,
+            condition: trigger.condition,
+            market_type: trigger.market_type,
+            evaluation_run_id: evalRun.id,
+          });
+
+          if (alert) {
+            totalAlerts++;
+
+            // Send webhook if configured
+            if (webhookUrl && trigger.webhook_enabled) {
+              try {
+                await fetch(webhookUrl, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    trigger_id: trigger.id,
+                    alert_id: alert.id,
+                    event: `${match.away_team} @ ${match.home_team}`,
+                    sport: match.sport,
+                    odds: match.odds,
+                    threshold: trigger.odds_threshold,
+                    condition: trigger.condition,
+                  }),
+                });
+                webhooksSent++;
+              } catch (webhookError) {
+                console.error("[CronPoll] Webhook failed:", webhookError);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Step 7: Update evaluation run
+    const durationMs = Date.now() - startTime;
+    await supabase
+      .from("evaluation_runs")
+      .update({
+        status: "completed",
+        triggers_checked: triggers.length,
+        matches_found: totalMatches,
+        alerts_created: totalAlerts,
+        duration_ms: durationMs,
+      })
+      .eq("id", evalRun.id);
+
+    console.log(`[CronPoll] Completed: ${triggers.length} triggers, ${totalMatches} matches, ${totalAlerts} alerts, ${webhooksSent} webhooks (${durationMs}ms)`);
+
+    return {
+      success: true,
+      evaluationRunId: evalRun.id,
+      triggersChecked: triggers.length,
+      matchesFound: totalMatches,
+      alertsCreated: totalAlerts,
+      webhooksSent,
+      durationMs,
+    };
+  } catch (error) {
+    console.error("[CronPoll] Error:", error);
+    const durationMs = Date.now() - startTime;
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+      triggersChecked: 0,
+      matchesFound: 0,
+      alertsCreated: 0,
+      webhooksSent: 0,
+      durationMs,
     };
   }
 }

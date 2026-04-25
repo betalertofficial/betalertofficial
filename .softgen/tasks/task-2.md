@@ -63,7 +63,7 @@ Optimize odds polling to only hit the Odds API when games are actually live, red
   - Calls Odds API events endpoint for each league
   - Upserts into `event_schedules` with status = 'scheduled'
   - Returns count of events synced per league
-- [ ] Update `cronPollingService.ts` to check schedules before fetching odds:
+- [x] Update `cronPollingService.ts` to check schedules before fetching odds:
   - Query `event_schedules` for events with status = 'live' AND commence_time <= now
   - Get distinct league_keys from results
   - Only call `fetchOddsForSport()` for leagues with live events
