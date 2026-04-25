@@ -264,44 +264,87 @@ export async function runCronPoll(
     const allOdds = await fetchLiveOddsForSports(oddsApiKey, activeSports);
     console.log(`[CronPoll] Total live odds collected: ${allOdds.length}`);
 
-    // Step 6: Store odds snapshots
-    await storeOddsSnapshots(supabase, allOdds);
+    // Step 6: Store odds snapshots and get IDs
+    const storedSnapshots = await storeOddsSnapshots(supabase, allOdds);
+
+    // Create lookup map: event_id + team + bookmaker + bet_type -> snapshot_id
+    const snapshotMap = new Map<string, string>();
+    storedSnapshots.forEach((snapshot, index) => {
+      const odds = allOdds[index];
+      const key = `${odds.event_id}|${odds.team_or_player}|${odds.bookmaker}|${odds.bet_type}`;
+      snapshotMap.set(key, snapshot.id);
+    });
 
     // Step 7: Load existing matches for recurring triggers
-    const { data: existingAlerts } = await supabase
-      .from("alerts")
-      .select("trigger_id, event_id")
-      .in("trigger_id", triggers.filter(t => t.frequency === "recurring").map(t => t.id));
+    const recurringTriggerIds = triggers
+      .filter(t => t.frequency === "recurring")
+      .map(t => t.id);
 
-    const existingMatches = new Map<string, Set<string>>();
-    existingAlerts?.forEach(alert => {
-      if (!existingMatches.has(alert.trigger_id)) {
-        existingMatches.set(alert.trigger_id, new Set());
+    const { data: existingMatches } = await supabase
+      .from("trigger_matches")
+      .select("trigger_id, odds_snapshot_id, odds_snapshots(event_id)")
+      .in("trigger_id", recurringTriggerIds);
+
+    const existingMatchMap = new Map<string, Set<string>>();
+    existingMatches?.forEach(match => {
+      const eventId = (match.odds_snapshots as any)?.event_id;
+      if (eventId) {
+        if (!existingMatchMap.has(match.trigger_id)) {
+          existingMatchMap.set(match.trigger_id, new Set());
+        }
+        existingMatchMap.get(match.trigger_id)?.add(eventId);
       }
-      existingMatches.get(alert.trigger_id)?.add(alert.event_id);
     });
 
     // Step 8: Find matches using matching engine
-    const allMatches = findMatches(triggers, allOdds, existingMatches);
+    const allMatches = findMatches(triggers, allOdds, existingMatchMap);
     const uniqueMatches = deduplicateMatches(allMatches);
     
     console.log(`[CronPoll] Found ${uniqueMatches.length} unique matches`);
 
-    // Step 9: Create alerts and send webhooks
+    // Step 9: Create trigger_matches and alerts
+    let matchesCreated = 0;
     let alertsCreated = 0;
     let webhooksSent = 0;
 
     for (const match of uniqueMatches) {
       try {
+        // Find the snapshot ID for this match
+        const snapshotKey = `${match.eventId}|${match.teamOrPlayer}|${match.bookmaker}|${match.betType}`;
+        const snapshotId = snapshotMap.get(snapshotKey);
+
+        if (!snapshotId) {
+          console.warn(`[CronPoll] No snapshot ID found for match: ${snapshotKey}`);
+          continue;
+        }
+
+        // Create trigger_match
+        const { data: triggerMatch, error: matchError } = await supabase
+          .from("trigger_matches")
+          .insert({
+            trigger_id: match.triggerId,
+            odds_snapshot_id: snapshotId,
+            matched_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (matchError) {
+          console.error(`[CronPoll] Failed to create trigger match:`, matchError);
+          continue;
+        }
+
+        matchesCreated++;
+
+        // Create alert
         const { data: alert, error: alertError } = await supabase
           .from("alerts")
           .insert({
-            evaluation_run_id: evalRun.id,
+            trigger_match_id: triggerMatch.id,
             sport: match.sport,
             home_team: match.eventDetails.split(" ")[0] || "",
             away_team: match.teamOrPlayer,
-            triggered_odds: match.oddsValue,
-            game_detail: match.eventDetails,
+            message: `${match.teamOrPlayer} ${match.betType} hit! ${match.bookmaker}: ${formatOdds(match.oddsValue)}`,
           })
           .select()
           .single();
@@ -377,4 +420,11 @@ export async function runCronPoll(
       durationMs,
     };
   }
+}
+
+function formatOdds(odds: number): string {
+  if (odds >= 0) {
+    return `+${odds}`;
+  }
+  return `${odds}`;
 }
