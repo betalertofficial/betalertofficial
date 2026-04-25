@@ -2,7 +2,7 @@
   "framework": "nextjs",
   "crons": [
     {
-      "path": "/api/cron/evaluate-triggers",
+      "path": "/api/cron/poll-triggers",
       "schedule": "* * * * *"
     }
   ],

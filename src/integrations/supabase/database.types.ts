@@ -1,4 +1,4 @@
- 
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 export type Json =
   | string
   | number
@@ -18,18 +18,21 @@ export type Database = {
       admin_settings: {
         Row: {
           id: string
+          last_poll_at: string | null
           setting_key: string
           setting_value: string
           updated_at: string | null
         }
         Insert: {
           id?: string
+          last_poll_at?: string | null
           setting_key: string
           setting_value: string
           updated_at?: string | null
         }
         Update: {
           id?: string
+          last_poll_at?: string | null
           setting_key?: string
           setting_value?: string
           updated_at?: string | null
