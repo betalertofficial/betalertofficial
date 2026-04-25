@@ -34,6 +34,8 @@ interface CronPollResult {
   durationMs: number;
   error?: string;
   skippedReason?: string;
+  liveEventsCount?: number;
+  activeSports?: string[];
 }
 
 /**
@@ -209,10 +211,20 @@ export async function runCronPoll(
         webhooksSent: 0,
         durationMs,
         skippedReason: "No live events",
+        liveEventsCount: 0,
+        activeSports: [],
       };
     }
 
     console.log(`[CronPoll] Found ${activeSports.length} sports with live events:`, activeSports);
+
+    // Count total live events
+    const { count: liveEventsCount } = await supabase
+      .from("event_schedules")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "live");
+
+    console.log(`[CronPoll] Total live events: ${liveEventsCount}`);
 
     // Step 3: Create evaluation run
     const { data: evalRun, error: evalError } = await supabase
@@ -406,6 +418,8 @@ export async function runCronPoll(
       alertsCreated,
       webhooksSent,
       durationMs,
+      liveEventsCount: liveEventsCount || 0,
+      activeSports,
     };
   } catch (error) {
     console.error("[CronPoll] Error:", error);

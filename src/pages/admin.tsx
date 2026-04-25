@@ -352,15 +352,37 @@ export default function AdminPage() {
       console.log("=== MANUAL POLL RESULT ===");
       console.log("Evaluation Run ID:", result.evaluation_run_id);
       console.log("Triggers Checked:", result.triggers_checked);
+      console.log("Live Events:", result.live_events_count);
+      console.log("Active Sports:", result.active_sports);
       console.log("Matches Found:", result.matches_found);
       console.log("Alerts Created:", result.alerts_created);
       console.log("Webhooks Sent:", result.webhooks_sent);
       console.log("Duration (ms):", result.duration_ms);
       console.log("Full result:", result);
       
+      // Build detailed description
+      let description = `Checked ${result.triggers_checked} triggers`;
+      
+      if (result.live_events_count !== undefined && result.live_events_count > 0) {
+        description += ` across ${result.live_events_count} live event${result.live_events_count === 1 ? '' : 's'}`;
+        
+        if (result.active_sports && result.active_sports.length > 0) {
+          const sportNames = result.active_sports
+            .map((s: string) => s.replace(/_/g, " ").toUpperCase())
+            .join(", ");
+          description += ` (${sportNames})`;
+        }
+        
+        description += `. Found ${result.matches_found} match${result.matches_found === 1 ? '' : 'es'}, sent ${result.webhooks_sent} alert${result.webhooks_sent === 1 ? '' : 's'}.`;
+      } else if (result.skipped_reason) {
+        description = result.skipped_reason + ". No live games found in event schedules.";
+      } else {
+        description += `. Found ${result.matches_found} matches, sent ${result.webhooks_sent} alerts.`;
+      }
+      
       toast({
         title: "Manual Poll Complete",
-        description: `Checked ${result.triggers_checked} triggers, found ${result.matches_found} matches, sent ${result.webhooks_sent} alerts. Check browser console (F12) for details.`,
+        description: description + " Check browser console (F12) for details.",
         variant: result.matches_found > 0 ? "default" : "default",
       });
       

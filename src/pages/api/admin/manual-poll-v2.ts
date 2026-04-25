@@ -79,7 +79,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       alerts_created: result.alertsCreated,
       webhooks_sent: result.webhooksSent,
       duration_ms: result.durationMs,
-      dry_run: dryRun,
+      live_events_count: result.liveEventsCount,
+      active_sports: result.activeSports,
+      skipped_reason: result.skippedReason,
       error: result.error,
     });
   } catch (error) {
