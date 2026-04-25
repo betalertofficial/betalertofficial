@@ -324,6 +324,7 @@ export async function runCronPoll(
           .insert({
             trigger_id: match.triggerId,
             odds_snapshot_id: snapshotId,
+            matched_value: match.oddsValue,
             matched_at: new Date().toISOString(),
           })
           .select()
