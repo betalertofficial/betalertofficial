@@ -106,9 +106,10 @@ export function findMatches(
       console.log(`[MatchingEngine] Bookmaker filter: ${trigger.bookmaker}`);
     }
 
-    // Map sport to Odds API format
-    const oddsApiSport = SPORT_MAPPING[trigger.sport] || trigger.sport.toLowerCase();
-    console.log(`[MatchingEngine] Mapped sport: ${trigger.sport} → ${oddsApiSport}`);
+    // trigger.sport now uses league_key format (e.g., "basketball_nba")
+    // odds.sport also uses league_key format
+    const oddsApiSport = trigger.sport;
+    console.log(`[MatchingEngine] League: ${trigger.sport}`);
     
     // Map bet type to Odds API format
     const oddsApiBetType = BET_TYPE_MAPPING[trigger.bet_type.toLowerCase()] || trigger.bet_type.toLowerCase();
@@ -136,7 +137,7 @@ export function findMatches(
         continue;
       }
 
-      // 1. Match sport
+      // 1. Match sport/league
       if (odds.sport !== oddsApiSport) {
         sportMismatches++;
         continue;
@@ -155,7 +156,7 @@ export function findMatches(
       const oddsBetType = BET_TYPE_MAPPING[odds.bet_type.toLowerCase()] || odds.bet_type.toLowerCase();
       if (oddsBetType !== oddsApiBetType) {
         betTypeMismatches++;
-        if (teamMismatches < 5) { // Only log first few for debugging
+        if (betTypeMismatches < 5) { // Only log first few for debugging
           console.log(`[MatchingEngine] Bet type mismatch: "${odds.bet_type}" (${oddsBetType}) != "${trigger.bet_type}" (${oddsApiBetType})`);
         }
         continue;
@@ -209,31 +210,6 @@ export function findMatches(
   }
 
   console.log(`[MatchingEngine] Found ${matches.length} total matches`);
-  return matches;
-}
-
-/**
- * Match a trigger against odds snapshots
- * Returns matching events that meet the trigger criteria
- */
-export function matchTriggerToOdds(
-  trigger: Trigger,
-  oddsSnapshots: OddsSnapshot[]
-): TriggerMatch[] {
-  const matches: TriggerMatch[] = [];
-
-  // Filter odds to matching sport/league
-  const relevantOdds = oddsSnapshots.filter(odd => {
-    // trigger.sport now uses league_key format (e.g., "basketball_nba")
-    // odd.sport_key also uses league_key format
-    return odd.sport_key === trigger.sport;
-  });
-
-  console.log(`[MatchingEngine] Filtering ${oddsSnapshots.length} odds for trigger ${trigger.id}`);
-  console.log(`[MatchingEngine] Trigger league: ${trigger.sport}, Found ${relevantOdds.length} matching odds`);
-
-  // TODO: Implement the rest of the match logic here
-
   return matches;
 }
 

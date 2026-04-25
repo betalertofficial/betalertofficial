@@ -10,6 +10,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/integrations/supabase/types";
 import { getActiveSports, markEventsAsLive, markEventsAsCompleted } from "./scheduleService";
+import { findMatches, deduplicateMatches } from "./matchingEngine";
 
 type Trigger = Database["public"]["Tables"]["triggers"]["Row"];
 
@@ -260,112 +261,105 @@ export async function runCronPoll(
 
     // Step 5: Fetch odds ONLY for sports with live events
     // activeSports now contains league_keys (e.g., "basketball_nba")
-    const allOdds: OddsSnapshot[] = [];
-    
-    for (const leagueKey of activeSports) {
-      console.log(`[CronPoll] Fetching odds for ${leagueKey} (live events detected)`);
-      const odds = await fetchOddsForSport(oddsApiKey, leagueKey);
-      
-      // Filter to only include games that have started (commence_time <= now)
-      const now = new Date();
-      const liveOdds = odds.filter(odd => {
-        const commenceTime = new Date(odd.event_data.commence_time);
-        return commenceTime <= now;
-      });
-      
-      console.log(`[CronPoll] ${leagueKey}: ${odds.length} total odds, ${liveOdds.length} live games`);
-      allOdds.push(...liveOdds);
-    }
-
+    const allOdds = await fetchLiveOddsForSports(oddsApiKey, activeSports);
     console.log(`[CronPoll] Total live odds collected: ${allOdds.length}`);
 
-    // Step 6: Evaluate triggers using matching engine
-    let totalMatches = 0;
-    let totalAlerts = 0;
+    // Step 6: Store odds snapshots
+    await storeOddsSnapshots(supabase, allOdds);
+
+    // Step 7: Load existing matches for recurring triggers
+    const { data: existingAlerts } = await supabase
+      .from("alerts")
+      .select("trigger_id, event_id")
+      .in("trigger_id", triggers.filter(t => t.frequency === "recurring").map(t => t.id));
+
+    const existingMatches = new Map<string, Set<string>>();
+    existingAlerts?.forEach(alert => {
+      if (!existingMatches.has(alert.trigger_id)) {
+        existingMatches.set(alert.trigger_id, new Set());
+      }
+      existingMatches.get(alert.trigger_id)?.add(alert.event_id);
+    });
+
+    // Step 8: Find matches using matching engine
+    const allMatches = findMatches(triggers, allOdds, existingMatches);
+    const uniqueMatches = deduplicateMatches(allMatches);
+    
+    console.log(`[CronPoll] Found ${uniqueMatches.length} unique matches`);
+
+    // Step 9: Create alerts and send webhooks
+    let alertsCreated = 0;
     let webhooksSent = 0;
 
-    for (const trigger of triggers) {
-      const matches = matchTriggerToOdds(trigger, allOdds);
+    for (const match of uniqueMatches) {
+      try {
+        const { data: alert, error: alertError } = await supabase
+          .from("alerts")
+          .insert({
+            evaluation_run_id: evalRun.id,
+            sport: match.sport,
+            home_team: match.eventDetails.split(" ")[0] || "",
+            away_team: match.teamOrPlayer,
+            triggered_odds: match.oddsValue,
+            game_detail: match.eventDetails,
+          })
+          .select()
+          .single();
 
-      if (matches.length > 0) {
-        console.log(`[CronPoll] Trigger ${trigger.id} (${trigger.sport}) matched ${matches.length} events`);
-        totalMatches += matches.length;
+        if (alertError) {
+          console.error(`[CronPoll] Failed to create alert:`, alertError);
+          continue;
+        }
 
-        // Create alerts for each match
-        for (const match of matches) {
+        alertsCreated++;
+        console.log(`[CronPoll] Created alert for trigger ${match.triggerId}: ${match.eventDetails} @ ${match.oddsValue}`);
+
+        // Send webhook if URL is configured
+        if (webhookUrl) {
           try {
-            const { data: alert, error: alertError } = await supabase
-              .from("alerts")
-              .insert({
-                trigger_id: trigger.id,
-                user_id: trigger.user_id,
-                event_id: match.event_id,
-                sport: match.sport_key,
-                home_team: match.home_team,
-                away_team: match.away_team,
-                triggered_odds: match.odds_value,
-                market_type: trigger.market_type,
-                evaluation_run_id: evalRun.id,
-              })
-              .select()
-              .single();
-
-            if (alertError) {
-              console.error(`[CronPoll] Failed to create alert:`, alertError);
-              continue;
-            }
-
-            totalAlerts++;
-
-            // Send webhook if enabled
-            if (webhookUrl && trigger.webhook_enabled) {
-              try {
-                await fetch(webhookUrl, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    trigger_id: trigger.id,
-                    alert_id: alert.id,
-                    event: `${match.away_team} @ ${match.home_team}`,
-                    sport: match.sport_key,
-                    odds: match.odds_value,
-                    threshold: trigger.odds_threshold,
-                    market: trigger.market_type,
-                  }),
-                });
-                webhooksSent++;
-              } catch (webhookError) {
-                console.error("[CronPoll] Webhook failed:", webhookError);
-              }
-            }
-          } catch (error) {
-            console.error("[CronPoll] Error processing match:", error);
+            await fetch(webhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                trigger_id: match.triggerId,
+                alert_id: alert.id,
+                event: match.eventDetails,
+                sport: match.sport,
+                odds: match.oddsValue,
+                bookmaker: match.bookmaker,
+              }),
+            });
+            webhooksSent++;
+          } catch (webhookError) {
+            console.error("[CronPoll] Webhook failed:", webhookError);
           }
         }
+      } catch (error) {
+        console.error("[CronPoll] Error processing match:", error);
       }
     }
 
-    // Step 7: Update evaluation run
+    // Step 10: Update evaluation run
     const durationMs = Date.now() - startTime;
     await supabase
       .from("evaluation_runs")
       .update({
         status: "completed",
         triggers_checked: triggers.length,
-        matches_found: totalMatches,
-        alerts_created: totalAlerts,
+        matches_found: uniqueMatches.length,
+        alerts_created: alertsCreated,
         duration_ms: durationMs,
       })
       .eq("id", evalRun.id);
 
-    console.log(`[CronPoll] Completed: ${triggers.length} triggers, ${totalMatches} matches, ${totalAlerts} alerts, ${webhooksSent} webhooks (${durationMs}ms)`);
+    console.log(`[CronPoll] Completed: ${triggers.length} triggers, ${uniqueMatches.length} matches, ${alertsCreated} alerts, ${webhooksSent} webhooks (${durationMs}ms)`);
 
     return {
       success: true,
       evaluationRunId: evalRun.id,
       triggersChecked: triggers.length,
-      matchesFound: totalMatches,
-      alertsCreated: totalAlerts,
+      matchesFound: uniqueMatches.length,
+      alertsCreated,
       webhooksSent,
       durationMs,
     };
