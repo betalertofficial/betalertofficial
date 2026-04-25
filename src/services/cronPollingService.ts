@@ -38,7 +38,7 @@ interface CronPollResult {
 async function fetchActiveTriggers(supabase: SupabaseClient) {
   console.log("[CronPolling] Fetching active triggers...");
 
-  // Fetch active triggers
+  // Fetch active triggers with frequency field
   const { data: triggers, error: triggersError } = await supabase
     .from("triggers")
     .select("*")
@@ -57,6 +57,59 @@ async function fetchActiveTriggers(supabase: SupabaseClient) {
   console.log(`[CronPolling] Found ${triggers?.length || 0} active triggers`);
 
   return triggers || [];
+}
+
+/**
+ * NEW STEP: Fetch existing matches for recurring triggers to prevent duplicate alerts
+ */
+async function fetchExistingMatches(
+  supabase: SupabaseClient,
+  triggerIds: string[]
+): Promise<Map<string, Set<string>>> {
+  console.log(`[CronPolling] Fetching existing matches for ${triggerIds.length} triggers...`);
+
+  const existingMatches = new Map<string, Set<string>>();
+
+  if (triggerIds.length === 0) {
+    return existingMatches;
+  }
+
+  // Fetch all trigger_matches that have odds_snapshot_id
+  const { data: matches, error } = await supabase
+    .from("trigger_matches")
+    .select(`
+      trigger_id,
+      odds_snapshots!inner (
+        event_id
+      )
+    `)
+    .in("trigger_id", triggerIds);
+
+  if (error) {
+    console.error("[CronPolling] Error fetching existing matches:", error);
+    return existingMatches;
+  }
+
+  // Build map of trigger_id -> Set of event_ids
+  for (const match of matches || []) {
+    const snapshot = Array.isArray(match.odds_snapshots) 
+      ? match.odds_snapshots[0] 
+      : match.odds_snapshots;
+
+    if (snapshot?.event_id) {
+      if (!existingMatches.has(match.trigger_id)) {
+        existingMatches.set(match.trigger_id, new Set());
+      }
+      existingMatches.get(match.trigger_id)!.add(snapshot.event_id);
+    }
+  }
+
+  console.log(`[CronPolling] Found existing matches for ${existingMatches.size} triggers`);
+  for (const [triggerId, eventIds] of existingMatches.entries()) {
+    console.log(`[CronPolling]   - Trigger ${triggerId}: ${eventIds.size} events already matched`);
+  }
+
+  return existingMatches;
 }
 
 /**
@@ -140,7 +193,7 @@ async function fetchLiveOdds(apiKey: string, sports: string[]): Promise<OddsSnap
 async function storeOddsSnapshots(
   supabase: SupabaseClient,
   oddsData: OddsSnapshot[]
-): Promise<{ id: string; team_or_player: string; bookmaker: string; bet_type: string; event_data: any }[]> {
+): Promise<{ id: string; event_id: string; team_or_player: string; bookmaker: string; bet_type: string; event_data: any }[]> {
   console.log(`[CronPolling] Storing ${oddsData.length} odds snapshots...`);
 
   try {
@@ -180,30 +233,36 @@ async function storeOddsSnapshots(
 }
 
 /**
- * STEP 4: Store trigger matches with 24h deduplication
+ * STEP 4: Store trigger matches with event tracking
  */
 async function storeTriggerMatches(
   supabase: SupabaseClient,
   matches: Match[],
-  storedSnapshots: { id: string; team_or_player: string; bookmaker: string; bet_type: string; event_data: any }[]
+  storedSnapshots: { id: string; event_id: string; team_or_player: string; bookmaker: string; bet_type: string; event_data: any }[]
 ) {
   console.log(`[CronPolling] Storing ${matches.length} trigger matches...`);
 
-  const storedMatches: { match_id: string; trigger_id: string }[] = [];
+  const storedMatches: { match_id: string; trigger_id: string; event_id: string }[] = [];
 
   for (const match of matches) {
-    console.log(`[CronPolling] Processing match for trigger ${match.triggerId}...`);
+    console.log(`[CronPolling] Processing match for trigger ${match.triggerId}, event ${match.eventId}...`);
 
     // Find matching odds snapshot (now with database ID!)
     const matchingSnapshot = storedSnapshots.find(
       (s) =>
+        s.event_id === match.eventId &&
         s.team_or_player === match.teamOrPlayer &&
         s.bookmaker === match.bookmaker &&
         s.bet_type === match.betType
     );
 
     console.log(`[CronPolling] DEBUG - Snapshot lookup:`, {
-      searching_for: { team: match.teamOrPlayer, bookmaker: match.bookmaker, betType: match.betType },
+      searching_for: { 
+        eventId: match.eventId,
+        team: match.teamOrPlayer, 
+        bookmaker: match.bookmaker, 
+        betType: match.betType 
+      },
       found: matchingSnapshot?.id || null,
       total_snapshots: storedSnapshots.length
     });
@@ -212,6 +271,7 @@ async function storeTriggerMatches(
       console.log(`[CronPolling] ⚠️ WARNING: No matching snapshot found!`);
       console.log(`[CronPolling] DEBUG - Sample snapshots:`, storedSnapshots.slice(0, 3).map(s => ({
         id: s.id,
+        event_id: s.event_id,
         team: s.team_or_player,
         bookmaker: s.bookmaker,
         bet_type: s.bet_type
@@ -219,6 +279,7 @@ async function storeTriggerMatches(
     } else {
       console.log(`[CronPolling] ✅ Found matching snapshot:`, {
         id: matchingSnapshot.id,
+        event_id: matchingSnapshot.event_id,
         team: matchingSnapshot.team_or_player,
         bookmaker: matchingSnapshot.bookmaker,
         bet_type: matchingSnapshot.bet_type,
@@ -228,7 +289,7 @@ async function storeTriggerMatches(
 
     const snapshotId = matchingSnapshot?.id || null;
 
-    // Insert new match (no deduplication - every match creates a new entry)
+    // Insert new match
     const { data, error } = await supabase
       .from("trigger_matches")
       .insert({
@@ -247,8 +308,12 @@ async function storeTriggerMatches(
     }
 
     if (data && data.length > 0) {
-      storedMatches.push({ match_id: data[0].id, trigger_id: match.triggerId });
-      console.log(`[CronPolling] ✅ Stored match ${data[0].id} for trigger ${match.triggerId} with snapshot ${snapshotId}`);
+      storedMatches.push({ 
+        match_id: data[0].id, 
+        trigger_id: match.triggerId,
+        event_id: match.eventId 
+      });
+      console.log(`[CronPolling] ✅ Stored match ${data[0].id} for trigger ${match.triggerId} with snapshot ${snapshotId}, event ${match.eventId}`);
     }
   }
 
@@ -764,6 +829,12 @@ export async function runCronPoll(
       };
     }
 
+    // Fetch existing matches for recurring triggers
+    const recurringTriggerIds = triggers
+      .filter((t: any) => t.frequency === 'recurring')
+      .map((t: any) => t.id);
+    const existingMatches = await fetchExistingMatches(supabase, recurringTriggerIds);
+
     // Get unique sports from triggers
     const sports = [...new Set(triggers.map((t: any) => {
       const sportMap: Record<string, string> = {
@@ -781,8 +852,8 @@ export async function runCronPoll(
     // Store odds snapshots
     const snapshotIdMap = await storeOddsSnapshots(supabase, oddsSnapshots);
 
-    // Find matches
-    const rawMatches = findMatches(triggers, oddsSnapshots);
+    // Find matches (pass existing matches to filter out recurring duplicates)
+    const rawMatches = findMatches(triggers, oddsSnapshots, existingMatches);
     const matches = deduplicateMatches(rawMatches);
 
     // Create match map for alert creation

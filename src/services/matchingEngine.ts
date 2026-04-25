@@ -11,6 +11,7 @@ interface Trigger {
   odds_comparator: string;
   odds_value: number;
   bookmaker?: string | null;
+  frequency?: string; // 'once' or 'recurring'
 }
 
 interface OddsSnapshot {
@@ -31,6 +32,7 @@ export interface Match {
   sport: string;
   teamOrPlayer: string;
   betType: string;
+  eventId: string; // Add event_id to track per-game matches
 }
 
 // Sport mapping: user-facing name → odds API sport key
@@ -57,11 +59,19 @@ const BET_TYPE_MAPPING: Record<string, string> = {
 
 /**
  * Find matches between triggers and live odds data
+ * @param triggers - Active triggers to evaluate
+ * @param oddsData - Live odds snapshots
+ * @param existingMatches - Map of trigger_id -> Set of event_ids that have already matched
  */
-export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Match[] {
+export function findMatches(
+  triggers: Trigger[], 
+  oddsData: OddsSnapshot[],
+  existingMatches: Map<string, Set<string>> = new Map()
+): Match[] {
   const matches: Match[] = [];
 
   console.log(`[MatchingEngine] Starting match process: ${triggers.length} triggers, ${oddsData.length} odds snapshots`);
+  console.log(`[MatchingEngine] Existing matches for ${existingMatches.size} recurring triggers`);
   
   // Filter out pregame odds - only include games that have started
   const currentTime = new Date();
@@ -91,6 +101,7 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
   for (const trigger of triggers) {
     console.log(`\n[MatchingEngine] === Evaluating trigger ${trigger.id} ===`);
     console.log(`[MatchingEngine] Trigger: ${trigger.sport} - ${trigger.team_or_player} ${trigger.bet_type} ${trigger.odds_comparator} ${trigger.odds_value}`);
+    console.log(`[MatchingEngine] Frequency: ${trigger.frequency || 'once'}`);
     if (trigger.bookmaker) {
       console.log(`[MatchingEngine] Bookmaker filter: ${trigger.bookmaker}`);
     }
@@ -103,6 +114,12 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
     const oddsApiBetType = BET_TYPE_MAPPING[trigger.bet_type.toLowerCase()] || trigger.bet_type.toLowerCase();
     console.log(`[MatchingEngine] Mapped bet type: ${trigger.bet_type} → ${oddsApiBetType}`);
 
+    // Get set of event_ids this trigger has already matched (for recurring triggers)
+    const alreadyMatchedEvents = existingMatches.get(trigger.id) || new Set<string>();
+    if (trigger.frequency === 'recurring' && alreadyMatchedEvents.size > 0) {
+      console.log(`[MatchingEngine] Recurring trigger has already matched ${alreadyMatchedEvents.size} events`);
+    }
+
     // Find matching odds (using filtered live odds only)
     let triggerMatches = 0;
     let sportMismatches = 0;
@@ -110,8 +127,15 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
     let betTypeMismatches = 0;
     let bookmakerMismatches = 0;
     let oddsMismatches = 0;
+    let alreadyMatchedSkips = 0;
     
     for (const odds of liveOdds) {
+      // Skip if this is a recurring trigger that already matched this event
+      if (trigger.frequency === 'recurring' && alreadyMatchedEvents.has(odds.event_id)) {
+        alreadyMatchedSkips++;
+        continue;
+      }
+
       // 1. Match sport
       if (odds.sport !== oddsApiSport) {
         sportMismatches++;
@@ -166,9 +190,10 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
         sport: trigger.sport,
         teamOrPlayer: odds.team_or_player,  // Use actual odds team name
         betType: odds.bet_type,              // Use actual odds bet type
+        eventId: odds.event_id,              // Track event_id for recurring triggers
       });
 
-      console.log(`[MatchingEngine] ✅ MATCH FOUND for trigger ${trigger.id}: ${odds.bookmaker} @ ${odds.odds_value}`);
+      console.log(`[MatchingEngine] ✅ MATCH FOUND for trigger ${trigger.id}: ${odds.bookmaker} @ ${odds.odds_value} (event: ${odds.event_id})`);
     }
 
     console.log(`[MatchingEngine] Trigger ${trigger.id} results:`);
@@ -177,6 +202,9 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
     console.log(`  - Bet type mismatches: ${betTypeMismatches}`);
     console.log(`  - Bookmaker mismatches: ${bookmakerMismatches}`);
     console.log(`  - Odds condition mismatches: ${oddsMismatches}`);
+    if (trigger.frequency === 'recurring') {
+      console.log(`  - Already matched events skipped: ${alreadyMatchedSkips}`);
+    }
     console.log(`  - Total matches: ${triggerMatches}`);
   }
 
