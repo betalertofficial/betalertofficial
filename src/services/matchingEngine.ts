@@ -213,6 +213,31 @@ export function findMatches(
 }
 
 /**
+ * Match a trigger against odds snapshots
+ * Returns matching events that meet the trigger criteria
+ */
+export function matchTriggerToOdds(
+  trigger: Trigger,
+  oddsSnapshots: OddsSnapshot[]
+): TriggerMatch[] {
+  const matches: TriggerMatch[] = [];
+
+  // Filter odds to matching sport/league
+  const relevantOdds = oddsSnapshots.filter(odd => {
+    // trigger.sport now uses league_key format (e.g., "basketball_nba")
+    // odd.sport_key also uses league_key format
+    return odd.sport_key === trigger.sport;
+  });
+
+  console.log(`[MatchingEngine] Filtering ${oddsSnapshots.length} odds for trigger ${trigger.id}`);
+  console.log(`[MatchingEngine] Trigger league: ${trigger.sport}, Found ${relevantOdds.length} matching odds`);
+
+  // TODO: Implement the rest of the match logic here
+
+  return matches;
+}
+
+/**
  * Check if odds value meets the trigger condition
  */
 function checkOddsCondition(oddsValue: number, comparator: string, targetValue: number): boolean {
