@@ -19,10 +19,16 @@ import {
   Database,
   TrendingUp,
   PlayCircle,
-  Edit
+  Edit,
+  Calendar,
+  RefreshCw,
+  ToggleLeft,
+  ToggleRight
 } from "lucide-react";
 import { PollingControlModal } from "@/components/admin/PollingControlModal";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function AdminPage() {
   const { user, profile, loading } = useAuth();
@@ -38,6 +44,11 @@ export default function AdminPage() {
   const [isManualPolling, setIsManualPolling] = useState(false);
   const [showPollingModal, setShowPollingModal] = useState(false);
   const [isMappingTeams, setIsMappingTeams] = useState(false);
+  const [syncingSchedules, setSyncingSchedules] = useState(false);
+  const [syncResult, setSyncResult] = useState<any>(null);
+  const [trackedLeagues, setTrackedLeagues] = useState<any[]>([]);
+  const [eventSchedules, setEventSchedules] = useState<any[]>([]);
+  const [loadingSchedules, setLoadingSchedules] = useState(false);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -64,6 +75,12 @@ export default function AdminPage() {
 
     checkAdmin();
   }, [user]);
+
+  // Load tracked leagues and event schedules
+  useEffect(() => {
+    loadTrackedLeagues();
+    loadEventSchedules();
+  }, []);
 
   // Cleanup polling interval on unmount
   useEffect(() => {
@@ -327,6 +344,101 @@ export default function AdminPage() {
       setIsMappingTeams(false);
     }
   };
+
+  async function loadTrackedLeagues() {
+    try {
+      const { data, error } = await supabase
+        .from("tracked_leagues")
+        .select("*")
+        .order("league_name");
+
+      if (error) throw error;
+      setTrackedLeagues(data || []);
+    } catch (error) {
+      console.error("Error loading leagues:", error);
+    }
+  }
+
+  async function loadEventSchedules() {
+    setLoadingSchedules(true);
+    try {
+      const { data, error } = await supabase
+        .from("event_schedules")
+        .select("*")
+        .order("commence_time", { ascending: true })
+        .limit(20);
+
+      if (error) throw error;
+      setEventSchedules(data || []);
+    } catch (error) {
+      console.error("Error loading schedules:", error);
+    } finally {
+      setLoadingSchedules(false);
+    }
+  }
+
+  async function handleSyncSchedules() {
+    setSyncingSchedules(true);
+    setSyncResult(null);
+
+    try {
+      const response = await fetch("/api/admin/sync-schedules", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to sync schedules");
+      }
+
+      setSyncResult(result);
+      toast({
+        title: "Success",
+        description: `Synced ${result.total_events_synced} events across ${result.leagues_synced} leagues`,
+      });
+
+      // Reload schedules
+      await loadEventSchedules();
+    } catch (error) {
+      console.error("Sync error:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to sync schedules",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingSchedules(false);
+    }
+  }
+
+  async function toggleLeague(leagueKey: string, currentEnabled: boolean) {
+    try {
+      const { error } = await supabase
+        .from("tracked_leagues")
+        .update({ enabled: !currentEnabled })
+        .eq("league_key", leagueKey);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `League ${!currentEnabled ? "enabled" : "disabled"}`,
+      });
+
+      await loadTrackedLeagues();
+    } catch (error) {
+      console.error("Toggle error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to toggle league",
+        variant: "destructive",
+      });
+    }
+  }
 
   if (loading || checkingAdmin) {
     return (
