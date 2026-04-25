@@ -150,6 +150,56 @@ export type Database = {
         }
         Relationships: []
       }
+      event_schedules: {
+        Row: {
+          away_team: string
+          commence_time: string
+          created_at: string | null
+          event_id: string
+          home_team: string
+          id: string
+          last_checked_at: string | null
+          league_key: string
+          sport_key: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          away_team: string
+          commence_time: string
+          created_at?: string | null
+          event_id: string
+          home_team: string
+          id?: string
+          last_checked_at?: string | null
+          league_key: string
+          sport_key: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          away_team?: string
+          commence_time?: string
+          created_at?: string | null
+          event_id?: string
+          home_team?: string
+          id?: string
+          last_checked_at?: string | null
+          league_key?: string
+          sport_key?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_schedules_league_key_fkey"
+            columns: ["league_key"]
+            isOneToOne: false
+            referencedRelation: "tracked_leagues"
+            referencedColumns: ["league_key"]
+          },
+        ]
+      }
       odds_feed_events: {
         Row: {
           event_count: number | null
@@ -357,6 +407,36 @@ export type Database = {
           primary_color?: string | null
           secondary_color?: string | null
           slug?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      tracked_leagues: {
+        Row: {
+          created_at: string | null
+          enabled: boolean | null
+          id: string
+          league_key: string
+          league_name: string
+          sport_category: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          league_key: string
+          league_name: string
+          sport_category: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          league_key?: string
+          league_name?: string
+          sport_category?: string
           updated_at?: string | null
         }
         Relationships: []
