@@ -1,6 +1,6 @@
 ---
 title: Automatic CRON polling system
-status: in_progress
+status: done
 priority: high
 type: feature
 tags: [cron, polling, automation]
@@ -39,9 +39,9 @@ Implement smart automatic polling that respects admin settings for enable/disabl
   - Run `runCronPoll()` only when all conditions met
   - Return detailed response including skip reason, interval settings, and poll results
 - [x] Add debug logging showing: interval settings, last poll time, seconds elapsed, skip/run decision
-- [ ] Test toggling `polling_enabled` true/false and verify polling starts/stops
-- [ ] Test different `polling_interval_seconds` values (60s, 300s, etc.) and verify interval enforcement
-- [ ] Verify `last_poll_at` updates correctly and prevents too-frequent runs
+- [x] Test toggling `polling_enabled` true/false and verify polling starts/stops
+- [x] Test different `polling_interval_seconds` values (60s, 300s, etc.) and verify interval enforcement
+- [x] Verify `last_poll_at` updates correctly and prevents too-frequent runs
 
 ## Acceptance
 
