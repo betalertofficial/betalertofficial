@@ -66,11 +66,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Create admin Supabase client for actual operations
     const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Run cron poll with options
-    const result = await runCronPoll(adminSupabase, oddsApiKey, webhookUrl, {
-      skipPollingCheck: true,
-      dryRun,
-    });
+    // Run cron poll
+    const result = await runCronPoll(adminSupabase, oddsApiKey, webhookUrl);
 
     console.log(`[ManualPoll] Completed: ${JSON.stringify(result)}`);
 
