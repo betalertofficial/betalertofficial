@@ -94,10 +94,7 @@ export default function AdminPage() {
   // Restart interval if polling is enabled and interval changes
   useEffect(() => {
     if (pollingEnabled && pollingIntervalRef.current) {
-      // Clear existing interval
       clearInterval(pollingIntervalRef.current);
-
-      // Start new interval with updated time (in seconds now)
       pollingIntervalRef.current = setInterval(async () => {
         try {
           await handleManualPoll();
@@ -124,9 +121,102 @@ export default function AdminPage() {
     }
   };
 
+  async function loadTrackedLeagues() {
+    try {
+      const { data, error } = await supabase
+        .from("tracked_leagues")
+        .select("*")
+        .order("league_name");
+
+      if (error) throw error;
+      setTrackedLeagues(data || []);
+    } catch (error) {
+      console.error("Error loading leagues:", error);
+    }
+  }
+
+  async function loadEventSchedules() {
+    setLoadingSchedules(true);
+    try {
+      const { data, error } = await supabase
+        .from("event_schedules")
+        .select("*")
+        .order("commence_time", { ascending: true })
+        .limit(20);
+
+      if (error) throw error;
+      setEventSchedules(data || []);
+    } catch (error) {
+      console.error("Error loading schedules:", error);
+    } finally {
+      setLoadingSchedules(false);
+    }
+  }
+
+  async function handleSyncSchedules() {
+    setSyncingSchedules(true);
+    setSyncResult(null);
+
+    try {
+      const response = await fetch("/api/admin/sync-schedules", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to sync schedules");
+      }
+
+      setSyncResult(result);
+      toast({
+        title: "Success",
+        description: `Synced ${result.total_events_synced} events across ${result.leagues_synced} leagues`,
+      });
+
+      await loadEventSchedules();
+    } catch (error) {
+      console.error("Sync error:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to sync schedules",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingSchedules(false);
+    }
+  }
+
+  async function toggleLeague(leagueKey: string, currentEnabled: boolean) {
+    try {
+      const { error } = await supabase
+        .from("tracked_leagues")
+        .update({ enabled: !currentEnabled })
+        .eq("league_key", leagueKey);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `League ${!currentEnabled ? "enabled" : "disabled"}`,
+      });
+
+      await loadTrackedLeagues();
+    } catch (error) {
+      console.error("Toggle error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to toggle league",
+        variant: "destructive",
+      });
+    }
+  }
+
   const handlePollingToggle = async (enabled: boolean) => {
     try {
-      // Clear any existing interval
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
@@ -145,12 +235,8 @@ export default function AdminPage() {
 
       setPollingEnabled(enabled);
 
-      // If enabling, start the polling interval
       if (enabled) {
-        // Run immediately
         await handleManualPoll();
-
-        // Then set up interval (in seconds now)
         pollingIntervalRef.current = setInterval(async () => {
           try {
             await handleManualPoll();
@@ -209,14 +295,11 @@ export default function AdminPage() {
       setPollingInterval(newInterval);
       setIsEditingInterval(false);
 
-      // Restart polling with new interval if enabled
       if (pollingEnabled) {
-        // Clear existing interval
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
         }
 
-        // Start new interval
         pollingIntervalRef.current = setInterval(async () => {
           try {
             await handleManualPoll();
@@ -241,7 +324,6 @@ export default function AdminPage() {
   };
 
   const handleManualPoll = async () => {
-    // Prevent multiple simultaneous polls
     if (isManualPolling) {
       console.log("Poll already in progress, skipping");
       return;
@@ -304,7 +386,6 @@ export default function AdminPage() {
       console.log("Resetting manual poll loading state");
       setIsManualPolling(false);
       
-      // Reload admin data in the background (don't block the finally)
       loadAdminData().catch((error) => {
         console.error("Error reloading admin data:", error);
       });
@@ -344,101 +425,6 @@ export default function AdminPage() {
       setIsMappingTeams(false);
     }
   };
-
-  async function loadTrackedLeagues() {
-    try {
-      const { data, error } = await supabase
-        .from("tracked_leagues")
-        .select("*")
-        .order("league_name");
-
-      if (error) throw error;
-      setTrackedLeagues(data || []);
-    } catch (error) {
-      console.error("Error loading leagues:", error);
-    }
-  }
-
-  async function loadEventSchedules() {
-    setLoadingSchedules(true);
-    try {
-      const { data, error } = await supabase
-        .from("event_schedules")
-        .select("*")
-        .order("commence_time", { ascending: true })
-        .limit(20);
-
-      if (error) throw error;
-      setEventSchedules(data || []);
-    } catch (error) {
-      console.error("Error loading schedules:", error);
-    } finally {
-      setLoadingSchedules(false);
-    }
-  }
-
-  async function handleSyncSchedules() {
-    setSyncingSchedules(true);
-    setSyncResult(null);
-
-    try {
-      const response = await fetch("/api/admin/sync-schedules", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to sync schedules");
-      }
-
-      setSyncResult(result);
-      toast({
-        title: "Success",
-        description: `Synced ${result.total_events_synced} events across ${result.leagues_synced} leagues`,
-      });
-
-      // Reload schedules
-      await loadEventSchedules();
-    } catch (error) {
-      console.error("Sync error:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to sync schedules",
-        variant: "destructive",
-      });
-    } finally {
-      setSyncingSchedules(false);
-    }
-  }
-
-  async function toggleLeague(leagueKey: string, currentEnabled: boolean) {
-    try {
-      const { error } = await supabase
-        .from("tracked_leagues")
-        .update({ enabled: !currentEnabled })
-        .eq("league_key", leagueKey);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: `League ${!currentEnabled ? "enabled" : "disabled"}`,
-      });
-
-      await loadTrackedLeagues();
-    } catch (error) {
-      console.error("Toggle error:", error);
-      toast({
-        title: "Error",
-        description: "Failed to toggle league",
-        variant: "destructive",
-      });
-    }
-  }
 
   if (loading || checkingAdmin) {
     return (
@@ -576,13 +562,183 @@ export default function AdminPage() {
           </Card>
         </div>
 
-        <Tabs defaultValue="overview" className="space-y-6">
+        <Tabs defaultValue="schedules" className="space-y-6">
           <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-4">
+            <TabsTrigger value="schedules">Schedules</TabsTrigger>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="triggers">Triggers</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="schedules">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Event Schedule Management
+                </CardTitle>
+                <CardDescription>
+                  Configure tracked leagues and sync upcoming game schedules
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Sync Schedules Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold">Sync Event Schedules</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Fetch upcoming games for enabled leagues (next 7-14 days)
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleSyncSchedules}
+                      disabled={syncingSchedules}
+                    >
+                      {syncingSchedules ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Syncing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Sync Now
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {syncResult && (
+                    <Alert>
+                      <Database className="h-4 w-4" />
+                      <AlertTitle>Sync Complete</AlertTitle>
+                      <AlertDescription>
+                        <div className="mt-2 space-y-1 text-sm">
+                          <p>Total events synced: {syncResult.total_events_synced}</p>
+                          <p>Leagues processed: {syncResult.leagues_synced}</p>
+                          {syncResult.details && (
+                            <div className="mt-2">
+                              {Object.entries(syncResult.details).map(([league, count]: [string, any]) => (
+                                <p key={league}>
+                                  {league}: {count} events
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+
+                {/* Tracked Leagues Section */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Tracked Leagues</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {trackedLeagues.map((league) => (
+                      <Card key={league.league_key}>
+                        <CardContent className="flex items-center justify-between p-4">
+                          <div>
+                            <p className="font-medium">{league.league_name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {league.league_key}
+                            </p>
+                          </div>
+                          <Button
+                            variant={league.enabled ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => toggleLeague(league.league_key, league.enabled)}
+                          >
+                            {league.enabled ? (
+                              <>
+                                <ToggleRight className="mr-2 h-4 w-4" />
+                                Enabled
+                              </>
+                            ) : (
+                              <>
+                                <ToggleLeft className="mr-2 h-4 w-4" />
+                                Disabled
+                              </>
+                            )}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Upcoming Events Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">Upcoming Events</h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={loadEventSchedules}
+                      disabled={loadingSchedules}
+                    >
+                      {loadingSchedules ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+
+                  {eventSchedules.length === 0 ? (
+                    <Alert>
+                      <AlertTitle>No events scheduled</AlertTitle>
+                      <AlertDescription>
+                        Click "Sync Now" to fetch upcoming game schedules
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>League</TableHead>
+                            <TableHead>Matchup</TableHead>
+                            <TableHead>Start Time</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {eventSchedules.map((event) => (
+                            <TableRow key={event.id}>
+                              <TableCell className="font-medium">
+                                {event.league_key.replace("_", " ").toUpperCase()}
+                              </TableCell>
+                              <TableCell>
+                                {event.away_team} @ {event.home_team}
+                              </TableCell>
+                              <TableCell>
+                                {new Date(event.commence_time).toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    event.status === "live"
+                                      ? "default"
+                                      : event.status === "completed"
+                                      ? "secondary"
+                                      : "outline"
+                                  }
+                                >
+                                  {event.status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="overview">
             <div className="grid gap-6">
@@ -599,7 +755,7 @@ export default function AdminPage() {
                       </Label>
                       <p className="text-sm text-muted-foreground">
                         {pollingEnabled 
-                          ? "API calls running every 30 seconds" 
+                          ? `API calls running every ${pollingInterval} seconds` 
                           : "Polling suspended - no API calls"}
                       </p>
                     </div>
@@ -699,19 +855,25 @@ export default function AdminPage() {
                   </Button>
                 </CardContent>
               </Card>
-            </div>
-          </TabsContent>
 
-          <TabsContent value="users">
-            <Card className="glass-panel">
-              <CardHeader>
-                <CardTitle>User Management</CardTitle>
-                <CardDescription>View and manage user accounts</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">User management interface coming soon...</p>
-              </CardContent>
-            </Card>
+              <div className="glass-panel p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold">NBA Team Mapping</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Map Odds API team names to canonical teams
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleMapNBATeams}
+                    disabled={isMappingTeams}
+                    variant="outline"
+                  >
+                    {isMappingTeams ? "Mapping..." : "Map NBA Teams"}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="triggers">
@@ -738,39 +900,6 @@ export default function AdminPage() {
             </Card>
           </TabsContent>
         </Tabs>
-
-        <div className="mt-8">
-          <h2 className="text-2xl font-semibold tracking-tight mb-4">System Controls</h2>
-          <Card>
-            <CardHeader>
-              <CardTitle>API Polling</CardTitle>
-              <CardDescription>
-                Manually control the automated 1-minute polling of the Odds API.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button onClick={() => setShowPollingModal(true)}>Manage API Polling</Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="glass-panel p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold">NBA Team Mapping</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Map Odds API team names to canonical teams
-              </p>
-            </div>
-            <Button
-              onClick={handleMapNBATeams}
-              disabled={isMappingTeams}
-              variant="outline"
-            >
-              {isMappingTeams ? "Mapping..." : "Map NBA Teams"}
-            </Button>
-          </div>
-        </div>
       </main>
 
       <footer className="border-t border-border mt-16 py-8">
