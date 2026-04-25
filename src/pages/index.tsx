@@ -13,29 +13,13 @@ export default function LandingPage() {
       />
 
       {/* Hero Section */}
-      <section className="container mx-auto px-4 py-20 md:py-32">
-        <div className="grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-6">We monitor the games when you can't.
-
-            </h1>
-            <p className="text-lg text-gray-600 mb-8">Set highly customized alert conditions and get a text the moment it hits.
-
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <Link href="/dashboard">
-                <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-8 py-6 text-lg">
-                  Create My Alert
-                </Button>
-              </Link>
-            </div>
-          </div>
-
-          {/* Trigger Card Mockup */}
-          <div className="relative">
+      <section className="container mx-auto px-4 py-12 md:py-32">
+        <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
+          {/* Trigger Card Mockup - Shows first on mobile */}
+          <div className="relative order-1 md:order-2">
             <Card className="p-6 shadow-xl bg-white rounded-2xl">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="font-semibold text-lg">Create Alert</h3>
+                <h3 className="font-semibold text-lg">Create Trigger</h3>
                 <Settings className="h-5 w-5 text-gray-400" />
               </div>
 
@@ -45,7 +29,7 @@ export default function LandingPage() {
                     Team
                   </label>
                   <div className="bg-gray-100 rounded-lg px-4 py-3 flex items-center justify-between">
-                    <span className="text-gray-900">Boston Celtics</span>
+                    <span className="text-gray-900">Lakers</span>
                     <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
@@ -76,30 +60,47 @@ export default function LandingPage() {
                     Game Context
                   </label>
                   <div className="bg-gray-100 rounded-lg px-4 py-3">
-                    <span className="text-gray-900">2nd Quarter</span>
+                    <span className="text-gray-900">3rd Quarter or later</span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 text-green-600 bg-green-50 rounded-lg px-4 py-3">
-                  <CheckCircle2 className="h-5 w-5" />
+                  <Bell className="h-5 w-5" />
                   <span className="font-medium">Condition Matched!</span>
                 </div>
               </div>
             </Card>
 
             {/* SMS Notification Mockup with Pulse Animation */}
-            <div className="absolute -bottom-8 -right-8 bg-gray-900 text-white rounded-2xl p-4 shadow-2xl max-w-xs animate-pulse-float">
-              <div className="flex items-start gap-3">
-                <div className="bg-green-500 rounded-lg p-2 flex-shrink-0">
-                  <Bell className="h-4 w-4" />
+            <div className="absolute -bottom-6 -right-6 md:-bottom-8 md:-right-8 bg-gray-900 text-white rounded-2xl p-3 md:p-4 shadow-2xl max-w-[280px] md:max-w-xs animate-pulse-float">
+              <div className="flex items-start gap-2 md:gap-3">
+                <div className="bg-green-500 rounded-lg p-1.5 md:p-2 flex-shrink-0">
+                  <Bell className="h-3 w-3 md:h-4 md:w-4" />
                 </div>
                 <div>
                   <div className="text-xs font-semibold mb-1">BET ALERT - NOW</div>
-                  <div className="text-sm">
+                  <div className="text-xs md:text-sm">
                     Lakers are at <span className="font-bold">+350</span> with 8 min left in the 3rd Quarter. Score is 85-74.
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Text Content - Shows second on mobile */}
+          <div className="order-2 md:order-1 mt-8 md:mt-0">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-4 md:mb-6">
+              We watch the games when you can't.
+            </h1>
+            <p className="text-base md:text-lg text-gray-600 mb-6 md:mb-8 leading-relaxed">
+              Set highly specific triggers and get an SMS the moment it hits.
+            </p>
+            <div className="flex flex-wrap gap-4">
+              <Link href="/dashboard">
+                <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-6 py-5 md:px-8 md:py-6 text-base md:text-lg">
+                  Create My Alert
+                </Button>
+              </Link>
             </div>
           </div>
         </div>

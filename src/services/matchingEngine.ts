@@ -20,6 +20,7 @@ interface OddsSnapshot {
   bookmaker: string;
   bet_type: string;
   odds_value: number;
+  event_data?: any; // Event data from Odds API (includes commence_time)
 }
 
 export interface Match {
@@ -62,10 +63,27 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
 
   console.log(`[MatchingEngine] Starting match process: ${triggers.length} triggers, ${oddsData.length} odds snapshots`);
   
+  // Filter out pregame odds - only include games that have started
+  const currentTime = new Date();
+  const liveOdds = oddsData.filter(odds => {
+    if (!odds.event_data?.commence_time) {
+      // If no commence_time, assume it's live (shouldn't happen but be safe)
+      return true;
+    }
+    const commenceTime = new Date(odds.event_data.commence_time);
+    return commenceTime <= currentTime;
+  });
+
+  const filteredCount = oddsData.length - liveOdds.length;
+  if (filteredCount > 0) {
+    console.log(`[MatchingEngine] Filtered out ${filteredCount} pregame odds (games not started yet)`);
+  }
+  console.log(`[MatchingEngine] Processing ${liveOdds.length} live game odds`);
+  
   // DEBUG: Show sample odds data
-  if (oddsData.length > 0) {
-    console.log("[MatchingEngine] DEBUG - Sample odds data (first 3):");
-    oddsData.slice(0, 3).forEach(odds => {
+  if (liveOdds.length > 0) {
+    console.log("[MatchingEngine] DEBUG - Sample live odds data (first 3):");
+    liveOdds.slice(0, 3).forEach(odds => {
       console.log(`  - ${odds.sport} | ${odds.team_or_player} | ${odds.bet_type} | ${odds.bookmaker} | ${odds.odds_value}`);
     });
   }
@@ -85,7 +103,7 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
     const oddsApiBetType = BET_TYPE_MAPPING[trigger.bet_type.toLowerCase()] || trigger.bet_type.toLowerCase();
     console.log(`[MatchingEngine] Mapped bet type: ${trigger.bet_type} → ${oddsApiBetType}`);
 
-    // Find matching odds
+    // Find matching odds (using filtered live odds only)
     let triggerMatches = 0;
     let sportMismatches = 0;
     let teamMismatches = 0;
@@ -93,7 +111,7 @@ export function findMatches(triggers: Trigger[], oddsData: OddsSnapshot[]): Matc
     let bookmakerMismatches = 0;
     let oddsMismatches = 0;
     
-    for (const odds of oddsData) {
+    for (const odds of liveOdds) {
       // 1. Match sport
       if (odds.sport !== oddsApiSport) {
         sportMismatches++;
