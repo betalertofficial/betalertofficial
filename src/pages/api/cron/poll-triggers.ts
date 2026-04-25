@@ -3,8 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 import { runCronPoll } from "@/services/cronPollingService";
 
 /**
- * Cron endpoint for trigger evaluation
+ * Smart cron endpoint for trigger evaluation
  * GET /api/cron/poll-triggers
+ * 
+ * Runs every minute via Vercel Cron, but only executes polling if:
+ * 1. admin_settings.odds_polling_status = 'true'
+ * 2. Enough time has passed since last poll (based on polling_interval_seconds)
+ * 
  * Requires: Authorization: Bearer CRON_SECRET
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -51,6 +56,77 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Create admin Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Fetch settings as key-value pairs
+    const { data: settingsRows, error: settingsError } = await supabase
+      .from("admin_settings")
+      .select("setting_key, setting_value")
+      .in("setting_key", ["odds_polling_status", "polling_interval_seconds", "last_poll_at"]);
+
+    if (settingsError) {
+      console.error("[Cron] Error fetching admin settings:", settingsError);
+      return res.status(500).json({ error: "Failed to fetch settings" });
+    }
+
+    // Parse key-value pairs into settings object
+    const settings: Record<string, string> = {};
+    settingsRows?.forEach(row => {
+      settings[row.setting_key] = row.setting_value;
+    });
+
+    const pollingEnabled = settings.odds_polling_status === "true";
+    const intervalSeconds = parseInt(settings.polling_interval_seconds || "60");
+    const lastPollAt = settings.last_poll_at || null;
+
+    console.log(`[Cron] Settings: polling_enabled=${pollingEnabled}, interval=${intervalSeconds}s, last_poll=${lastPollAt}`);
+
+    // If polling is disabled, skip
+    if (!pollingEnabled) {
+      console.log("[Cron] Polling is disabled, skipping");
+      return res.status(200).json({
+        skipped: true,
+        reason: "Polling disabled in admin settings",
+      });
+    }
+
+    // Check if enough time has passed since last poll
+    const now = new Date();
+    
+    if (lastPollAt) {
+      const lastPoll = new Date(lastPollAt);
+      const secondsSinceLastPoll = (now.getTime() - lastPoll.getTime()) / 1000;
+      
+      if (secondsSinceLastPoll < intervalSeconds) {
+        const remainingSeconds = Math.ceil(intervalSeconds - secondsSinceLastPoll);
+        console.log(`[Cron] Skipping poll - only ${Math.floor(secondsSinceLastPoll)}s since last poll (interval: ${intervalSeconds}s, ${remainingSeconds}s remaining)`);
+        return res.status(200).json({
+          skipped: true,
+          reason: "Polling interval not reached",
+          seconds_since_last_poll: Math.floor(secondsSinceLastPoll),
+          required_interval: intervalSeconds,
+          seconds_remaining: remainingSeconds,
+        });
+      }
+    }
+
+    console.log(`[Cron] Starting poll (interval: ${intervalSeconds}s, last poll: ${lastPollAt || 'never'})`);
+
+    // Update last_poll_at BEFORE running (prevents concurrent runs)
+    // Use upsert to handle case where last_poll_at setting doesn't exist yet
+    const { error: updateError } = await supabase
+      .from("admin_settings")
+      .upsert({ 
+        setting_key: "last_poll_at",
+        setting_value: now.toISOString(),
+        updated_at: now.toISOString()
+      }, {
+        onConflict: "setting_key"
+      });
+
+    if (updateError) {
+      console.error("[Cron] Error updating last_poll_at:", updateError);
+      // Continue anyway - non-critical
+    }
+
     // Run cron poll
     const result = await runCronPoll(supabase, oddsApiKey, webhookUrl);
 
@@ -62,6 +138,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       alerts_created: result.alertsCreated,
       webhooks_sent: result.webhooksSent,
       duration_ms: result.durationMs,
+      polling_interval_seconds: intervalSeconds,
       error: result.error,
     });
   } catch (error) {
