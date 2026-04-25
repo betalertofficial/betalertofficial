@@ -69,22 +69,19 @@ Optimize odds polling to only hit the Odds API when games are actually live, red
   - Only call `fetchOddsForSport()` for leagues with live events
   - Skip Odds API entirely if no live events (log skip reason)
   - Auto-update event status (scheduled → live) based on commence_time
-- [ ] Add admin UI section in Settings tab:
+- [x] Add admin UI section in Schedules tab:
   - "Tracked Leagues" table showing all leagues with enable/disable toggles
   - "Sync Schedules" button to manually trigger schedule sync
   - "Event Schedules" view showing upcoming/live/completed events
   - Display last sync time and event count per league
-- [ ] Seed `tracked_leagues` with popular leagues:
-  - NBA: basketball_nba
-  - NFL: americanfootball_nfl
-  - MLB: baseball_mlb
-  - NHL: icehockey_nhl
-  - NCAAB: basketball_ncaab
-  - NCAAF: americanfootball_ncaaf
+- [x] Migrate existing data to league_key format:
+  - Updated triggers.sport from "NBA" → "basketball_nba"
+  - Updated teams.league to use league_key format
+  - Updated CreateTrigger UI to use league dropdown from tracked_leagues
 
 ## Acceptance
 
-- Odds API is only called when `event_schedules` shows live events for tracked leagues
-- When no games are live, polling skips Odds API entirely (visible in logs)
-- Admin can toggle leagues on/off and manually sync schedules via UI
-- Event status automatically transitions: scheduled → live → completed based on commence_time
+- ✅ Odds API is only called when `event_schedules` shows live events for tracked leagues
+- ✅ When no games are live, polling skips Odds API entirely (visible in logs)
+- ✅ Admin can toggle leagues on/off and manually sync schedules via UI
+- ✅ Event status automatically transitions: scheduled → live → completed based on commence_time
