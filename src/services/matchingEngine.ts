@@ -33,6 +33,7 @@ export interface Match {
   teamOrPlayer: string;
   betType: string;
   eventId: string; // Add event_id to track per-game matches
+  frequency: string; // 'once' or 'recurring'
 }
 
 // Sport mapping: user-facing name → odds API sport key
@@ -185,13 +186,14 @@ export function findMatches(
       triggerMatches++;
       matches.push({
         triggerId: trigger.id,
+        eventId: odds.event_id,
+        teamOrPlayer: odds.team_or_player,
+        sport: odds.sport,
+        betType: odds.bet_type,
         oddsValue: odds.odds_value,
         bookmaker: odds.bookmaker,
         eventDetails: `${odds.team_or_player} ${odds.bet_type}`,
-        sport: trigger.sport,
-        teamOrPlayer: odds.team_or_player,  // Use actual odds team name
-        betType: odds.bet_type,              // Use actual odds bet type
-        eventId: odds.event_id,              // Track event_id for recurring triggers
+        frequency: trigger.frequency, // Include frequency from trigger
       });
 
       console.log(`[MatchingEngine] ✅ MATCH FOUND for trigger ${trigger.id}: ${odds.bookmaker} @ ${odds.odds_value} (event: ${odds.event_id})`);
