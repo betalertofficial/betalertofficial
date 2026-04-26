@@ -313,9 +313,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
       const oddsComparator = oddsDirection === "higher" ? ">=" : "<=";
 
       console.log("Creating trigger with data:", {
-        sport: SPORT_DISPLAY_NAMES[selectedSport] || selectedSport,
+        sport: selectedSport, // Use API key format (e.g., "baseball_mlb") NOT display name
         team_or_player: selectedTeam,
-        team_id: selectedTeamId || null, // Use the UUID we already have from team selection
+        team_id: selectedTeamId || null,
         bet_type: betType,
         odds_comparator: oddsComparator,
         odds_value: finalOddsValue,
@@ -326,9 +326,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
       });
 
       const trigger = await triggerService.createTrigger({
-        sport: SPORT_DISPLAY_NAMES[selectedSport] || selectedSport,
+        sport: selectedSport, // Store "baseball_mlb", NOT "MLB"
         team_or_player: selectedTeam,
-        team_id: selectedTeamId || null, // Pass the actual team UUID
+        team_id: selectedTeamId || null,
         bet_type: betType,
         odds_comparator: oddsComparator,
         odds_value: finalOddsValue,
