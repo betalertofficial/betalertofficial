@@ -327,7 +327,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
       const trigger = await triggerService.createTrigger({
         sport: SPORT_DISPLAY_NAMES[selectedSport] || selectedSport,
         team_or_player: selectedTeam,
-        team_id: selectedTeamId,
+        team_id: null, // Explicitly set to null instead of undefined
         bet_type: betType,
         odds_comparator: oddsComparator,
         odds_value: finalOddsValue,
