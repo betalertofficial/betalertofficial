@@ -428,13 +428,20 @@ export async function runCronPoll(
         // Send webhook if URL is configured
         if (webhookUrl) {
           try {
+            // Fetch full trigger data
+            const { data: triggerData } = await supabase
+              .from("triggers")
+              .select("*")
+              .eq("id", match.triggerId)
+              .single();
+
             await fetch(webhookUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 trigger_id: match.triggerId,
                 alert_id: alert.id,
-                message: alert.message, // Include the full alert message
+                message: alert.message,
                 event: match.eventDetails,
                 sport: match.sport,
                 team: match.teamOrPlayer,
@@ -454,6 +461,8 @@ export async function runCronPoll(
                 // Metadata
                 matched_at: triggerMatch.matched_at,
                 delivery_status: alert.delivery_status,
+                // Full trigger data
+                trigger: triggerData,
               }),
             });
             webhooksSent++;
