@@ -388,13 +388,21 @@ export async function runCronPoll(
           }
         }
 
+        // Build alert message with ESPN game data
+        let alertMessage = `${match.teamOrPlayer} ${match.betType} hit! ${match.bookmaker}: ${formatOdds(match.oddsValue)}`;
+        
+        if (espnData?.found) {
+          // Add game score and status to message
+          alertMessage += `\n\n📊 Game Status: ${espnService.formatScore(espnData)}`;
+        }
+
         // Create alert with profile_id and ESPN game data
         const { data: alert, error: alertError } = await supabase
           .from("alerts")
           .insert({
             trigger_match_id: triggerMatch.id,
             profile_id: profileTrigger.profile_id,
-            message: `${match.teamOrPlayer} ${match.betType} hit! ${match.bookmaker}: ${formatOdds(match.oddsValue)}`,
+            message: alertMessage,
             // ESPN game data fields
             game_status: espnData?.state || null,
             game_detail: espnData?.detail || null,
@@ -426,10 +434,26 @@ export async function runCronPoll(
               body: JSON.stringify({
                 trigger_id: match.triggerId,
                 alert_id: alert.id,
+                message: alert.message, // Include the full alert message
                 event: match.eventDetails,
                 sport: match.sport,
+                team: match.teamOrPlayer,
+                bet_type: match.betType,
                 odds: match.oddsValue,
                 bookmaker: match.bookmaker,
+                // ESPN game data
+                game_status: alert.game_status,
+                game_detail: alert.game_detail,
+                home_team: alert.home_team,
+                away_team: alert.away_team,
+                home_score: alert.home_score,
+                away_score: alert.away_score,
+                period: alert.period,
+                clock: alert.clock,
+                score_summary: alert.score_summary,
+                // Metadata
+                matched_at: triggerMatch.matched_at,
+                delivery_status: alert.delivery_status,
               }),
             });
             webhooksSent++;
