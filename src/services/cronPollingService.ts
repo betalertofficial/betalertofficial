@@ -330,6 +330,18 @@ export async function runCronPoll(
           continue;
         }
 
+        // Get profile_id for this trigger from profile_triggers junction table
+        const { data: profileTrigger, error: profileError } = await supabase
+          .from("profile_triggers")
+          .select("profile_id")
+          .eq("trigger_id", match.triggerId)
+          .single();
+
+        if (profileError || !profileTrigger) {
+          console.error(`[CronPoll] No profile found for trigger ${match.triggerId}:`, profileError);
+          continue;
+        }
+
         // Create trigger_match
         const { data: triggerMatch, error: matchError } = await supabase
           .from("trigger_matches")
@@ -349,14 +361,12 @@ export async function runCronPoll(
 
         matchesCreated++;
 
-        // Create alert
+        // Create alert with profile_id
         const { data: alert, error: alertError } = await supabase
           .from("alerts")
           .insert({
             trigger_match_id: triggerMatch.id,
-            sport: match.sport,
-            home_team: match.eventDetails.split(" ")[0] || "",
-            away_team: match.teamOrPlayer,
+            profile_id: profileTrigger.profile_id, // Required field from profile_triggers
             message: `${match.teamOrPlayer} ${match.betType} hit! ${match.bookmaker}: ${formatOdds(match.oddsValue)}`,
           })
           .select()
