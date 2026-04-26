@@ -60,7 +60,7 @@ export const triggerService = {
       .insert([{
         sport: params.sport,
         team_or_player: params.team_or_player,
-        team_id: params.team_id,
+        team_id: params.team_id || null, // Convert undefined/empty string to null
         bet_type: params.bet_type,
         odds_comparator: params.odds_comparator,
         odds_value: params.odds_value,

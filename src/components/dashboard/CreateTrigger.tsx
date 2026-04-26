@@ -315,6 +315,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
       console.log("Creating trigger with data:", {
         sport: SPORT_DISPLAY_NAMES[selectedSport] || selectedSport,
         team_or_player: selectedTeam,
+        team_id: selectedTeamId || null, // Use the UUID we already have from team selection
         bet_type: betType,
         odds_comparator: oddsComparator,
         odds_value: finalOddsValue,
@@ -327,7 +328,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
       const trigger = await triggerService.createTrigger({
         sport: SPORT_DISPLAY_NAMES[selectedSport] || selectedSport,
         team_or_player: selectedTeam,
-        team_id: null, // Explicitly set to null instead of undefined
+        team_id: selectedTeamId || null, // Pass the actual team UUID
         bet_type: betType,
         odds_comparator: oddsComparator,
         odds_value: finalOddsValue,
