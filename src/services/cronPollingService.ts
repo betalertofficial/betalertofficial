@@ -11,6 +11,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/integrations/supabase/types";
 import { getActiveSports, markEventsAsLive, markEventsAsCompleted } from "./scheduleService";
 import { findMatches, deduplicateMatches } from "./matchingEngine";
+import { espnService } from "./espnService";
 
 type Trigger = Database["public"]["Tables"]["triggers"]["Row"];
 
@@ -361,13 +362,49 @@ export async function runCronPoll(
 
         matchesCreated++;
 
-        // Create alert with profile_id
+        // Fetch ESPN game data
+        const oddsSnapshot = allOdds.find(o => 
+          o.event_id === match.eventId && 
+          o.team_or_player === match.teamOrPlayer &&
+          o.bookmaker === match.bookmaker &&
+          o.bet_type === match.betType
+        );
+
+        let espnData = null;
+        if (oddsSnapshot?.event_data) {
+          const eventData = oddsSnapshot.event_data;
+          console.log(`[CronPoll] Fetching ESPN data for: ${eventData.away_team} @ ${eventData.home_team} (${match.sport})`);
+          
+          espnData = await espnService.findGameScore(
+            match.sport,
+            eventData.home_team,
+            eventData.away_team
+          );
+          
+          if (espnData.found) {
+            console.log(`[CronPoll] ESPN data found: ${espnService.formatScore(espnData)}`);
+          } else {
+            console.log(`[CronPoll] ESPN data not found for this game`);
+          }
+        }
+
+        // Create alert with profile_id and ESPN game data
         const { data: alert, error: alertError } = await supabase
           .from("alerts")
           .insert({
             trigger_match_id: triggerMatch.id,
-            profile_id: profileTrigger.profile_id, // Required field from profile_triggers
+            profile_id: profileTrigger.profile_id,
             message: `${match.teamOrPlayer} ${match.betType} hit! ${match.bookmaker}: ${formatOdds(match.oddsValue)}`,
+            // ESPN game data fields
+            game_status: espnData?.state || null,
+            game_detail: espnData?.detail || null,
+            home_team: espnData?.homeTeam || null,
+            away_team: espnData?.awayTeam || null,
+            home_score: espnData?.homeScore || null,
+            away_score: espnData?.awayScore || null,
+            period: espnData?.period || null,
+            clock: espnData?.clock || null,
+            score_summary: espnData?.found ? espnService.formatScore(espnData) : null,
           })
           .select()
           .single();

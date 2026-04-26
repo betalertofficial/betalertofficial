@@ -1,10 +1,16 @@
 /**
- * ESPN NBA Scoreboard Service
+ * ESPN Scoreboard Service
  * Free API - no authentication required
- * Documentation: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard
+ * Supports: NBA, MLB
  */
 
-const ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard";
+const ESPN_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports";
+
+// Sport-specific endpoints
+const SPORT_ENDPOINTS: Record<string, string> = {
+  "basketball_nba": `${ESPN_BASE_URL}/basketball/nba/scoreboard`,
+  "baseball_mlb": `${ESPN_BASE_URL}/baseball/mlb/scoreboard`,
+};
 
 export interface ESPNScore {
   found: boolean;
@@ -12,10 +18,10 @@ export interface ESPNScore {
   awayTeam?: string;
   homeScore?: number;
   awayScore?: number;
-  period?: number;
+  period?: number; // Inning for baseball, Quarter for basketball
   clock?: string;
   state?: string; // STATUS_SCHEDULED, STATUS_IN_PROGRESS, STATUS_FINAL
-  detail?: string; // e.g., "4th - 2:30" or "Final"
+  detail?: string; // e.g., "Top 4th" or "4th - 2:30" or "Final"
   espnGameId?: string;
 }
 
@@ -120,11 +126,18 @@ function teamsMatch(name1: string, name2: string): boolean {
 
 export const espnService = {
   /**
-   * Fetch NBA scoreboard from ESPN
+   * Fetch scoreboard from ESPN for a specific sport
+   * @param sport - Sport key (e.g., "basketball_nba", "baseball_mlb")
    * @param date - Optional date in YYYYMMDD format (defaults to today)
    */
-  async getScoreboard(date?: string): Promise<ESPNScoreboard> {
-    const url = date ? `${ESPN_SCOREBOARD_URL}?dates=${date}` : ESPN_SCOREBOARD_URL;
+  async getScoreboard(sport: string, date?: string): Promise<ESPNScoreboard> {
+    const endpoint = SPORT_ENDPOINTS[sport];
+    
+    if (!endpoint) {
+      throw new Error(`Unsupported sport: ${sport}. Supported: ${Object.keys(SPORT_ENDPOINTS).join(", ")}`);
+    }
+    
+    const url = date ? `${endpoint}?dates=${date}` : endpoint;
     
     try {
       const response = await fetch(url);
@@ -136,18 +149,19 @@ export const espnService = {
       const data = await response.json();
       return data;
     } catch (error) {
-      console.error("Error fetching ESPN scoreboard:", error);
+      console.error(`Error fetching ESPN ${sport} scoreboard:`, error);
       throw error;
     }
   },
 
   /**
    * Find a specific game's score by team names
+   * @param sport - Sport key (e.g., "basketball_nba", "baseball_mlb")
    * @param homeTeam - Home team name (can be full or partial)
    * @param awayTeam - Away team name (can be full or partial)
    * @param date - Optional date in YYYYMMDD format
    */
-  async findGameScore(homeTeam: string, awayTeam: string, date?: string): Promise<ESPNScore> {
+  async findGameScore(sport: string, homeTeam: string, awayTeam: string, date?: string): Promise<ESPNScore> {
     try {
       // If no date provided, use current date in Pacific timezone
       if (!date) {
@@ -159,9 +173,9 @@ export const espnService = {
         console.log(`[ESPN] Using Pacific date: ${date}`);
       }
       
-      console.log(`[ESPN] Searching for game: ${awayTeam} @ ${homeTeam} on date ${date}`);
+      console.log(`[ESPN] Searching ${sport} for game: ${awayTeam} @ ${homeTeam} on date ${date}`);
       
-      const scoreboard = await this.getScoreboard(date);
+      const scoreboard = await this.getScoreboard(sport, date);
       console.log(`[ESPN] Found ${scoreboard.events?.length || 0} total events`);
       
       for (const event of scoreboard.events || []) {
@@ -207,7 +221,7 @@ export const espnService = {
       console.log(`[ESPN] ❌ No ESPN game found for ${homeTeam} vs ${awayTeam} on ${date}`);
       return { found: false };
     } catch (error) {
-      console.error("[ESPN] Error finding game score:", error);
+      console.error(`[ESPN] Error finding ${sport} game score:`, error);
       return { found: false };
     }
   },
