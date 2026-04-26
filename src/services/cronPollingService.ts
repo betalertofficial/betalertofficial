@@ -362,6 +362,20 @@ export async function runCronPoll(
 
         matchesCreated++;
 
+        // If this is a "once" trigger, mark it as completed
+        if (match.frequency === "once") {
+          const { error: updateError } = await supabase
+            .from("triggers")
+            .update({ status: "completed" })
+            .eq("id", match.triggerId);
+          
+          if (updateError) {
+            console.error(`[CronPoll] Failed to mark trigger ${match.triggerId} as completed:`, updateError);
+          } else {
+            console.log(`[CronPoll] Marked trigger ${match.triggerId} as completed (frequency=once)`);
+          }
+        }
+
         // Fetch ESPN game data
         const oddsSnapshot = allOdds.find(o => 
           o.event_id === match.eventId && 
