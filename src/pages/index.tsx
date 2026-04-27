@@ -95,12 +95,22 @@ export default function LandingPage() {
             <p className="text-base md:text-lg text-gray-600 mb-6 md:mb-8 leading-relaxed">
               Set highly specific triggers and get an SMS the moment it hits.
             </p>
-            <div className="flex flex-wrap gap-4">
-              <Link href="/dashboard">
-                <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-6 py-5 md:px-8 md:py-6 text-base md:text-lg">
-                  Create My Alert
-                </Button>
-              </Link>
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3 max-w-md">
+                <input
+                  type="tel"
+                  placeholder="Enter your phone number"
+                  className="flex-1 px-4 py-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-base"
+                />
+                <Link href="/dashboard">
+                  <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-6 py-3 text-base whitespace-nowrap w-full sm:w-auto">
+                    Get Started
+                  </Button>
+                </Link>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed max-w-md">
+                I agree to receive SMS alerts from Hammer when my alerts trigger. Msg & data rates may apply. Reply STOP anytime to unsubscribe.
+              </p>
             </div>
           </div>
         </div>
