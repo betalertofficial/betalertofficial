@@ -43,6 +43,7 @@ export function GameOddsChart() {
   const chartRef = useRef<HTMLDivElement>(null);
   
   const [gameUrl, setGameUrl] = useState("");
+  const [gameDate, setGameDate] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [storyData, setStoryData] = useState<GameOddsStory | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,12 +74,17 @@ export function GameOddsChart() {
       return;
     }
 
+    if (!gameDate) {
+      setError("Please select the game date");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
       // Call with no team selection to just find the game
-      const result = await generateGameOddsStory(gameUrl);
+      const result = await generateGameOddsStory(gameUrl, gameDate);
       
       setTeamOptions(result.teamOptions);
       setGameFound(true);
@@ -106,7 +112,7 @@ export function GameOddsChart() {
     setError(null);
 
     try {
-      const story = await generateGameOddsStory(gameUrl, winner);
+      const story = await generateGameOddsStory(gameUrl, gameDate, winner);
       setStoryData(story);
       
       toast({
@@ -320,10 +326,21 @@ export function GameOddsChart() {
             )}
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="game-date">Game Date</Label>
+            <Input
+              id="game-date"
+              type="date"
+              value={gameDate}
+              onChange={(e) => setGameDate(e.target.value)}
+              max={new Date().toISOString().split("T")[0]}
+            />
+          </div>
+
           {!gameFound && (
             <Button
               onClick={handleFindGame}
-              disabled={isLoading || !gameUrl}
+              disabled={isLoading || !gameUrl || !gameDate}
               className="w-full"
             >
               {isLoading ? (

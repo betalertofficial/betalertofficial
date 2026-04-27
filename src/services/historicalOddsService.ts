@@ -298,10 +298,11 @@ function findPeakOdds(snapshots: OddsSnapshot[]): OddsSnapshot {
 
 /**
  * Main function to generate the game odds story data
- * Now only requires the game URL - automatically finds teams and presents options
+ * Now only requires the game URL and date - automatically finds teams and presents options
  */
 export async function generateGameOddsStory(
   gameUrl: string,
+  gameDate: string,
   winningTeamSelection?: "home" | "away"
 ): Promise<GameOddsStory> {
   // Parse the NBA.com URL
@@ -321,20 +322,14 @@ export async function generateGameOddsStory(
 
   console.log("Team mapping:", { away: awayTeamFull, home: homeTeamFull });
 
-  // Find the event in The Odds API
-  // Extract date from game ID (first 8 digits: YYYYMMDD format)
-  const year = parseInt("20" + parsed.gameId.substring(0, 2));
-  const month = parseInt(parsed.gameId.substring(2, 4)) - 1;
-  const day = parseInt(parsed.gameId.substring(4, 6));
-  const searchDate = new Date(year, month, day).toISOString().split("T")[0];
+  // Find the event in The Odds API using the provided date
+  console.log("Searching for game on date:", gameDate);
   
-  console.log("Searching for game on date:", searchDate);
-  
-  const event = await findHistoricalEvent(awayTeamFull, homeTeamFull, searchDate);
+  const event = await findHistoricalEvent(awayTeamFull, homeTeamFull, gameDate);
   
   if (!event) {
     throw new Error(
-      `Could not find this game in The Odds API for date ${searchDate}. ` +
+      `Could not find this game in The Odds API for date ${gameDate}. ` +
       `Looked for: ${awayTeamFull} @ ${homeTeamFull}`
     );
   }
