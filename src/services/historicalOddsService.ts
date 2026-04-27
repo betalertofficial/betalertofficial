@@ -69,7 +69,11 @@ export async function fetchGamesForDate(date: string): Promise<HistoricalEvent[]
       throw new Error(`Failed to fetch games (${response.status}): ${errorText || response.statusText}`);
     }
 
-    const events: HistoricalEvent[] = await response.json();
+    const responseData = await response.json();
+    console.log("Full API response:", responseData);
+    
+    // The historical endpoint returns { data: [...], timestamp: ..., ... }
+    const events: HistoricalEvent[] = responseData.data || [];
     console.log(`Found ${events.length} games for ${date}:`, events);
     return events;
   } catch (error) {
