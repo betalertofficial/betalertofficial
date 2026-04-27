@@ -100,7 +100,9 @@ async function fetchOddsSnapshot(
       throw new Error(`Failed to fetch odds: ${response.statusText}`);
     }
 
-    return await response.json();
+    const data = await response.json();
+    console.log("Odds snapshot response:", data);
+    return data;
   } catch (error) {
     console.error(`Error fetching snapshot at ${timestamp}:`, error);
     return null;
@@ -115,6 +117,13 @@ function extractMoneyline(
   snapshot: OddsData,
   teamName: string
 ): { odds: number; bookmaker: string } | null {
+  console.log("Extracting moneyline for team:", teamName, "from snapshot:", snapshot);
+  
+  if (!snapshot || !snapshot.bookmakers || snapshot.bookmakers.length === 0) {
+    console.log("No bookmakers found in snapshot");
+    return null;
+  }
+  
   const preferredBookmakers = ["draftkings", "fanduel"];
   
   // Try preferred bookmakers first
