@@ -194,8 +194,8 @@ export function PhoneAuth({ onSuccess }: PhoneAuthProps) {
           </form>
         )}
 
-        <p className="text-xs text-center text-muted-foreground mt-6">
-          By verifying your phone, you agree to receive SMS alerts when your triggers are hit.
+        <p className="text-sm text-muted-foreground">
+          I agree to receive SMS alerts from Hammer when my alerts trigger. Msg & data rates may apply. Reply STOP anytime to unsubscribe.
         </p>
       </CardContent>
     </Card>
