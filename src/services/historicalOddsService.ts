@@ -127,22 +127,59 @@ async function getTeamMapping(): Promise<Record<string, string>> {
   try {
     const { data, error } = await supabase
       .from("teams")
-      .select("nba_code, canonical_name")
+      .select("api_key, canonical_name")
       .eq("sport", "basketball_nba");
 
     if (error) throw error;
 
     const mapping: Record<string, string> = {};
-    data?.forEach((team) => {
-      if (team.nba_code && team.canonical_name) {
-        mapping[team.nba_code.toUpperCase()] = team.canonical_name;
-      }
-    });
+    if (data) {
+      data.forEach((team: any) => {
+        if (team.api_key && team.canonical_name) {
+          // Extract NBA team code from api_key (e.g., "basketball_nba_SAS" -> "SAS")
+          const parts = team.api_key.split("_");
+          const code = parts[parts.length - 1];
+          mapping[code.toUpperCase()] = team.canonical_name;
+        }
+      });
+    }
 
     return mapping;
   } catch (error) {
     console.error("Error fetching team mapping:", error);
-    return {};
+    // Fallback mapping if database query fails
+    return {
+      "SAS": "San Antonio Spurs",
+      "POR": "Portland Trail Blazers",
+      "LAL": "Los Angeles Lakers",
+      "LAC": "Los Angeles Clippers",
+      "GSW": "Golden State Warriors",
+      "PHX": "Phoenix Suns",
+      "SAC": "Sacramento Kings",
+      "DAL": "Dallas Mavericks",
+      "HOU": "Houston Rockets",
+      "MEM": "Memphis Grizzlies",
+      "NOP": "New Orleans Pelicans",
+      "DEN": "Denver Nuggets",
+      "MIN": "Minnesota Timberwolves",
+      "OKC": "Oklahoma City Thunder",
+      "UTA": "Utah Jazz",
+      "ATL": "Atlanta Hawks",
+      "BOS": "Boston Celtics",
+      "BKN": "Brooklyn Nets",
+      "CHA": "Charlotte Hornets",
+      "CHI": "Chicago Bulls",
+      "CLE": "Cleveland Cavaliers",
+      "DET": "Detroit Pistons",
+      "IND": "Indiana Pacers",
+      "MIA": "Miami Heat",
+      "MIL": "Milwaukee Bucks",
+      "NYK": "New York Knicks",
+      "ORL": "Orlando Magic",
+      "PHI": "Philadelphia 76ers",
+      "TOR": "Toronto Raptors",
+      "WAS": "Washington Wizards"
+    };
   }
 }
 
