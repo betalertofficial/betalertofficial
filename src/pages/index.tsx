@@ -143,9 +143,9 @@ export default function LandingPage() {
             </p>
             <div className="space-y-3">
               <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
-                <div className="flex-1 flex gap-2">
+                <div className="flex-1 flex items-center h-12 px-3 rounded-full border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-transparent">
                   <Select value={countryCode} onValueChange={setCountryCode}>
-                    <SelectTrigger className="w-[120px] h-12 rounded-full border border-gray-300 bg-white">
+                    <SelectTrigger className="w-[90px] h-8 border-0 bg-transparent focus:ring-0 focus:ring-offset-0 pl-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -156,12 +156,13 @@ export default function LandingPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <div className="h-6 w-px bg-gray-300 mx-2"></div>
                   <input
                     type="tel"
                     placeholder="Enter your phone number"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="flex-1 h-12 px-4 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-base"
+                    className="flex-1 h-full bg-transparent border-0 focus:outline-none text-base"
                   />
                 </div>
                 <Link href="/dashboard" className="w-full sm:w-auto">
