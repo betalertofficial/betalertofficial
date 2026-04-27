@@ -26,6 +26,7 @@ import {
   ToggleRight
 } from "lucide-react";
 import { PollingControlModal } from "@/components/admin/PollingControlModal";
+import { GameOddsChart } from "@/components/admin/GameOddsChart";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -585,10 +586,11 @@ export default function AdminPage() {
         </div>
 
         <Tabs defaultValue="schedules" className="space-y-6">
-          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-4">
+          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-5">
             <TabsTrigger value="schedules">Schedules</TabsTrigger>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="triggers">Triggers</TabsTrigger>
+            <TabsTrigger value="charts">Charts</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
           </TabsList>
 
@@ -906,6 +908,18 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">Trigger management interface coming soon...</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="charts">
+            <Card className="glass-panel">
+              <CardHeader>
+                <CardTitle>Social Media Charts</CardTitle>
+                <CardDescription>Generate shareable odds story graphics</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <GameOddsChart />
               </CardContent>
             </Card>
           </TabsContent>
