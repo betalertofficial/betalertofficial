@@ -34,6 +34,7 @@ const countryCodes = [
 export default function LandingPage() {
   const [countryCode, setCountryCode] = useState("+1");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [consentChecked, setConsentChecked] = useState(false);
 
   useEffect(() => {
     // Detect user's country based on IP
@@ -166,14 +167,26 @@ export default function LandingPage() {
                   />
                 </div>
                 <Link href="/dashboard" className="w-full sm:w-auto">
-                  <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full h-12 px-6 text-base whitespace-nowrap w-full">
+                  <Button 
+                    className="bg-green-500 hover:bg-green-600 text-white rounded-full h-12 px-6 text-base whitespace-nowrap w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!consentChecked || !phoneNumber}
+                  >
                     Get Started
                   </Button>
                 </Link>
               </div>
-              <p className="text-xs text-gray-500 leading-relaxed max-w-md">
-                I agree to receive SMS alerts from Hammer when my alerts trigger. Msg & data rates may apply. Reply STOP anytime to unsubscribe.
-              </p>
+              <div className="flex items-start gap-2 max-w-md">
+                <input
+                  type="checkbox"
+                  id="consent"
+                  checked={consentChecked}
+                  onChange={(e) => setConsentChecked(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-green-500 focus:ring-green-500 cursor-pointer"
+                />
+                <label htmlFor="consent" className="text-xs text-gray-500 leading-relaxed cursor-pointer">
+                  I agree to receive SMS alerts from Hammer when my alerts trigger. Msg & data rates may apply. Reply STOP anytime to unsubscribe.
+                </label>
+              </div>
             </div>
           </div>
         </div>
