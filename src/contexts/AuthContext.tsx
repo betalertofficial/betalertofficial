@@ -108,7 +108,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (sessionUser) {
             try {
               console.log("[AuthContext] Fetching profile for user:", sessionUser.id);
-              const profileData = await profileService.getProfile(sessionUser.id);
+              
+              // Add timeout to prevent infinite hang
+              const profilePromise = profileService.getProfile(sessionUser.id);
+              const timeoutPromise = new Promise<null>((resolve) => 
+                setTimeout(() => {
+                  console.warn("[AuthContext] Profile fetch timeout after 10s");
+                  resolve(null);
+                }, 10000)
+              );
+              
+              const profileData = await Promise.race([profilePromise, timeoutPromise]);
               console.log("[AuthContext] Profile fetched successfully:", profileData);
               if (mounted) setProfile(profileData);
             } catch (error) {
