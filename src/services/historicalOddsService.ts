@@ -199,6 +199,39 @@ async function fetchOddsChain(
 }
 
 /**
+ * Fetch all raw API responses for debugging
+ */
+export async function fetchRawOddsData(
+  eventId: string,
+  commenceTime: string
+): Promise<any[]> {
+  const rawSnapshots: any[] = [];
+  let currentTimestamp = commenceTime;
+  const maxSnapshots = 100;
+  const gameEndTime = new Date(new Date(commenceTime).getTime() + 2.5 * 60 * 60 * 1000).toISOString();
+
+  console.log(`Fetching raw odds data from ${commenceTime}...`);
+
+  for (let i = 0; i < maxSnapshots; i++) {
+    const snapshot = await fetchOddsSnapshot(eventId, currentTimestamp);
+    
+    if (!snapshot) break;
+    
+    rawSnapshots.push(snapshot);
+
+    if (!snapshot.next_timestamp || new Date(snapshot.next_timestamp) > new Date(gameEndTime)) {
+      break;
+    }
+
+    currentTimestamp = snapshot.next_timestamp;
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+
+  console.log(`Collected ${rawSnapshots.length} raw snapshots`);
+  return rawSnapshots;
+}
+
+/**
  * Find the peak odds moment (highest/most positive odds = best value)
  */
 function findPeakOdds(snapshots: OddsSnapshot[]): OddsSnapshot {

@@ -11,6 +11,7 @@ import {
   fetchGamesForDate,
   generateGameOddsStory,
   generateSocialCaption,
+  fetchRawOddsData,
   type GameOddsStory
 } from "@/services/historicalOddsService";
 import {
@@ -242,6 +243,44 @@ export function GameOddsChart() {
     });
   };
 
+  const handleDownloadRawData = async () => {
+    if (!selectedGame) {
+      toast({
+        title: "No Game Selected",
+        description: "Please select a game first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const rawData = await fetchRawOddsData(selectedGame.id, selectedGame.commence_time);
+      
+      const dataStr = JSON.stringify(rawData, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `odds-data-${selectedGame.away_team}-${selectedGame.home_team}-${new Date(selectedGame.commence_time).toISOString().split("T")[0]}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Raw Data Downloaded",
+        description: `${rawData.length} snapshots saved`,
+      });
+    } catch (err) {
+      toast({
+        title: "Download Failed",
+        description: err instanceof Error ? err.message : "Could not download raw data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Generate chart data
   const chartData = storyData ? {
     labels: storyData.snapshots.map((s, i) => {
@@ -360,7 +399,7 @@ export function GameOddsChart() {
             </div>
           )}
 
-          {selectedGame && !storyData && (
+          {gameFound && selectedGame && !storyData && (
             <div className="space-y-3">
               <Label>Which team won?</Label>
               <div className="grid grid-cols-2 gap-3">
@@ -393,6 +432,25 @@ export function GameOddsChart() {
                   </div>
                 </Button>
               </div>
+              
+              <Button
+                variant="outline"
+                onClick={handleDownloadRawData}
+                disabled={isLoading}
+                className="w-full"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Raw API Data (JSON)
+                  </>
+                )}
+              </Button>
             </div>
           )}
         </CardContent>
