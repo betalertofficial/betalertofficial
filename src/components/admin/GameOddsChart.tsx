@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
-  parseNBAGameUrl,
+  fetchGamesForDate,
   generateGameOddsStory,
   generateSocialCaption,
   type GameOddsStory
@@ -25,7 +26,7 @@ import {
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 import html2canvas from "html2canvas";
-import { Loader2, Download, Copy, Image as ImageIcon, AlertCircle, Check } from "lucide-react";
+import { Loader2, Download, Copy, AlertCircle, Check } from "lucide-react";
 
 ChartJS.register(
   CategoryScale,
@@ -38,66 +39,61 @@ ChartJS.register(
   Filler
 );
 
+interface HistoricalEvent {
+  id: string;
+  sport_key: string;
+  commence_time: string;
+  home_team: string;
+  away_team: string;
+}
+
 export function GameOddsChart() {
   const { toast } = useToast();
   const chartRef = useRef<HTMLDivElement>(null);
   
-  const [gameUrl, setGameUrl] = useState("");
   const [gameDate, setGameDate] = useState("");
+  const [availableGames, setAvailableGames] = useState<HistoricalEvent[]>([]);
+  const [selectedGame, setSelectedGame] = useState<HistoricalEvent | null>(null);
+  const [selectedWinner, setSelectedWinner] = useState<"home" | "away" | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [storyData, setStoryData] = useState<GameOddsStory | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<"feed" | "story">("feed");
-  const [gameFound, setGameFound] = useState(false);
-  const [teamOptions, setTeamOptions] = useState<{ home: string; away: string } | null>(null);
-  const [selectedWinner, setSelectedWinner] = useState<"home" | "away" | null>(null);
 
-  const handleUrlChange = (url: string) => {
-    setGameUrl(url);
+  const handleDateChange = async (date: string) => {
+    setGameDate(date);
     setError(null);
-    setGameFound(false);
-    setTeamOptions(null);
+    setAvailableGames([]);
+    setSelectedGame(null);
     setSelectedWinner(null);
     setStoryData(null);
 
-    // Try to parse and show preview
-    const parsed = parseNBAGameUrl(url);
-    if (url && !parsed) {
-      setError("Please paste a valid NBA.com game URL");
-    }
-  };
-
-  const handleFindGame = async () => {
-    const parsed = parseNBAGameUrl(gameUrl);
-    if (!parsed) {
-      setError("Please paste a valid NBA.com game URL");
-      return;
-    }
-
-    if (!gameDate) {
-      setError("Please select the game date");
-      return;
-    }
+    if (!date) return;
 
     setIsLoading(true);
-    setError(null);
 
     try {
-      // Call with no team selection to just find the game
-      const result = await generateGameOddsStory(gameUrl, gameDate);
+      const games = await fetchGamesForDate(date);
       
-      setTeamOptions(result.teamOptions);
-      setGameFound(true);
-      
-      toast({
-        title: "Game Found",
-        description: `${result.teamOptions.away} @ ${result.teamOptions.home}`,
-      });
+      if (games.length === 0) {
+        setError("No NBA games found for this date");
+        toast({
+          title: "No Games Found",
+          description: "Try a different date",
+          variant: "destructive",
+        });
+      } else {
+        setAvailableGames(games);
+        toast({
+          title: "Games Loaded",
+          description: `Found ${games.length} game${games.length > 1 ? "s" : ""}`,
+        });
+      }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to find game";
+      const errorMessage = err instanceof Error ? err.message : "Failed to fetch games";
       setError(errorMessage);
       toast({
-        title: "Game Not Found",
+        title: "Failed to Load Games",
         description: errorMessage,
         variant: "destructive",
       });
@@ -106,13 +102,23 @@ export function GameOddsChart() {
     }
   };
 
+  const handleGameSelect = (gameId: string) => {
+    const game = availableGames.find(g => g.id === gameId);
+    setSelectedGame(game || null);
+    setSelectedWinner(null);
+    setStoryData(null);
+    setError(null);
+  };
+
   const handleGenerateChart = async (winner: "home" | "away") => {
+    if (!selectedGame) return;
+
     setSelectedWinner(winner);
     setIsLoading(true);
     setError(null);
 
     try {
-      const story = await generateGameOddsStory(gameUrl, gameDate, winner);
+      const story = await generateGameOddsStory(selectedGame, winner);
       setStoryData(story);
       
       toast({
@@ -303,12 +309,14 @@ export function GameOddsChart() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="game-url">NBA.com Game URL</Label>
+            <Label htmlFor="game-date">Game Date</Label>
             <Input
-              id="game-url"
-              placeholder="https://www.nba.com/game/sas-vs-por-0042500153/box-score"
-              value={gameUrl}
-              onChange={(e) => handleUrlChange(e.target.value)}
+              id="game-date"
+              type="date"
+              value={gameDate}
+              onChange={(e) => handleDateChange(e.target.value)}
+              max={new Date().toISOString().split("T")[0]}
+              disabled={isLoading}
             />
             {error && (
               <Alert variant="destructive">
@@ -316,45 +324,27 @@ export function GameOddsChart() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            {gameFound && teamOptions && (
-              <Alert>
-                <Check className="h-4 w-4" />
-                <AlertDescription>
-                  Found: {teamOptions.away} @ {teamOptions.home} — {new Date(storyData?.gameInfo.commenceTime || "").toLocaleDateString()}
-                </AlertDescription>
-              </Alert>
-            )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="game-date">Game Date</Label>
-            <Input
-              id="game-date"
-              type="date"
-              value={gameDate}
-              onChange={(e) => setGameDate(e.target.value)}
-              max={new Date().toISOString().split("T")[0]}
-            />
-          </div>
-
-          {!gameFound && (
-            <Button
-              onClick={handleFindGame}
-              disabled={isLoading || !gameUrl || !gameDate}
-              className="w-full"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Finding Game...
-                </>
-              ) : (
-                "Find Game in Odds API"
-              )}
-            </Button>
+          {availableGames.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="game-select">Select Game</Label>
+              <Select onValueChange={handleGameSelect}>
+                <SelectTrigger id="game-select">
+                  <SelectValue placeholder="Choose a game..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableGames.map((game) => (
+                    <SelectItem key={game.id} value={game.id}>
+                      {game.away_team} @ {game.home_team}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
 
-          {gameFound && teamOptions && !storyData && (
+          {selectedGame && !storyData && (
             <div className="space-y-3">
               <Label>Which team won?</Label>
               <div className="grid grid-cols-2 gap-3">
@@ -369,7 +359,7 @@ export function GameOddsChart() {
                   ) : null}
                   <div className="flex flex-col items-start">
                     <span className="text-xs text-muted-foreground">Away</span>
-                    <span className="font-semibold">{teamOptions.away}</span>
+                    <span className="font-semibold">{selectedGame.away_team}</span>
                   </div>
                 </Button>
                 <Button
@@ -383,7 +373,7 @@ export function GameOddsChart() {
                   ) : null}
                   <div className="flex flex-col items-start">
                     <span className="text-xs text-muted-foreground">Home</span>
-                    <span className="font-semibold">{teamOptions.home}</span>
+                    <span className="font-semibold">{selectedGame.home_team}</span>
                   </div>
                 </Button>
               </div>

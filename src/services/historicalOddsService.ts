@@ -6,12 +6,6 @@ interface OddsSnapshot {
   bookmaker: string;
 }
 
-interface ParsedGameUrl {
-  gameId: string;
-  awayTeam: string;
-  homeTeam: string;
-}
-
 interface HistoricalEvent {
   id: string;
   sport_key: string;
@@ -54,129 +48,23 @@ const ODDS_API_KEY = process.env.NEXT_PUBLIC_ODDS_API_KEY || "1c4cf509a237efe8af
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
 
 /**
- * Parse NBA.com game URL to extract game ID and team codes
- * Format: https://www.nba.com/game/{away}-vs-{home}-{gameId}/box-score
+ * Fetch all NBA games for a specific date
  */
-export function parseNBAGameUrl(url: string): ParsedGameUrl | null {
-  const regex = /nba\.com\/game\/([a-z]{3})-vs-([a-z]{3})-(\d{10})/i;
-  const match = url.match(regex);
-  
-  if (!match) return null;
-  
-  return {
-    awayTeam: match[1].toUpperCase(),
-    homeTeam: match[2].toUpperCase(),
-    gameId: match[3]
-  };
-}
-
-/**
- * Get team name mapping from database using vendor_team_map
- */
-async function getTeamMapping(): Promise<Record<string, string>> {
-  try {
-    const { data, error } = await supabase
-      .from("vendor_team_map")
-      .select(`
-        vendor_team_key,
-        teams!inner(name)
-      `)
-      .eq("vendor_sport_key", "basketball_nba");
-
-    if (error) throw error;
-
-    const mapping: Record<string, string> = {};
-    if (data && Array.isArray(data)) {
-      data.forEach((item: any) => {
-        if (item.vendor_team_key && item.teams?.name) {
-          // Extract team code from vendor_team_key (e.g., "basketball_nba_SAS" -> "SAS")
-          const parts = item.vendor_team_key.split("_");
-          const code = parts[parts.length - 1];
-          mapping[code.toUpperCase()] = item.teams.name;
-        }
-      });
-    }
-
-    // If we got data, return it
-    if (Object.keys(mapping).length > 0) {
-      return mapping;
-    }
-
-    // Otherwise fall through to hardcoded mapping
-    throw new Error("No team mappings found in database");
-  } catch (error) {
-    console.error("Error fetching team mapping:", error);
-    // Fallback mapping if database query fails
-    return {
-      "SAS": "San Antonio Spurs",
-      "POR": "Portland Trail Blazers",
-      "LAL": "Los Angeles Lakers",
-      "LAC": "Los Angeles Clippers",
-      "GSW": "Golden State Warriors",
-      "PHX": "Phoenix Suns",
-      "SAC": "Sacramento Kings",
-      "DAL": "Dallas Mavericks",
-      "HOU": "Houston Rockets",
-      "MEM": "Memphis Grizzlies",
-      "NOP": "New Orleans Pelicans",
-      "DEN": "Denver Nuggets",
-      "MIN": "Minnesota Timberwolves",
-      "OKC": "Oklahoma City Thunder",
-      "UTA": "Utah Jazz",
-      "ATL": "Atlanta Hawks",
-      "BOS": "Boston Celtics",
-      "BKN": "Brooklyn Nets",
-      "CHA": "Charlotte Hornets",
-      "CHI": "Chicago Bulls",
-      "CLE": "Cleveland Cavaliers",
-      "DET": "Detroit Pistons",
-      "IND": "Indiana Pacers",
-      "MIA": "Miami Heat",
-      "MIL": "Milwaukee Bucks",
-      "NYK": "New York Knicks",
-      "ORL": "Orlando Magic",
-      "PHI": "Philadelphia 76ers",
-      "TOR": "Toronto Raptors",
-      "WAS": "Washington Wizards"
-    };
-  }
-}
-
-/**
- * Find the matching event in The Odds API historical events
- */
-async function findHistoricalEvent(
-  awayTeamFull: string,
-  homeTeamFull: string,
-  searchDate: string
-): Promise<HistoricalEvent | null> {
+export async function fetchGamesForDate(date: string): Promise<HistoricalEvent[]> {
   try {
     const response = await fetch(
-      `${ODDS_API_BASE}/historical/sports/basketball_nba/events?apiKey=${ODDS_API_KEY}&date=${searchDate}`
+      `${ODDS_API_BASE}/historical/sports/basketball_nba/events?apiKey=${ODDS_API_KEY}&date=${date}`
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch historical events: ${response.statusText}`);
+      throw new Error(`Failed to fetch games: ${response.statusText}`);
     }
 
     const events: HistoricalEvent[] = await response.json();
-    
-    // Try to match by team names
-    for (const event of events) {
-      const matchesAway = event.away_team.toLowerCase().includes(awayTeamFull.toLowerCase()) ||
-                         awayTeamFull.toLowerCase().includes(event.away_team.toLowerCase());
-      const matchesHome = event.home_team.toLowerCase().includes(homeTeamFull.toLowerCase()) ||
-                         homeTeamFull.toLowerCase().includes(event.home_team.toLowerCase());
-
-      if (matchesAway && matchesHome) {
-        return event;
-      }
-    }
-
-    return null;
+    return events;
   } catch (error) {
-    console.error("Error finding historical event:", error);
-    return null;
+    console.error("Error fetching games for date:", error);
+    throw error;
   }
 }
 
@@ -298,62 +186,12 @@ function findPeakOdds(snapshots: OddsSnapshot[]): OddsSnapshot {
 
 /**
  * Main function to generate the game odds story data
- * Now only requires the game URL and date - automatically finds teams and presents options
  */
 export async function generateGameOddsStory(
-  gameUrl: string,
-  gameDate: string,
-  winningTeamSelection?: "home" | "away"
+  event: HistoricalEvent,
+  winningTeamSelection: "home" | "away"
 ): Promise<GameOddsStory> {
-  // Parse the NBA.com URL
-  const parsed = parseNBAGameUrl(gameUrl);
-  if (!parsed) {
-    throw new Error("Invalid NBA.com game URL");
-  }
-
-  console.log("Parsed game:", parsed);
-
-  // Get team mapping from database
-  const teamMapping = await getTeamMapping();
-  
-  // Map team codes to full names
-  const awayTeamFull = teamMapping[parsed.awayTeam] || parsed.awayTeam;
-  const homeTeamFull = teamMapping[parsed.homeTeam] || parsed.homeTeam;
-
-  console.log("Team mapping:", { away: awayTeamFull, home: homeTeamFull });
-
-  // Find the event in The Odds API using the provided date
-  console.log("Searching for game on date:", gameDate);
-  
-  const event = await findHistoricalEvent(awayTeamFull, homeTeamFull, gameDate);
-  
-  if (!event) {
-    throw new Error(
-      `Could not find this game in The Odds API for date ${gameDate}. ` +
-      `Looked for: ${awayTeamFull} @ ${homeTeamFull}`
-    );
-  }
-
-  console.log("Found event:", event);
-
-  // If no team selection provided yet, return early with team options
-  if (!winningTeamSelection) {
-    return {
-      snapshots: [],
-      peakOdds: { timestamp: "", odds: 0, bookmaker: "" },
-      winningTeam: "",
-      gameInfo: {
-        homeTeam: event.home_team,
-        awayTeam: event.away_team,
-        commenceTime: event.commence_time,
-        winner: ""
-      },
-      teamOptions: {
-        home: event.home_team,
-        away: event.away_team
-      }
-    };
-  }
+  console.log("Generating story for event:", event);
 
   // Determine which team name to use for odds lookup
   const winningTeamName = winningTeamSelection === "home" ? event.home_team : event.away_team;
