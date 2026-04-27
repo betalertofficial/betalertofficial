@@ -18,7 +18,7 @@ export const profileService = {
       throw error;
     }
 
-    return data;
+    return data as Profile | null;
   },
 
   async createProfile(profile: Omit<Profile, "created_at" | "updated_at" | "name" | "subscription_tier" | "trigger_limit"> & Partial<Pick<Profile, "name" | "subscription_tier" | "trigger_limit">>): Promise<Profile> {
