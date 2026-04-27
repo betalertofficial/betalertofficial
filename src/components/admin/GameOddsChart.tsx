@@ -103,15 +103,30 @@ export function GameOddsChart() {
   };
 
   const handleGameSelect = (gameId: string) => {
+    console.log("Selecting game with ID:", gameId);
+    console.log("Available games:", availableGames);
+    
     const game = availableGames.find(g => g.id === gameId);
-    setSelectedGame(game || null);
-    setSelectedWinner(null);
-    setStoryData(null);
-    setError(null);
+    console.log("Found game:", game);
+    
+    if (game) {
+      setSelectedGame(game);
+      setStoryData(null);
+      setError(null);
+    } else {
+      console.error("Could not find game with ID:", gameId);
+      setError("Could not find the selected game");
+    }
   };
 
   const handleGenerateChart = async (winner: "home" | "away") => {
-    if (!selectedGame) return;
+    console.log("Generating chart for winner:", winner);
+    console.log("Selected game:", selectedGame);
+    
+    if (!selectedGame) {
+      setError("No game selected");
+      return;
+    }
 
     setSelectedWinner(winner);
     setIsLoading(true);
@@ -126,6 +141,7 @@ export function GameOddsChart() {
         description: `Found ${story.snapshots.length} odds snapshots`,
       });
     } catch (err) {
+      console.error("Error generating chart:", err);
       const errorMessage = err instanceof Error ? err.message : "Failed to generate chart";
       setError(errorMessage);
       toast({
