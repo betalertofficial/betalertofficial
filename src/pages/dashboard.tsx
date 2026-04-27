@@ -7,7 +7,7 @@ import { Settings } from "@/components/dashboard/Settings";
 import { CreateTrigger } from "@/components/dashboard/CreateTrigger";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Bell } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 
 type TabValue = "triggers" | "history" | "settings";
@@ -19,10 +19,12 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<TabValue>("triggers");
   const [viewMode, setViewMode] = useState<ViewMode>("dashboard");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const hasCheckedParam = useRef(false);
 
   // Check for createTrigger URL param on mount
   useEffect(() => {
-    if (router.isReady && router.query.createTrigger === "true") {
+    if (!hasCheckedParam.current && router.isReady && router.query.createTrigger === "true") {
+      hasCheckedParam.current = true;
       setShowCreateModal(true);
       // Clean up URL param
       const { createTrigger, ...cleanQuery } = router.query;
