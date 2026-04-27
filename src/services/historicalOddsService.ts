@@ -222,8 +222,11 @@ export async function generateGameOddsStory(
   // Fetch the complete odds chain for the winning team
   const snapshots = await fetchOddsChain(event.id, event.commence_time, winningTeamName);
 
-  if (snapshots.length < 10) {
-    throw new Error("Not enough odds data to generate this chart");
+  console.log("Total snapshots collected:", snapshots.length);
+  console.log("Snapshots:", snapshots);
+
+  if (snapshots.length === 0) {
+    throw new Error("No odds data found for this game");
   }
 
   // Find peak odds
