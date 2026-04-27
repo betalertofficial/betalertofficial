@@ -80,7 +80,7 @@ export default function DashboardPage() {
       <footer className="border-t border-border mt-16 py-8">
         <div className="container mx-auto px-4 text-center">
           <p className="text-sm text-muted-foreground">
-            Please gamble responsibly. Must be 21+ and located in eligible states.
+            I agree to receive SMS alerts from Hammer when my alerts trigger. Msg & data rates may apply. Reply STOP anytime to unsubscribe.
           </p>
           <p className="text-xs text-muted-foreground mt-2">
             © {new Date().getFullYear()} Bet Alert. All rights reserved.
