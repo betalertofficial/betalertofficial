@@ -30,7 +30,7 @@ export default function DashboardPage() {
       const { createTrigger, ...cleanQuery } = router.query;
       router.replace({ query: cleanQuery }, undefined, { shallow: true });
     }
-  }, [router.isReady, router.query]);
+  }, [router.isReady]);
 
   if (loading) {
     return (
