@@ -121,7 +121,7 @@ export function GameOddsChart() {
   };
 
   const handleGenerateChart = async (winner: "home" | "away") => {
-    console.log("Generating chart for winner:", winner);
+    console.log("Downloading raw data for winner:", winner);
     console.log("Selected game:", selectedGame);
     
     if (!selectedGame) {
@@ -134,19 +134,32 @@ export function GameOddsChart() {
     setError(null);
 
     try {
-      const story = await generateGameOddsStory(selectedGame, winner);
-      setStoryData(story);
+      const rawData = await fetchRawOddsData(selectedGame.id, selectedGame.commence_time);
       
+      const dataStr = JSON.stringify(rawData, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const winningTeam = winner === "home" ? selectedGame.home_team : selectedGame.away_team;
+      link.download = `odds-data-${winningTeam.replace(/\s+/g, "-")}-${new Date(selectedGame.commence_time).toISOString().split("T")[0]}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+
       toast({
-        title: "Chart Generated",
-        description: `Found ${story.snapshots.length} odds snapshots`,
+        title: "Download Complete",
+        description: `${rawData.length} snapshots exported successfully`,
       });
+      
+      // Reset selection so user can choose another game
+      setSelectedGame(null);
+      setSelectedWinner(null);
     } catch (err) {
-      console.error("Error generating chart:", err);
-      const errorMessage = err instanceof Error ? err.message : "Failed to generate chart";
+      console.error("Error downloading data:", err);
+      const errorMessage = err instanceof Error ? err.message : "Failed to download data";
       setError(errorMessage);
       toast({
-        title: "Generation Failed",
+        title: "Download Failed",
         description: errorMessage,
         variant: "destructive",
       });
@@ -432,25 +445,6 @@ export function GameOddsChart() {
                   </div>
                 </Button>
               </div>
-              
-              <Button
-                variant="outline"
-                onClick={handleDownloadRawData}
-                disabled={isLoading}
-                className="w-full"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Downloading...
-                  </>
-                ) : (
-                  <>
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Raw API Data (JSON)
-                  </>
-                )}
-              </Button>
             </div>
           )}
         </CardContent>
