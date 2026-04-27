@@ -100,39 +100,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log("[AuthContext] Existing session found:", sessionUser.id);
         }
         
-        // 3. Set the user state explicitly BEFORE setting loading=false
+        // 3. Set the user state explicitly
         if (mounted) {
           setUser(sessionUser);
+          console.log("[AuthContext] User set, setting loading to false");
+          setLoading(false); // Set loading false BEFORE profile fetch
           
-          // 4. Fetch profile if we have a user
+          // 4. Fetch profile in background (non-blocking)
           if (sessionUser) {
-            try {
-              console.log("[AuthContext] Fetching profile for user:", sessionUser.id);
-              
-              // Add timeout to prevent infinite hang
-              const profilePromise = profileService.getProfile(sessionUser.id);
-              const timeoutPromise = new Promise<null>((resolve) => 
-                setTimeout(() => {
-                  console.warn("[AuthContext] Profile fetch timeout after 10s");
-                  resolve(null);
-                }, 10000)
-              );
-              
-              const profileData = await Promise.race([profilePromise, timeoutPromise]);
-              console.log("[AuthContext] Profile fetched successfully:", profileData);
-              if (mounted) setProfile(profileData);
-            } catch (error) {
-              console.error("[AuthContext] Error fetching profile:", error);
-              if (mounted) setProfile(null);
-            }
+            console.log("[AuthContext] Fetching profile for user:", sessionUser.id);
+            profileService.getProfile(sessionUser.id)
+              .then(profileData => {
+                console.log("[AuthContext] Profile fetched successfully:", profileData);
+                if (mounted) setProfile(profileData);
+              })
+              .catch(error => {
+                console.error("[AuthContext] Error fetching profile:", error);
+                if (mounted) setProfile(null);
+              });
           }
         }
         
         console.log("[AuthContext] Auth initialization complete");
       } catch (error) {
         console.error("[AuthContext] Auth init error", error);
-      } finally {
-        console.log("[AuthContext] Setting loading to false");
         if (mounted) setLoading(false);
       }
     };
