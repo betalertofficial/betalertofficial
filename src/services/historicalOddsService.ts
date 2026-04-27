@@ -52,15 +52,24 @@ const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
  */
 export async function fetchGamesForDate(date: string): Promise<HistoricalEvent[]> {
   try {
-    const response = await fetch(
-      `${ODDS_API_BASE}/historical/sports/basketball_nba/events?apiKey=${ODDS_API_KEY}&date=${date}`
-    );
+    // Ensure date is in ISO format (YYYY-MM-DD becomes YYYY-MM-DDT00:00:00Z)
+    const isoDate = new Date(date + "T00:00:00Z").toISOString();
+    const apiUrl = `${ODDS_API_BASE}/historical/sports/basketball_nba/events?apiKey=${ODDS_API_KEY}&date=${isoDate}`;
+    
+    console.log("Fetching games for date:", { date, isoDate, apiUrl: apiUrl.replace(ODDS_API_KEY, "***") });
+
+    const response = await fetch(apiUrl);
+
+    console.log("API Response status:", response.status, response.statusText);
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch games: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error("API Error Response:", errorText);
+      throw new Error(`Failed to fetch games (${response.status}): ${errorText || response.statusText}`);
     }
 
     const events: HistoricalEvent[] = await response.json();
+    console.log(`Found ${events.length} games for ${date}:`, events);
     return events;
   } catch (error) {
     console.error("Error fetching games for date:", error);
