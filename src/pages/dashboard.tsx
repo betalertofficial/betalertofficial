@@ -42,12 +42,6 @@ export default function DashboardPage() {
     return <PhoneAuth />;
   }
 
-  useEffect(() => {
-    if (router.query.createTrigger) {
-      setViewMode("create");
-    }
-  }, [router.query.createTrigger]);
-
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border glass-panel sticky top-0 z-50">
