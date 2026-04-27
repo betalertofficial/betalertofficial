@@ -52,8 +52,9 @@ const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
  */
 export async function fetchGamesForDate(date: string): Promise<HistoricalEvent[]> {
   try {
-    // Ensure date is in ISO format (YYYY-MM-DD becomes YYYY-MM-DDT00:00:00Z)
-    const isoDate = new Date(date + "T00:00:00Z").toISOString();
+    // The Odds API historical endpoint wants ISO format without milliseconds
+    // YYYY-MM-DDT00:00:00Z instead of YYYY-MM-DDT00:00:00.000Z
+    const isoDate = new Date(date + "T00:00:00Z").toISOString().split('.')[0] + 'Z';
     const apiUrl = `${ODDS_API_BASE}/historical/sports/basketball_nba/events?apiKey=${ODDS_API_KEY}&date=${isoDate}`;
     
     console.log("Fetching games for date:", { date, isoDate, apiUrl: apiUrl.replace(ODDS_API_KEY, "***") });
