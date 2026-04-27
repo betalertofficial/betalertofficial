@@ -142,7 +142,7 @@ export default function LandingPage() {
               Set highly specific triggers and get an SMS the moment it hits.
             </p>
             <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
+              <div className="flex flex-col sm:flex-row gap-3 max-w-md">
                 <div className="flex-1 flex items-center h-12 px-3 rounded-full border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-transparent">
                   <Select value={countryCode} onValueChange={setCountryCode}>
                     <SelectTrigger className="w-[90px] h-8 border-0 bg-transparent focus:ring-0 focus:ring-offset-0 pl-0">
@@ -171,7 +171,7 @@ export default function LandingPage() {
                   </Button>
                 </Link>
               </div>
-              <p className="text-xs text-gray-500 leading-relaxed max-w-2xl">
+              <p className="text-xs text-gray-500 leading-relaxed max-w-md">
                 I agree to receive SMS alerts from Hammer when my alerts trigger. Msg & data rates may apply. Reply STOP anytime to unsubscribe.
               </p>
             </div>
