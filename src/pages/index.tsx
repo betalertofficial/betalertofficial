@@ -1,10 +1,56 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Bell, Settings, CheckCircle2, Sliders, Radio, Wallet, Mail, Globe } from "lucide-react";
+import { Bell, Sliders, Radio, Wallet, Settings } from "lucide-react";
 import Link from "next/link";
 import { SEO } from "@/components/SEO";
+import { useState, useEffect } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const countryCodes = [
+  { code: "+1", country: "US", flag: "🇺🇸" },
+  { code: "+1", country: "CA", flag: "🇨🇦" },
+  { code: "+44", country: "GB", flag: "🇬🇧" },
+  { code: "+61", country: "AU", flag: "🇦🇺" },
+  { code: "+33", country: "FR", flag: "🇫🇷" },
+  { code: "+49", country: "DE", flag: "🇩🇪" },
+  { code: "+39", country: "IT", flag: "🇮🇹" },
+  { code: "+34", country: "ES", flag: "🇪🇸" },
+  { code: "+52", country: "MX", flag: "🇲🇽" },
+  { code: "+55", country: "BR", flag: "🇧🇷" },
+  { code: "+86", country: "CN", flag: "🇨🇳" },
+  { code: "+91", country: "IN", flag: "🇮🇳" },
+  { code: "+81", country: "JP", flag: "🇯🇵" },
+  { code: "+82", country: "KR", flag: "🇰🇷" },
+];
 
 export default function LandingPage() {
+  const [countryCode, setCountryCode] = useState("+1");
+  const [phoneNumber, setPhoneNumber] = useState("");
+
+  useEffect(() => {
+    // Detect user's country based on IP
+    fetch("https://ipapi.co/json/")
+      .then((res) => res.json())
+      .then((data) => {
+        const userCountry = countryCodes.find((c) => c.country === data.country_code);
+        if (userCountry) {
+          setCountryCode(userCountry.code);
+        }
+      })
+      .catch(() => {
+        // Default to US if detection fails
+        setCountryCode("+1");
+      });
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <SEO 
@@ -96,19 +142,35 @@ export default function LandingPage() {
               Set highly specific triggers and get an SMS the moment it hits.
             </p>
             <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row gap-3 max-w-md">
-                <input
-                  type="tel"
-                  placeholder="Enter your phone number"
-                  className="flex-1 px-4 py-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-base"
-                />
-                <Link href="/dashboard">
-                  <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-6 py-3 text-base whitespace-nowrap w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
+                <div className="flex-1 flex gap-2">
+                  <Select value={countryCode} onValueChange={setCountryCode}>
+                    <SelectTrigger className="w-[120px] h-12 rounded-full border border-gray-300 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {countryCodes.map((item) => (
+                        <SelectItem key={`${item.code}-${item.country}`} value={item.code}>
+                          {item.flag} {item.code}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <input
+                    type="tel"
+                    placeholder="Enter your phone number"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    className="flex-1 h-12 px-4 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-base"
+                  />
+                </div>
+                <Link href="/dashboard" className="w-full sm:w-auto">
+                  <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full h-12 px-6 text-base whitespace-nowrap w-full">
                     Get Started
                   </Button>
                 </Link>
               </div>
-              <p className="text-xs text-gray-500 leading-relaxed max-w-md">
+              <p className="text-xs text-gray-500 leading-relaxed max-w-2xl">
                 I agree to receive SMS alerts from Hammer when my alerts trigger. Msg & data rates may apply. Reply STOP anytime to unsubscribe.
               </p>
             </div>
