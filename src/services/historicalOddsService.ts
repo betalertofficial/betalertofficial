@@ -47,6 +47,7 @@ export interface GameOddsStory {
     commenceTime: string;
     winner: string;
   };
+  teamOptions: { home: string; away: string };
 }
 
 const ODDS_API_KEY = process.env.NEXT_PUBLIC_ODDS_API_KEY || "1c4cf509a237efe8afb4342c676c999f";
@@ -116,6 +117,32 @@ async function findHistoricalEvent(
   } catch (error) {
     console.error("Error finding historical event:", error);
     return null;
+  }
+}
+
+/**
+ * Get team name mapping from database
+ */
+async function getTeamMapping(): Promise<Record<string, string>> {
+  try {
+    const { data, error } = await supabase
+      .from("teams")
+      .select("nba_code, canonical_name")
+      .eq("sport", "basketball_nba");
+
+    if (error) throw error;
+
+    const mapping: Record<string, string> = {};
+    data?.forEach((team) => {
+      if (team.nba_code && team.canonical_name) {
+        mapping[team.nba_code.toUpperCase()] = team.canonical_name;
+      }
+    });
+
+    return mapping;
+  } catch (error) {
+    console.error("Error fetching team mapping:", error);
+    return {};
   }
 }
 
@@ -227,24 +254,6 @@ async function fetchOddsChain(
 }
 
 /**
- * Determine the winning team from the game
- * This requires querying the scores or using external data
- */
-async function determineWinner(
-  homeTeam: string,
-  awayTeam: string,
-  gameDate: string
-): Promise<{ winner: string; finalScore?: string }> {
-  // For now, we'll need the user to specify the winner
-  // In production, you could query ESPN API or similar for final scores
-  // Placeholder - assume home team won
-  return {
-    winner: homeTeam,
-    finalScore: undefined
-  };
-}
-
-/**
  * Find the peak odds moment (highest/most positive odds = best value)
  */
 function findPeakOdds(snapshots: OddsSnapshot[]): OddsSnapshot {
@@ -267,6 +276,15 @@ export async function generateGameOddsStory(
   }
 
   console.log("Parsed game:", parsed);
+
+  // Get team mapping from database
+  const teamMapping = await getTeamMapping();
+  
+  // Map team codes to full names
+  const awayTeamFull = teamMapping[parsed.awayTeam] || parsed.awayTeam;
+  const homeTeamFull = teamMapping[parsed.homeTeam] || parsed.homeTeam;
+
+  console.log("Team mapping:", { away: awayTeamFull, home: homeTeamFull });
 
   // Find the event in The Odds API
   // We need to search by date - extract from gameId or ask user

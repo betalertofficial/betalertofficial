@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -25,7 +25,7 @@ import {
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 import html2canvas from "html2canvas";
-import { Loader2, Download, Copy, Image as ImageIcon, AlertCircle } from "lucide-react";
+import { Loader2, Download, Copy, Image as ImageIcon, AlertCircle, Check } from "lucide-react";
 
 ChartJS.register(
   CategoryScale,
@@ -43,15 +43,21 @@ export function GameOddsChart() {
   const chartRef = useRef<HTMLDivElement>(null);
   
   const [gameUrl, setGameUrl] = useState("");
-  const [winningTeam, setWinningTeam] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [storyData, setStoryData] = useState<GameOddsStory | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<"feed" | "story">("feed");
+  const [gameFound, setGameFound] = useState(false);
+  const [teamOptions, setTeamOptions] = useState<{ home: string; away: string } | null>(null);
+  const [selectedWinner, setSelectedWinner] = useState<"home" | "away" | null>(null);
 
   const handleUrlChange = (url: string) => {
     setGameUrl(url);
     setError(null);
+    setGameFound(false);
+    setTeamOptions(null);
+    setSelectedWinner(null);
+    setStoryData(null);
 
     // Try to parse and show preview
     const parsed = parseNBAGameUrl(url);
@@ -60,15 +66,10 @@ export function GameOddsChart() {
     }
   };
 
-  const handleGenerate = async () => {
+  const handleFindGame = async () => {
     const parsed = parseNBAGameUrl(gameUrl);
     if (!parsed) {
       setError("Please paste a valid NBA.com game URL");
-      return;
-    }
-
-    if (!winningTeam.trim()) {
-      setError("Please enter the winning team name");
       return;
     }
 
@@ -76,7 +77,36 @@ export function GameOddsChart() {
     setError(null);
 
     try {
-      const story = await generateGameOddsStory(gameUrl, winningTeam);
+      // Call with no team selection to just find the game
+      const result = await generateGameOddsStory(gameUrl);
+      
+      setTeamOptions(result.teamOptions);
+      setGameFound(true);
+      
+      toast({
+        title: "Game Found",
+        description: `${result.teamOptions.away} @ ${result.teamOptions.home}`,
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to find game";
+      setError(errorMessage);
+      toast({
+        title: "Game Not Found",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGenerateChart = async (winner: "home" | "away") => {
+    setSelectedWinner(winner);
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const story = await generateGameOddsStory(gameUrl, winner);
       setStoryData(story);
       
       toast({
@@ -280,35 +310,68 @@ export function GameOddsChart() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="winning-team">Winning Team (full name)</Label>
-            <Input
-              id="winning-team"
-              placeholder="e.g. San Antonio Spurs"
-              value={winningTeam}
-              onChange={(e) => setWinningTeam(e.target.value)}
-            />
-          </div>
-
-          <Button
-            onClick={handleGenerate}
-            disabled={isLoading || !gameUrl || !winningTeam}
-            className="w-full"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Fetching Odds Data...
-              </>
-            ) : (
-              <>
-                <ImageIcon className="mr-2 h-4 w-4" />
-                Generate Chart
-              </>
+            {gameFound && teamOptions && (
+              <Alert>
+                <Check className="h-4 w-4" />
+                <AlertDescription>
+                  Found: {teamOptions.away} @ {teamOptions.home} — {new Date(storyData?.gameInfo.commenceTime || "").toLocaleDateString()}
+                </AlertDescription>
+              </Alert>
             )}
-          </Button>
+          </div>
+
+          {!gameFound && (
+            <Button
+              onClick={handleFindGame}
+              disabled={isLoading || !gameUrl}
+              className="w-full"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Finding Game...
+                </>
+              ) : (
+                "Find Game in Odds API"
+              )}
+            </Button>
+          )}
+
+          {gameFound && teamOptions && !storyData && (
+            <div className="space-y-3">
+              <Label>Which team won?</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  variant={selectedWinner === "away" ? "default" : "outline"}
+                  onClick={() => handleGenerateChart("away")}
+                  disabled={isLoading}
+                  className="h-auto py-4"
+                >
+                  {isLoading && selectedWinner === "away" ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  <div className="flex flex-col items-start">
+                    <span className="text-xs text-muted-foreground">Away</span>
+                    <span className="font-semibold">{teamOptions.away}</span>
+                  </div>
+                </Button>
+                <Button
+                  variant={selectedWinner === "home" ? "default" : "outline"}
+                  onClick={() => handleGenerateChart("home")}
+                  disabled={isLoading}
+                  className="h-auto py-4"
+                >
+                  {isLoading && selectedWinner === "home" ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  <div className="flex flex-col items-start">
+                    <span className="text-xs text-muted-foreground">Home</span>
+                    <span className="font-semibold">{teamOptions.home}</span>
+                  </div>
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
