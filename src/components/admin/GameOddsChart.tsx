@@ -399,7 +399,7 @@ export function GameOddsChart() {
             </div>
           )}
 
-          {gameFound && selectedGame && !storyData && (
+          {selectedGame && !storyData && (
             <div className="space-y-3">
               <Label>Which team won?</Label>
               <div className="grid grid-cols-2 gap-3">
