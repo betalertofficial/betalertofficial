@@ -7,14 +7,28 @@ import { Settings } from "@/components/dashboard/Settings";
 import { CreateTrigger } from "@/components/dashboard/CreateTrigger";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Bell } from "lucide-react";
+import { useEffect } from "react";
+import { useRouter } from "next/router";
 
 type TabValue = "triggers" | "history" | "settings";
 type ViewMode = "dashboard" | "create";
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabValue>("triggers");
   const [viewMode, setViewMode] = useState<ViewMode>("dashboard");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Check for createTrigger URL param on mount
+  useEffect(() => {
+    if (router.isReady && router.query.createTrigger === "true") {
+      setShowCreateModal(true);
+      // Clean up URL param
+      const { createTrigger, ...cleanQuery } = router.query;
+      router.replace({ query: cleanQuery }, undefined, { shallow: true });
+    }
+  }, [router.isReady, router.query]);
 
   if (loading) {
     return (
@@ -27,6 +41,12 @@ export default function DashboardPage() {
   if (!user) {
     return <PhoneAuth />;
   }
+
+  useEffect(() => {
+    if (router.query.createTrigger) {
+      setViewMode("create");
+    }
+  }, [router.query.createTrigger]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -63,7 +83,7 @@ export default function DashboardPage() {
             </TabsList>
 
             <TabsContent value="triggers">
-              <MyTriggers onCreateNew={() => setViewMode("create")} />
+              <MyTriggers onCreateNew={() => setShowCreateModal(true)} />
             </TabsContent>
 
             <TabsContent value="history">
@@ -75,6 +95,16 @@ export default function DashboardPage() {
             </TabsContent>
           </Tabs>
         )}
+
+        {/* Create Trigger Modal */}
+        <CreateTrigger
+          open={showCreateModal}
+          onOpenChange={setShowCreateModal}
+          onSuccess={() => {
+            setShowCreateModal(false);
+            setActiveTab("triggers");
+          }}
+        />
       </main>
 
       <footer className="border-t border-border mt-16 py-8">
