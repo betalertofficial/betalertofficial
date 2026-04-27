@@ -153,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [toast]);
+  }, []); // Empty deps - only run once on mount
 
   const signOut = async () => {
     await supabase.auth.signOut();
