@@ -45,9 +45,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const initializeAuth = async () => {
       try {
         setLoading(true);
+        console.log("[AuthContext] Starting auth initialization");
         
         // 1. Get Session directly first
         const { data: { session } } = await supabase.auth.getSession();
+        console.log("[AuthContext] Session check complete:", session ? "session found" : "no session");
         
         let sessionUser = session?.user ?? null;
 
@@ -105,18 +107,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // 4. Fetch profile if we have a user
           if (sessionUser) {
             try {
+              console.log("[AuthContext] Fetching profile for user:", sessionUser.id);
               const profileData = await profileService.getProfile(sessionUser.id);
+              console.log("[AuthContext] Profile fetched successfully:", profileData);
               if (mounted) setProfile(profileData);
             } catch (error) {
               console.error("[AuthContext] Error fetching profile:", error);
-              // Don't set profile to null here if we want to keep partial state, 
-              // but usually safer to keep it consistent
+              if (mounted) setProfile(null);
             }
           }
         }
+        
+        console.log("[AuthContext] Auth initialization complete");
       } catch (error) {
         console.error("[AuthContext] Auth init error", error);
       } finally {
+        console.log("[AuthContext] Setting loading to false");
         if (mounted) setLoading(false);
       }
     };
