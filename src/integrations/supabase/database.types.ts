@@ -1,4 +1,4 @@
- 
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 export type Json =
   | string
   | number
@@ -493,6 +493,8 @@ export type Database = {
           status: string | null
           team_id: string | null
           team_or_player: string
+          time_period_min: number | null
+          time_period_type: string | null
           updated_at: string | null
           vendor_id: string | null
         }
@@ -508,6 +510,8 @@ export type Database = {
           status?: string | null
           team_id?: string | null
           team_or_player: string
+          time_period_min?: number | null
+          time_period_type?: string | null
           updated_at?: string | null
           vendor_id?: string | null
         }
@@ -523,6 +527,8 @@ export type Database = {
           status?: string | null
           team_id?: string | null
           team_or_player?: string
+          time_period_min?: number | null
+          time_period_type?: string | null
           updated_at?: string | null
           vendor_id?: string | null
         }

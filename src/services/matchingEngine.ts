@@ -12,6 +12,8 @@ interface Trigger {
   odds_value: number;
   bookmaker?: string | null;
   frequency?: string; // 'once' or 'recurring'
+  time_period_type?: string | null; // 'quarter', 'period', 'inning', 'half'
+  time_period_min?: number | null; // Minimum period number (e.g., 3 = 3rd quarter or later)
 }
 
 interface OddsSnapshot {
@@ -130,6 +132,7 @@ export function findMatches(
     let bookmakerMismatches = 0;
     let oddsMismatches = 0;
     let alreadyMatchedSkips = 0;
+    let timePeriodMismatches = 0;
     
     for (const odds of liveOdds) {
       // Skip if this is a recurring trigger that already matched this event
@@ -163,13 +166,91 @@ export function findMatches(
         continue;
       }
 
-      // 4. Match bookmaker if specified (case-insensitive)
+      // 4. Validate time period constraints if specified
+      if (trigger.time_period_type && trigger.time_period_min !== null) {
+        // Check if event data has scores with period information
+        const scores = odds.event_data?.scores;
+        if (scores && Array.isArray(scores)) {
+          // Find the score for this team
+          const teamScore = scores.find((s: any) => s.name === odds.team_or_player);
+          
+          if (teamScore) {
+            // Get current period from last_period or calculate from breakdown
+            let currentPeriod: number | null = null;
+            let currentPeriodType: string | null = null;
+
+            // Try to get from last_period first
+            if (teamScore.last_period) {
+              const periodMatch = teamScore.last_period.match(/^(\w+)\s+(\d+)$/i);
+              if (periodMatch) {
+                currentPeriodType = periodMatch[1].toLowerCase();
+                currentPeriod = parseInt(periodMatch[2], 10);
+              }
+            }
+
+            // If not found, try to infer from breakdown
+            if (currentPeriod === null && teamScore.breakdown) {
+              const breakdownKeys = Object.keys(teamScore.breakdown);
+              if (breakdownKeys.length > 0) {
+                // Get the highest period number from breakdown
+                const periods = breakdownKeys
+                  .map(key => {
+                    const match = key.match(/(\d+)$/);
+                    return match ? parseInt(match[1], 10) : 0;
+                  })
+                  .filter(num => num > 0);
+                
+                if (periods.length > 0) {
+                  currentPeriod = Math.max(...periods);
+                  // Infer period type from trigger (we know what we're looking for)
+                  currentPeriodType = trigger.time_period_type;
+                }
+              }
+            }
+
+            // Validate period constraints
+            if (currentPeriod === null) {
+              timePeriodMismatches++;
+              console.log(`[MatchingEngine] Time period check failed: No current period found in event data`);
+              continue;
+            }
+
+            // Check if period types match (if we found the current period type)
+            if (currentPeriodType && currentPeriodType !== trigger.time_period_type) {
+              timePeriodMismatches++;
+              console.log(`[MatchingEngine] Time period type mismatch: "${currentPeriodType}" != "${trigger.time_period_type}"`);
+              continue;
+            }
+
+            // Check if current period meets minimum requirement
+            if (currentPeriod < trigger.time_period_min) {
+              timePeriodMismatches++;
+              console.log(`[MatchingEngine] Time period too early: period ${currentPeriod} < required ${trigger.time_period_min}`);
+              continue;
+            }
+
+            console.log(`[MatchingEngine] Time period check passed: ${currentPeriodType || trigger.time_period_type} ${currentPeriod} >= ${trigger.time_period_min}`);
+          } else {
+            // No team score found - can't validate period
+            timePeriodMismatches++;
+            console.log(`[MatchingEngine] Time period check failed: No score data found for ${odds.team_or_player}`);
+            continue;
+          }
+        } else {
+          // No scores data - can't validate period
+          timePeriodMismatches++;
+          console.log(`[MatchingEngine] Time period check failed: No scores in event data`);
+          continue;
+        }
+      }
+
+      // 5. Match bookmaker if specified (case-insensitive)
       if (trigger.bookmaker && trigger.bookmaker.toLowerCase() !== odds.bookmaker.toLowerCase()) {
         bookmakerMismatches++;
         continue;
       }
 
-      // 5. Check odds value meets condition
+      // 6. Check odds value meets condition
       const meetsCondition = checkOddsCondition(
         odds.odds_value,
         trigger.odds_comparator,
@@ -204,6 +285,7 @@ export function findMatches(
     console.log(`  - Team mismatches: ${teamMismatches}`);
     console.log(`  - Bet type mismatches: ${betTypeMismatches}`);
     console.log(`  - Bookmaker mismatches: ${bookmakerMismatches}`);
+    console.log(`  - Time period mismatches: ${timePeriodMismatches}`);
     console.log(`  - Odds condition mismatches: ${oddsMismatches}`);
     if (trigger.frequency === 'recurring') {
       console.log(`  - Already matched events skipped: ${alreadyMatchedSkips}`);

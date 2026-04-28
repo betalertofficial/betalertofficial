@@ -312,8 +312,34 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
       const finalOddsValue = oddsSign === "-" ? -numericValue : numericValue;
       const oddsComparator = oddsDirection === "higher" ? ">=" : "<=";
 
+      // Parse time period from gameTimeContext
+      let timePeriodType: string | null = null;
+      let timePeriodMin: number | null = null;
+
+      if (gameTimeContext !== "anytime" && gameTimeContext !== "pregame" && gameTimeContext !== "live") {
+        // Parse formats like "q1_or_later", "i3_or_later", "p2_or_later"
+        const match = gameTimeContext.match(/^([a-z])(\d+)_or_later$/);
+        if (match) {
+          const periodPrefix = match[1];
+          timePeriodMin = parseInt(match[2], 10);
+
+          // Map prefix to period type based on sport
+          const periodTypeMap: Record<string, Record<string, string>> = {
+            basketball_nba: { q: "quarter" },
+            americanfootball_nfl: { q: "quarter" },
+            icehockey_nhl: { p: "period" },
+            baseball_mlb: { i: "inning" }
+          };
+
+          const sportMap = periodTypeMap[selectedSport];
+          if (sportMap && sportMap[periodPrefix]) {
+            timePeriodType = sportMap[periodPrefix];
+          }
+        }
+      }
+
       console.log("Creating trigger with data:", {
-        sport: selectedSport, // Use API key format (e.g., "baseball_mlb") NOT display name
+        sport: selectedSport,
         team_or_player: selectedTeam,
         team_id: selectedTeamId || null,
         bet_type: betType,
@@ -322,11 +348,13 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
         frequency,
         status: "active",
         vendor_id: oddsApiVendor.id,
-        bookmaker: sportsbook
+        bookmaker: sportsbook,
+        time_period_type: timePeriodType,
+        time_period_min: timePeriodMin
       });
 
       const trigger = await triggerService.createTrigger({
-        sport: selectedSport, // Store "baseball_mlb", NOT "MLB"
+        sport: selectedSport,
         team_or_player: selectedTeam,
         team_id: selectedTeamId || null,
         bet_type: betType,
@@ -335,7 +363,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
         frequency,
         status: "active",
         vendor_id: oddsApiVendor.id,
-        bookmaker: sportsbook
+        bookmaker: sportsbook,
+        time_period_type: timePeriodType,
+        time_period_min: timePeriodMin
       });
 
       toast({
