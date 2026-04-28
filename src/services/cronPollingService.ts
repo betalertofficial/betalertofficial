@@ -91,6 +91,7 @@ async function fetchLiveOddsForSports(
           commence_time: event.commence_time,
           home_team: event.home_team,
           away_team: event.away_team,
+          scores: event.scores || null, // Include scores for period/inning tracking
         };
 
         for (const bookmaker of event.bookmakers || []) {
