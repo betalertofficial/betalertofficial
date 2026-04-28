@@ -382,6 +382,7 @@ export async function runCronPoll(
       }
 
       console.log(`[CronPoll] ${validatedEventIds.size} events passed time period validation`);
+      console.log(`[CronPoll] Validated event IDs:`, Array.from(validatedEventIds));
     }
 
     // Step 6: Create evaluation run
@@ -408,8 +409,11 @@ export async function runCronPoll(
     const validTriggers = triggers.filter(trigger => {
       // If trigger has no time period constraint, it's always valid
       if (!trigger.time_period_type || trigger.time_period_min === null) {
+        console.log(`[CronPoll] Trigger ${trigger.id} has no time period constraint - VALID`);
         return true;
       }
+
+      console.log(`[CronPoll] Validating trigger ${trigger.id} (${trigger.team_or_player}, ${trigger.time_period_type} >= ${trigger.time_period_min})...`);
 
       // If trigger has time period constraint, check if any odds for this trigger
       // come from a validated event
@@ -419,18 +423,26 @@ export async function runCronPoll(
           odds.team_or_player.toLowerCase().includes(trigger.team_or_player.toLowerCase()) ||
           trigger.team_or_player.toLowerCase().includes(odds.team_or_player.toLowerCase());
         
+        if (teamMatch) {
+          console.log(`[CronPoll]   - Found odds for ${odds.team_or_player} on event ${odds.event_id}`);
+          console.log(`[CronPoll]   - Event validated? ${validatedEventIds.has(odds.event_id)}`);
+        }
+
         // Check if event passed validation
         return teamMatch && validatedEventIds.has(odds.event_id);
       });
 
       if (!hasValidatedOdds) {
         console.log(`[CronPoll] Filtering out trigger ${trigger.id} - no validated events`);
+      } else {
+        console.log(`[CronPoll] Trigger ${trigger.id} has validated odds - VALID`);
       }
 
       return hasValidatedOdds;
     });
 
     console.log(`[CronPoll] ${validTriggers.length}/${triggers.length} triggers remain after time period filtering`);
+    console.log(`[CronPoll] Valid trigger IDs:`, validTriggers.map(t => t.id));
 
     if (validTriggers.length === 0) {
       console.log("[CronPoll] No valid triggers after time period filtering");
