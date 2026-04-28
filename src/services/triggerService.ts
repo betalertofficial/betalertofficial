@@ -12,6 +12,8 @@ interface CreateTriggerParams {
   vendor_id?: string;
   frequency: TriggerFrequency;
   status: string;
+  time_period_type?: string | null;
+  time_period_min?: number | null;
 }
 
 export const triggerService = {
@@ -67,7 +69,9 @@ export const triggerService = {
         frequency: params.frequency,
         status: params.status,
         vendor_id: params.vendor_id,
-        bookmaker: params.bookmaker
+        bookmaker: params.bookmaker,
+        time_period_type: params.time_period_type || null,
+        time_period_min: params.time_period_min || null
       }])
       .select()
       .single();
