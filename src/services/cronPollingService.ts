@@ -328,7 +328,7 @@ export async function runCronPoll(
           if (espnData.period !== undefined && espnData.period !== null) {
             currentPeriod = espnData.period;
             
-            // Parse period type from detail string for validation
+            // First try to parse period type from detail string
             if (espnData.detail) {
               const periodWord = espnData.detail.toLowerCase();
               
@@ -338,10 +338,25 @@ export async function runCronPoll(
               else if (periodWord.includes('period')) currentPeriodType = 'period';
               else if (periodWord.includes('half')) currentPeriodType = 'half';
             }
+
+            // If detail didn't contain a period keyword, infer from sport/league
+            if (!currentPeriodType) {
+              const sport = event.league_key.toLowerCase();
+              
+              if (sport.includes('baseball') || sport.includes('mlb')) {
+                currentPeriodType = 'inning';
+              } else if (sport.includes('basketball') || sport.includes('nba')) {
+                currentPeriodType = 'quarter';
+              } else if (sport.includes('hockey') || sport.includes('nhl')) {
+                currentPeriodType = 'period';
+              } else if (sport.includes('soccer') || sport.includes('football')) {
+                currentPeriodType = 'half';
+              }
+            }
           }
 
           if (currentPeriod === null || !currentPeriodType) {
-            console.log(`[CronPoll] ⚠️ Could not extract period data. Period: ${espnData.period}, Detail: "${espnData.detail}"`);
+            console.log(`[CronPoll] ⚠️ Could not extract period data. Period: ${espnData.period}, Detail: "${espnData.detail}", Sport: ${event.league_key}`);
             continue;
           }
 
