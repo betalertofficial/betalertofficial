@@ -135,6 +135,40 @@ async function storeOddsSnapshots(
 
   console.log(`[CronPoll] Storing ${oddsData.length} odds snapshots...`);
 
+  // Fetch ESPN data for all unique events
+  const uniqueEvents = new Map<string, { sport: string; home: string; away: string }>();
+  for (const odds of oddsData) {
+    if (!uniqueEvents.has(odds.event_id) && odds.event_data) {
+      uniqueEvents.set(odds.event_id, {
+        sport: odds.sport,
+        home: odds.event_data.home_team,
+        away: odds.event_data.away_team,
+      });
+    }
+  }
+
+  console.log(`[CronPoll] Fetching ESPN data for ${uniqueEvents.size} unique events...`);
+
+  // Fetch ESPN data for events not already in cache
+  for (const [eventId, eventInfo] of uniqueEvents) {
+    if (!espnDataCache.has(eventId)) {
+      try {
+        const espnData = await espnService.findGameScore(
+          eventInfo.sport,
+          eventInfo.home,
+          eventInfo.away
+        );
+        
+        if (espnData.found) {
+          espnDataCache.set(eventId, espnData);
+          console.log(`[CronPoll] Fetched ESPN data for ${eventInfo.away} @ ${eventInfo.home}: ${espnData.detail}`);
+        }
+      } catch (error) {
+        console.error(`[CronPoll] Error fetching ESPN data for event ${eventId}:`, error);
+      }
+    }
+  }
+
   const snapshots = oddsData.map((odds) => {
     // Get ESPN data for this event if available
     const espnData = espnDataCache.get(odds.event_id);
