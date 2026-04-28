@@ -313,6 +313,7 @@ export async function runCronPoll(
           console.log(`[CronPoll] ESPN data for ${event.event_id}:`, {
             state: espnData.state,
             detail: espnData.detail,
+            period: espnData.period,
             homeTeam: espnData.homeTeam,
             awayTeam: espnData.awayTeam,
             homeScore: espnData.homeScore,
@@ -323,13 +324,13 @@ export async function runCronPoll(
           let currentPeriod: number | null = null;
           let currentPeriodType: string | null = null;
 
-          // Parse period from detail string (e.g., "3rd Quarter", "Top 4th", "2nd Period")
-          if (espnData.detail) {
-            // Match patterns like "3rd Quarter", "Top 5th", "2nd Period", "1st Half"
-            const periodMatch = espnData.detail.match(/(?:Top|Bottom|Mid)?\s*(\d+)(?:st|nd|rd|th)\s+(\w+)/i);
-            if (periodMatch) {
-              currentPeriod = parseInt(periodMatch[1], 10);
-              const periodWord = periodMatch[2].toLowerCase();
+          // Use the period field directly from ESPN
+          if (espnData.period !== undefined && espnData.period !== null) {
+            currentPeriod = espnData.period;
+            
+            // Parse period type from detail string for validation
+            if (espnData.detail) {
+              const periodWord = espnData.detail.toLowerCase();
               
               // Map period word to standard type
               if (periodWord.includes('quarter')) currentPeriodType = 'quarter';
@@ -340,7 +341,7 @@ export async function runCronPoll(
           }
 
           if (currentPeriod === null || !currentPeriodType) {
-            console.log(`[CronPoll] ⚠️ Could not parse period from ESPN detail: "${espnData.detail}"`);
+            console.log(`[CronPoll] ⚠️ Could not extract period data. Period: ${espnData.period}, Detail: "${espnData.detail}"`);
             continue;
           }
 
