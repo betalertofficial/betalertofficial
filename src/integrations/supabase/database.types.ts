@@ -243,6 +243,7 @@ export type Database = {
           feed_event_id: string | null
           id: string
           odds_value: number
+          scores_data: Json | null
           snapshot_at: string | null
           sport: string
           team_or_player: string
@@ -257,6 +258,7 @@ export type Database = {
           feed_event_id?: string | null
           id?: string
           odds_value: number
+          scores_data?: Json | null
           snapshot_at?: string | null
           sport: string
           team_or_player: string
@@ -271,6 +273,7 @@ export type Database = {
           feed_event_id?: string | null
           id?: string
           odds_value?: number
+          scores_data?: Json | null
           snapshot_at?: string | null
           sport?: string
           team_or_player?: string

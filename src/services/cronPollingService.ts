@@ -126,7 +126,8 @@ async function fetchLiveOddsForSports(
  */
 async function storeOddsSnapshots(
   supabase: SupabaseClient<Database>,
-  oddsData: OddsSnapshot[]
+  oddsData: OddsSnapshot[],
+  espnDataCache: Map<string, any> = new Map()
 ): Promise<{ id: string; event_id: string }[]> {
   if (oddsData.length === 0) {
     return [];
@@ -134,16 +135,22 @@ async function storeOddsSnapshots(
 
   console.log(`[CronPoll] Storing ${oddsData.length} odds snapshots...`);
 
-  const snapshots = oddsData.map((odds) => ({
-    sport: odds.sport,
-    event_id: odds.event_id,
-    team_or_player: odds.team_or_player,
-    bookmaker: odds.bookmaker,
-    bet_type: odds.bet_type,
-    odds_value: odds.odds_value,
-    event_data: odds.event_data,
-    snapshot_at: new Date().toISOString(),
-  }));
+  const snapshots = oddsData.map((odds) => {
+    // Get ESPN data for this event if available
+    const espnData = espnDataCache.get(odds.event_id);
+    
+    return {
+      sport: odds.sport,
+      event_id: odds.event_id,
+      team_or_player: odds.team_or_player,
+      bookmaker: odds.bookmaker,
+      bet_type: odds.bet_type,
+      odds_value: odds.odds_value,
+      event_data: odds.event_data,
+      scores_data: espnData || null, // Store ESPN data for debugging
+      snapshot_at: new Date().toISOString(),
+    };
+  });
 
   const { data, error } = await supabase
     .from("odds_snapshots")
@@ -270,6 +277,7 @@ export async function runCronPoll(
     // Step 5: Get live events for sports with time-period triggers
     const sportsNeedingValidation = [...new Set(triggersWithTimePeriod.map(t => t.sport))];
     const validatedEventIds = new Set<string>();
+    const espnDataCache = new Map<string, any>(); // Cache ESPN data by event_id
 
     if (sportsNeedingValidation.length > 0) {
       console.log(`[CronPoll] Validating time periods for ${sportsNeedingValidation.length} sports...`);
@@ -299,6 +307,18 @@ export async function runCronPoll(
             continue;
           }
 
+          // Cache ESPN data for this event
+          espnDataCache.set(event.event_id, espnData);
+          
+          console.log(`[CronPoll] ESPN data for ${event.event_id}:`, {
+            state: espnData.state,
+            detail: espnData.detail,
+            homeTeam: espnData.homeTeam,
+            awayTeam: espnData.awayTeam,
+            homeScore: espnData.homeScore,
+            awayScore: espnData.awayScore,
+          });
+
           // Extract period info from ESPN data
           let currentPeriod: number | null = null;
           let currentPeriodType: string | null = null;
@@ -320,11 +340,11 @@ export async function runCronPoll(
           }
 
           if (currentPeriod === null || !currentPeriodType) {
-            console.log(`[CronPoll] Could not parse period from ESPN detail: "${espnData.detail}"`);
+            console.log(`[CronPoll] ⚠️ Could not parse period from ESPN detail: "${espnData.detail}"`);
             continue;
           }
 
-          console.log(`[CronPoll] Current game state: ${currentPeriodType} ${currentPeriod}`);
+          console.log(`[CronPoll] 📊 Parsed game state: ${currentPeriodType} ${currentPeriod}`);
 
           // Check if any triggers for this event pass time period validation
           const eventTriggers = triggersWithTimePeriod.filter(t => 
@@ -335,16 +355,20 @@ export async function runCronPoll(
              event.away_team.toLowerCase().includes(t.team_or_player.toLowerCase()))
           );
 
+          console.log(`[CronPoll] Found ${eventTriggers.length} triggers for this event`);
+
           for (const trigger of eventTriggers) {
+            console.log(`[CronPoll] Checking trigger ${trigger.id}: ${trigger.team_or_player} - ${trigger.time_period_type} >= ${trigger.time_period_min}`);
+            
             // Validate period type matches
             if (trigger.time_period_type !== currentPeriodType) {
-              console.log(`[CronPoll] Period type mismatch for trigger ${trigger.id}: ${currentPeriodType} != ${trigger.time_period_type}`);
+              console.log(`[CronPoll] ❌ Period type mismatch for trigger ${trigger.id}: ${currentPeriodType} != ${trigger.time_period_type}`);
               continue;
             }
 
             // Validate period number meets minimum
             if (currentPeriod < (trigger.time_period_min || 0)) {
-              console.log(`[CronPoll] Period too early for trigger ${trigger.id}: ${currentPeriod} < ${trigger.time_period_min}`);
+              console.log(`[CronPoll] ❌ Period too early for trigger ${trigger.id}: ${currentPeriod} < ${trigger.time_period_min}`);
               continue;
             }
 
@@ -435,7 +459,7 @@ export async function runCronPoll(
     }
 
     // Step 9: Store odds snapshots and get IDs
-    const storedSnapshots = await storeOddsSnapshots(supabase, allOdds);
+    const storedSnapshots = await storeOddsSnapshots(supabase, allOdds, espnDataCache);
 
     // Create lookup map: event_id + team + bookmaker + bet_type -> snapshot_id
     const snapshotMap = new Map<string, string>();
