@@ -162,11 +162,12 @@ async function storeOddsSnapshots(
 /**
  * Main cron polling function - runs scheduled trigger evaluation
  * 
- * SCHEDULE-AWARE OPTIMIZATION:
- * 1. Updates event statuses (scheduled → live → completed)
- * 2. Queries for leagues with live events (uses league_key format)
- * 3. Only fetches odds for leagues with active games
- * 4. Skips Odds API entirely if no live events
+ * SCHEDULE-AWARE OPTIMIZATION WITH TIME PERIOD VALIDATION:
+ * 1. Load active triggers and identify those with time period constraints
+ * 2. Query event_schedules for live events matching trigger sports
+ * 3. Fetch ESPN data for games with active triggers to validate periods
+ * 4. Filter triggers to only those that pass time period validation
+ * 5. Fetch odds and evaluate only validated triggers
  */
 export async function runCronPoll(
   supabase: SupabaseClient<Database>,
@@ -183,14 +184,20 @@ export async function runCronPoll(
     const markedCompleted = await markEventsAsCompleted(supabase);
     console.log(`[CronPoll] Status updates: ${markedLive} → live, ${markedCompleted} → completed`);
 
-    // Step 2: Get sports with live events (returns league_keys like "basketball_nba")
-    const activeSports = await getActiveSports(supabase);
-    
-    if (activeSports.length === 0) {
-      console.log("[CronPoll] No live events found - skipping Odds API");
+    // Step 2: Fetch active triggers first
+    const { data: triggers, error: triggersError } = await supabase
+      .from("triggers")
+      .select("*")
+      .eq("status", "active");
+
+    if (triggersError) {
+      throw new Error(`Failed to fetch triggers: ${triggersError.message}`);
+    }
+
+    if (!triggers || triggers.length === 0) {
+      console.log("[CronPoll] No active triggers found");
       const durationMs = Date.now() - startTime;
       
-      // Create evaluation run showing skip
       const { data: evalRun } = await supabase
         .from("evaluation_runs")
         .insert({
@@ -199,7 +206,7 @@ export async function runCronPoll(
           matches_found: 0,
           alerts_created: 0,
           duration_ms: durationMs,
-          error_message: "No live events - skipped polling",
+          error_message: "No active triggers",
         })
         .select()
         .single();
@@ -212,6 +219,39 @@ export async function runCronPoll(
         alertsCreated: 0,
         webhooksSent: 0,
         durationMs,
+      };
+    }
+
+    console.log(`[CronPoll] Loaded ${triggers.length} active triggers`);
+
+    // Step 3: Get sports with live events
+    const activeSports = await getActiveSports(supabase);
+    
+    if (activeSports.length === 0) {
+      console.log("[CronPoll] No live events found - skipping polling");
+      const durationMs = Date.now() - startTime;
+      
+      const { data: evalRun } = await supabase
+        .from("evaluation_runs")
+        .insert({
+          status: "completed",
+          triggers_checked: triggers.length,
+          matches_found: 0,
+          alerts_created: 0,
+          duration_ms: durationMs,
+          error_message: "No live events - skipped polling",
+        })
+        .select()
+        .single();
+
+      return {
+        success: true,
+        evaluationRunId: evalRun?.id,
+        triggersChecked: triggers.length,
+        matchesFound: 0,
+        alertsCreated: 0,
+        webhooksSent: 0,
+        durationMs,
         skippedReason: "No live events",
         liveEventsCount: 0,
         activeSports: [],
@@ -220,15 +260,106 @@ export async function runCronPoll(
 
     console.log(`[CronPoll] Found ${activeSports.length} sports with live events:`, activeSports);
 
-    // Count total live events
-    const { count: liveEventsCount } = await supabase
-      .from("event_schedules")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "live");
+    // Step 4: Filter triggers with time period constraints that need validation
+    const triggersWithTimePeriod = triggers.filter(t => 
+      t.time_period_type && t.time_period_min !== null
+    );
 
-    console.log(`[CronPoll] Total live events: ${liveEventsCount}`);
+    console.log(`[CronPoll] ${triggersWithTimePeriod.length} triggers have time period constraints`);
 
-    // Step 3: Create evaluation run
+    // Step 5: Get live events for sports with time-period triggers
+    const sportsNeedingValidation = [...new Set(triggersWithTimePeriod.map(t => t.sport))];
+    const validatedEventIds = new Set<string>();
+
+    if (sportsNeedingValidation.length > 0) {
+      console.log(`[CronPoll] Validating time periods for ${sportsNeedingValidation.length} sports...`);
+
+      // Query live events for these sports
+      const { data: liveEvents } = await supabase
+        .from("event_schedules")
+        .select("*")
+        .eq("status", "live")
+        .in("league_key", sportsNeedingValidation);
+
+      console.log(`[CronPoll] Found ${liveEvents?.length || 0} live events to validate`);
+
+      // For each live event, fetch ESPN data and validate time periods
+      for (const event of liveEvents || []) {
+        try {
+          console.log(`[CronPoll] Checking ESPN for: ${event.away_team} @ ${event.home_team}`);
+          
+          const espnData = await espnService.findGameScore(
+            event.league_key,
+            event.home_team,
+            event.away_team
+          );
+
+          if (!espnData.found) {
+            console.log(`[CronPoll] ESPN data not found for event ${event.event_id}`);
+            continue;
+          }
+
+          // Extract period info from ESPN data
+          let currentPeriod: number | null = null;
+          let currentPeriodType: string | null = null;
+
+          // Parse period from detail string (e.g., "3rd Quarter", "Top 4th", "2nd Period")
+          if (espnData.detail) {
+            // Match patterns like "3rd Quarter", "Top 5th", "2nd Period", "1st Half"
+            const periodMatch = espnData.detail.match(/(?:Top|Bottom|Mid)?\s*(\d+)(?:st|nd|rd|th)\s+(\w+)/i);
+            if (periodMatch) {
+              currentPeriod = parseInt(periodMatch[1], 10);
+              const periodWord = periodMatch[2].toLowerCase();
+              
+              // Map period word to standard type
+              if (periodWord.includes('quarter')) currentPeriodType = 'quarter';
+              else if (periodWord.includes('inning')) currentPeriodType = 'inning';
+              else if (periodWord.includes('period')) currentPeriodType = 'period';
+              else if (periodWord.includes('half')) currentPeriodType = 'half';
+            }
+          }
+
+          if (currentPeriod === null || !currentPeriodType) {
+            console.log(`[CronPoll] Could not parse period from ESPN detail: "${espnData.detail}"`);
+            continue;
+          }
+
+          console.log(`[CronPoll] Current game state: ${currentPeriodType} ${currentPeriod}`);
+
+          // Check if any triggers for this event pass time period validation
+          const eventTriggers = triggersWithTimePeriod.filter(t => 
+            t.sport === event.league_key &&
+            (t.team_or_player.toLowerCase().includes(event.home_team.toLowerCase()) ||
+             t.team_or_player.toLowerCase().includes(event.away_team.toLowerCase()) ||
+             event.home_team.toLowerCase().includes(t.team_or_player.toLowerCase()) ||
+             event.away_team.toLowerCase().includes(t.team_or_player.toLowerCase()))
+          );
+
+          for (const trigger of eventTriggers) {
+            // Validate period type matches
+            if (trigger.time_period_type !== currentPeriodType) {
+              console.log(`[CronPoll] Period type mismatch for trigger ${trigger.id}: ${currentPeriodType} != ${trigger.time_period_type}`);
+              continue;
+            }
+
+            // Validate period number meets minimum
+            if (currentPeriod < (trigger.time_period_min || 0)) {
+              console.log(`[CronPoll] Period too early for trigger ${trigger.id}: ${currentPeriod} < ${trigger.time_period_min}`);
+              continue;
+            }
+
+            console.log(`[CronPoll] ✅ Event ${event.event_id} passes time period validation for trigger ${trigger.id}`);
+            validatedEventIds.add(event.event_id);
+          }
+        } catch (error) {
+          console.error(`[CronPoll] Error validating event ${event.event_id}:`, error);
+        }
+      }
+
+      console.log(`[CronPoll] ${validatedEventIds.size} events passed time period validation`);
+    }
+
+    // Step 6: Create evaluation run
     const { data: evalRun, error: evalError } = await supabase
       .from("evaluation_runs")
       .insert({
@@ -243,42 +374,67 @@ export async function runCronPoll(
 
     console.log(`[CronPoll] Created evaluation run: ${evalRun.id}`);
 
-    // Step 4: Fetch active triggers
-    const { data: triggers, error: triggersError } = await supabase
-      .from("triggers")
-      .select("*")
-      .eq("status", "active");
+    // Step 7: Fetch odds ONLY for sports with live events
+    const allOdds = await fetchLiveOddsForSports(oddsApiKey, activeSports);
+    console.log(`[CronPoll] Total live odds collected: ${allOdds.length}`);
 
-    if (triggersError) {
-      throw new Error(`Failed to fetch triggers: ${triggersError.message}`);
-    }
+    // Step 8: Filter triggers based on time period validation
+    // Remove triggers that have time period constraints but their events didn't pass validation
+    const validTriggers = triggers.filter(trigger => {
+      // If trigger has no time period constraint, it's always valid
+      if (!trigger.time_period_type || trigger.time_period_min === null) {
+        return true;
+      }
 
-    if (!triggers || triggers.length === 0) {
-      console.log("[CronPoll] No active triggers found");
+      // If trigger has time period constraint, check if any odds for this trigger
+      // come from a validated event
+      const hasValidatedOdds = allOdds.some(odds => {
+        // Check if odds match this trigger's team
+        const teamMatch = 
+          odds.team_or_player.toLowerCase().includes(trigger.team_or_player.toLowerCase()) ||
+          trigger.team_or_player.toLowerCase().includes(odds.team_or_player.toLowerCase());
+        
+        // Check if event passed validation
+        return teamMatch && validatedEventIds.has(odds.event_id);
+      });
+
+      if (!hasValidatedOdds) {
+        console.log(`[CronPoll] Filtering out trigger ${trigger.id} - no validated events`);
+      }
+
+      return hasValidatedOdds;
+    });
+
+    console.log(`[CronPoll] ${validTriggers.length}/${triggers.length} triggers remain after time period filtering`);
+
+    if (validTriggers.length === 0) {
+      console.log("[CronPoll] No valid triggers after time period filtering");
+      const durationMs = Date.now() - startTime;
+      
       await supabase
         .from("evaluation_runs")
-        .update({ status: "completed", triggers_checked: 0 })
+        .update({
+          status: "completed",
+          triggers_checked: triggers.length,
+          matches_found: 0,
+          alerts_created: 0,
+          duration_ms: durationMs,
+          error_message: "No triggers passed time period validation",
+        })
         .eq("id", evalRun.id);
 
       return {
         success: true,
         evaluationRunId: evalRun.id,
-        triggersChecked: 0,
+        triggersChecked: triggers.length,
         matchesFound: 0,
         alertsCreated: 0,
         webhooksSent: 0,
-        durationMs: Date.now() - startTime,
+        durationMs,
       };
     }
 
-    console.log(`[CronPoll] Loaded ${triggers.length} active triggers`);
-
-    // Step 5: Fetch odds ONLY for sports with live events
-    // activeSports now contains league_keys (e.g., "basketball_nba")
-    const allOdds = await fetchLiveOddsForSports(oddsApiKey, activeSports);
-    console.log(`[CronPoll] Total live odds collected: ${allOdds.length}`);
-
-    // Step 6: Store odds snapshots and get IDs
+    // Step 9: Store odds snapshots and get IDs
     const storedSnapshots = await storeOddsSnapshots(supabase, allOdds);
 
     // Create lookup map: event_id + team + bookmaker + bet_type -> snapshot_id
@@ -289,8 +445,8 @@ export async function runCronPoll(
       snapshotMap.set(key, snapshot.id);
     });
 
-    // Step 7: Load existing matches for recurring triggers
-    const recurringTriggerIds = triggers
+    // Step 10: Load existing matches for recurring triggers
+    const recurringTriggerIds = validTriggers
       .filter(t => t.frequency === "recurring")
       .map(t => t.id);
 
@@ -310,13 +466,13 @@ export async function runCronPoll(
       }
     });
 
-    // Step 8: Find matches using matching engine
-    const allMatches = findMatches(triggers, allOdds, existingMatchMap);
+    // Step 11: Find matches using matching engine (with validated triggers only)
+    const allMatches = findMatches(validTriggers, allOdds, existingMatchMap);
     const uniqueMatches = deduplicateMatches(allMatches);
     
     console.log(`[CronPoll] Found ${uniqueMatches.length} unique matches`);
 
-    // Step 9: Create trigger_matches and alerts
+    // Step 12: Create trigger_matches and alerts
     let matchesCreated = 0;
     let alertsCreated = 0;
     let webhooksSent = 0;
@@ -377,7 +533,7 @@ export async function runCronPoll(
           }
         }
 
-        // Fetch ESPN game data
+        // Fetch ESPN game data for alert
         const oddsSnapshot = allOdds.find(o => 
           o.event_id === match.eventId && 
           o.team_or_player === match.teamOrPlayer &&
@@ -388,7 +544,7 @@ export async function runCronPoll(
         let espnData = null;
         if (oddsSnapshot?.event_data) {
           const eventData = oddsSnapshot.event_data;
-          console.log(`[CronPoll] Fetching ESPN data for: ${eventData.away_team} @ ${eventData.home_team} (${match.sport})`);
+          console.log(`[CronPoll] Fetching ESPN data for alert: ${eventData.away_team} @ ${eventData.home_team} (${match.sport})`);
           
           espnData = await espnService.findGameScore(
             match.sport,
@@ -407,7 +563,6 @@ export async function runCronPoll(
         let alertMessage = `${match.teamOrPlayer} ${match.betType} hit! ${match.bookmaker}: ${formatOdds(match.oddsValue)}`;
         
         if (espnData?.found) {
-          // Add game score and status to message
           alertMessage += `\n\n📊 Game Status: ${espnService.formatScore(espnData)}`;
         }
 
@@ -418,7 +573,6 @@ export async function runCronPoll(
             trigger_match_id: triggerMatch.id,
             profile_id: profileTrigger.profile_id,
             message: alertMessage,
-            // ESPN game data fields
             game_status: espnData?.state || null,
             game_detail: espnData?.detail || null,
             home_team: espnData?.homeTeam || null,
@@ -443,7 +597,6 @@ export async function runCronPoll(
         // Send webhook if URL is configured
         if (webhookUrl) {
           try {
-            // Fetch full trigger data
             const { data: triggerData } = await supabase
               .from("triggers")
               .select("*")
@@ -463,7 +616,6 @@ export async function runCronPoll(
                 bet_type: match.betType,
                 odds: match.oddsValue,
                 bookmaker: match.bookmaker,
-                // ESPN game data
                 game_status: alert.game_status,
                 game_detail: alert.game_detail,
                 home_team: alert.home_team,
@@ -473,10 +625,8 @@ export async function runCronPoll(
                 period: alert.period,
                 clock: alert.clock,
                 score_summary: alert.score_summary,
-                // Metadata
                 matched_at: triggerMatch.matched_at,
                 delivery_status: alert.delivery_status,
-                // Full trigger data
                 trigger: triggerData,
               }),
             });
@@ -490,7 +640,7 @@ export async function runCronPoll(
       }
     }
 
-    // Step 10: Update evaluation run
+    // Step 13: Update evaluation run
     const durationMs = Date.now() - startTime;
     await supabase
       .from("evaluation_runs")
@@ -513,7 +663,7 @@ export async function runCronPoll(
       alertsCreated,
       webhooksSent,
       durationMs,
-      liveEventsCount: liveEventsCount || 0,
+      liveEventsCount: validatedEventIds.size,
       activeSports,
     };
   } catch (error) {
