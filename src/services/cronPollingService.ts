@@ -363,30 +363,17 @@ export async function runCronPoll(
           if (espnData.period !== undefined && espnData.period !== null) {
             currentPeriod = espnData.period;
             
-            // First try to parse period type from detail string
-            if (espnData.detail) {
-              const periodWord = espnData.detail.toLowerCase();
-              
-              // Map period word to standard type
-              if (periodWord.includes('quarter')) currentPeriodType = 'quarter';
-              else if (periodWord.includes('inning')) currentPeriodType = 'inning';
-              else if (periodWord.includes('period')) currentPeriodType = 'period';
-              else if (periodWord.includes('half')) currentPeriodType = 'half';
-            }
-
-            // If detail didn't contain a period keyword, infer from sport/league
-            if (!currentPeriodType) {
-              const sport = event.league_key.toLowerCase();
-              
-              if (sport.includes('baseball') || sport.includes('mlb')) {
-                currentPeriodType = 'inning';
-              } else if (sport.includes('basketball') || sport.includes('nba')) {
-                currentPeriodType = 'quarter';
-              } else if (sport.includes('hockey') || sport.includes('nhl')) {
-                currentPeriodType = 'period';
-              } else if (sport.includes('soccer') || sport.includes('football')) {
-                currentPeriodType = 'half';
-              }
+            // Infer period type from sport/league (don't parse detail string)
+            const sport = event.league_key.toLowerCase();
+            
+            if (sport.includes('baseball') || sport.includes('mlb')) {
+              currentPeriodType = 'inning';
+            } else if (sport.includes('basketball') || sport.includes('nba')) {
+              currentPeriodType = 'quarter';
+            } else if (sport.includes('hockey') || sport.includes('nhl')) {
+              currentPeriodType = 'period';
+            } else if (sport.includes('soccer') || sport.includes('football')) {
+              currentPeriodType = 'half';
             }
           }
 
