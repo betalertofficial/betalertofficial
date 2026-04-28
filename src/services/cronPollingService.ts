@@ -341,7 +341,8 @@ export async function runCronPoll(
             continue;
           }
 
-          // Cache ESPN data for this event
+          // Cache ESPN data IMMEDIATELY for this event (before validation)
+          // This ensures scores_data is stored even if period parsing fails
           espnDataCache.set(event.event_id, espnData);
           
           console.log(`[CronPoll] ESPN data for ${event.event_id}:`, {
