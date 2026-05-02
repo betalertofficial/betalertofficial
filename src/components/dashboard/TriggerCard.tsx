@@ -1,4 +1,3 @@
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pause, Play, Trash2, Edit } from "lucide-react";
@@ -72,8 +71,12 @@ export function TriggerCard({ profileTrigger, onPause, onResume, onDelete, onEdi
           <p className="font-semibold capitalize">{trigger.frequency}</p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground mb-1">Bookmakers</p>
-          <p className="font-semibold text-xs">FanDuel, DraftKings</p>
+          <p className="text-xs text-muted-foreground mb-1">Period Level</p>
+          <p className="font-semibold text-xs capitalize">
+            {trigger.time_period_type && trigger.time_period_min 
+              ? `${trigger.time_period_type} ${trigger.time_period_min}+`
+              : 'Any Time'}
+          </p>
         </div>
       </div>
 
