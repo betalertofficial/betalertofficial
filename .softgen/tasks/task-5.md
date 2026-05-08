@@ -1,6 +1,6 @@
 ---
 title: "Telegram Alert Notifications"
-status: "todo"
+status: "done"
 priority: "high"
 type: "feature"
 tags: ["telegram", "alerts", "notifications"]
@@ -13,11 +13,11 @@ position: 5
 Add Telegram as primary notification channel. When trigger fires, check for telegram_chat_id first. If present, send via Telegram API. If not, fall back to Zapier webhook (existing behavior).
 
 ## Checklist
-- [ ] Create `telegramService.ts` — sendMessage via Telegram Bot API
-- [ ] Update `alertService.ts` — check telegram_chat_id, route to Telegram or Zapier
-- [ ] Format alert message for Telegram (Markdown support)
-- [ ] Add error handling (retry logic, fallback to Zapier on failure)
-- [ ] Update evaluate-triggers cron to use new routing
+- [x] Create `telegramService.ts` — sendMessage via Telegram Bot API
+- [x] Update `alertService.ts` — check telegram_chat_id, route to Telegram or Zapier
+- [x] Format alert message for Telegram (Markdown support)
+- [x] Add error handling (retry logic, fallback to Zapier on failure)
+- [x] Update evaluate-triggers cron to use new routing
 
 ## Acceptance
 - User with telegram_chat_id gets alerts via Telegram

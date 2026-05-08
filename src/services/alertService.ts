@@ -1,6 +1,6 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import type { Alert } from "@/types/database";
+import { sendTelegramMessage, formatTelegramAlert } from "./telegramService";
 
 const ZAPIER_WEBHOOK_URL = "https://hooks.zapier.com/hooks/catch/7723146/u140xkd/";
 
@@ -109,6 +109,7 @@ export const alertService = {
     if (error) throw error;
   },
 
+  // Main alert routing function - Telegram first, Zapier fallback
   async sendAlert(
     supabaseClient: any,
     profileId: string,
@@ -117,12 +118,22 @@ export const alertService = {
     triggerMatchId?: string
   ): Promise<boolean> {
     try {
+      // Get user profile to check for telegram_chat_id
+      const { data: profile, error: profileError } = await supabaseClient
+        .from("profiles")
+        .select("telegram_chat_id")
+        .eq("id", profileId)
+        .single();
+
+      if (profileError) {
+        console.error("Error fetching profile:", profileError);
+        return false;
+      }
+
       const message = `Trigger Hit! ${trigger.team_or_player} ${trigger.bet_type} ${trigger.odds_comparator} ${trigger.odds_value}. Found: ${snapshot.odds_value} at ${snapshot.bookmaker}`;
       
-      // If we don't have a triggerMatchId, we might create a detached alert or skip
-      // For now, we'll try to create it.
-      
-      const { data, error } = await supabaseClient
+      // Create alert record first
+      const { data: alert, error: alertError } = await supabaseClient
         .from("alerts")
         .insert([
           {
@@ -135,12 +146,72 @@ export const alertService = {
         .select()
         .single();
 
-      if (error) {
-        console.error("Error creating alert record:", error);
+      if (alertError) {
+        console.error("Error creating alert record:", alertError);
         return false;
       }
 
-      return true;
+      // Route to Telegram if telegram_chat_id exists
+      if (profile.telegram_chat_id) {
+        console.log(`Routing alert to Telegram for user ${profileId}`);
+        
+        const telegramMessage = formatTelegramAlert({
+          game: trigger.team_or_player,
+          market: trigger.bet_type,
+          detail: snapshot.bookmaker,
+          currentOdds: snapshot.odds_value,
+          targetOdds: trigger.odds_value,
+        });
+
+        const result = await sendTelegramMessage({
+          chatId: profile.telegram_chat_id,
+          text: telegramMessage,
+        });
+
+        // Update alert status
+        await supabaseClient
+          .from("alerts")
+          .update({
+            delivery_status: result.success ? "sent" : "failed",
+            webhook_response: result.error ? { error: result.error } : { success: true },
+            sent_at: new Date().toISOString()
+          })
+          .eq("id", alert.id);
+
+        return result.success;
+      } else {
+        // Fallback to Zapier webhook
+        console.log(`No Telegram chat_id, routing to Zapier for user ${profileId}`);
+        
+        const payload = {
+          trigger_id: trigger.id,
+          trigger_match_id: triggerMatchId || "",
+          recipient_profile_id: profileId,
+          message,
+          fired_value: snapshot.odds_value,
+          fired_context: snapshot,
+          sport: trigger.sport,
+          team: trigger.team_or_player,
+          vendor: snapshot.vendor || "unknown",
+          bookmakers: [snapshot.bookmaker],
+          deep_link_url: snapshot.deep_link_url,
+          timestamp: new Date().toISOString()
+        };
+
+        const response = await this.sendWebhookAlert(payload);
+        
+        // Update alert status
+        await supabaseClient
+          .from("alerts")
+          .update({
+            delivery_status: response.ok ? "sent" : "failed",
+            webhook_response: response.ok ? { success: true } : { error: "Webhook failed" },
+            sent_at: new Date().toISOString()
+          })
+          .eq("id", alert.id);
+
+        return response.ok;
+      }
     } catch (err) {
       console.error("Exception in sendAlert:", err);
       return false;
