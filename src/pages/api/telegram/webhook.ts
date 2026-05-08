@@ -129,7 +129,30 @@ export default async function handler(
 
     // Handle /start command
     if (text === "/start" || text.startsWith("/start ")) {
-      await handleStartCommand(chatId, username, firstName);
+      // Create or update profile
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: userId, // Use the auth user ID as profile ID
+            telegram_chat_id: chatId,
+            telegram_username: username || null,
+            telegram_first_name: firstName,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" }
+        );
+
+      if (profileError) {
+        console.error("Error creating/updating profile:", profileError);
+        await sendTelegramMessage(
+          chatId,
+          "Sorry, there was an error setting up your account. Please try again."
+        );
+        res.status(200).json({ ok: true });
+        return;
+      }
+
       res.status(200).json({ ok: true });
       return;
     }
