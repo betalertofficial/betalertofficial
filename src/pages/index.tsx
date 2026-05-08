@@ -11,13 +11,13 @@ import { useToast } from "@/hooks/use-toast";
 export default function Home() {
   const router = useRouter();
   const { toast } = useToast();
+  const [emailInput, setEmailInput] = useState("");
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   const handleTelegramAuth = async (user: TelegramUser) => {
     setIsAuthenticating(true);
     
     try {
-      // Send auth data to backend for verification
       const response = await fetch("/api/auth/telegram-callback", {
         method: "POST",
         headers: {
@@ -30,14 +30,11 @@ export default function Home() {
         throw new Error("Authentication failed");
       }
 
-      const data = await response.json();
-
       toast({
         title: "Welcome! 🎯",
         description: `Logged in as ${user.first_name}`,
       });
 
-      // Redirect to dashboard
       setTimeout(() => {
         router.push("/dashboard");
       }, 500);
@@ -106,7 +103,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Telegram Login Section */}
+        {/* Telegram Login Section - NEW */}
         <section id="telegram-section" className="py-20 bg-muted/30">
           <div className="container mx-auto px-4">
             <div className="max-w-4xl mx-auto">
