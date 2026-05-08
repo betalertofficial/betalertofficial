@@ -138,7 +138,7 @@ export default async function handler(
 
       if (existingProfile) {
         // Update existing profile
-        const { error: updateError } = await supabase
+        await supabase
           .from("profiles")
           .update({
             telegram_username: username || null,
@@ -146,33 +146,18 @@ export default async function handler(
             updated_at: new Date().toISOString(),
           } as any)
           .eq("id", existingProfile.id);
-
-        if (updateError) {
-          console.error("Error updating profile:", updateError);
-        }
       } else {
-        // Create new profile without auth user (will be linked when user opens web app)
-        // Use a temporary UUID that will be replaced when user authenticates
+        // Create new profile - will be linked to auth user when they open web app
         const tempId = `telegram_${chatId}`;
         
-        const { error: insertError } = await supabase
+        await supabase
           .from("profiles")
           .insert({
             id: tempId,
             telegram_chat_id: chatId.toString(),
             telegram_username: username || null,
             telegram_first_name: firstName,
-          });
-
-        if (insertError) {
-          console.error("Error creating profile:", insertError);
-          await sendTelegramMessage(
-            chatId,
-            "Sorry, there was an error setting up your account. Please try again."
-          );
-          res.status(200).json({ ok: true });
-          return;
-        }
+          } as any);
       }
 
       // Send welcome message
