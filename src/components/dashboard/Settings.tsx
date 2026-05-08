@@ -1,154 +1,144 @@
-import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
-import { profileService } from "@/services/profileService";
-import { triggerService } from "@/services/triggerService";
-import { LogOut, Save } from "lucide-react";
+import { MessageSquare, LogOut, Check } from "lucide-react";
+import { TelegramLoginButton, type TelegramUser } from "@/components/auth/TelegramLoginButton";
+import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 export function Settings() {
   const { profile, signOut, refreshProfile } = useAuth();
-  const [name, setName] = useState(profile?.name || "");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [activeCount, setActiveCount] = useState(0);
+  const { toast } = useToast();
+  const [isLinking, setIsLinking] = useState(false);
 
-  useEffect(() => {
-    const loadTriggerCount = async () => {
-      if (profile?.id) {
-        try {
-          const triggers = await triggerService.getUserTriggers(profile.id);
-          const active = triggers.filter(t => t.trigger?.status === "active").length;
-          setActiveCount(active);
-        } catch (error) {
-          console.error("Error loading trigger count:", error);
-        }
-      }
-    };
-    loadTriggerCount();
-  }, [profile?.id]);
-
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!profile) return;
-
-    setLoading(true);
-    setMessage("");
-
+  const handleTelegramLink = async (user: TelegramUser) => {
+    setIsLinking(true);
+    
     try {
-      await profileService.updateProfile(profile.id, { name });
+      // Send auth data to backend for verification and linking
+      const response = await fetch("/api/auth/telegram-callback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(user),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to link Telegram account");
+      }
+
+      // Refresh profile to show updated telegram data
       await refreshProfile();
-      setMessage("Profile updated successfully!");
-    } catch (error: any) {
-      setMessage(error.message || "Failed to update profile");
+
+      toast({
+        title: "Telegram Connected! 🎯",
+        description: "You'll now receive alerts via Telegram",
+      });
+    } catch (error) {
+      console.error("Telegram link error:", error);
+      toast({
+        title: "Connection Error",
+        description: "Failed to link Telegram account. Please try again.",
+        variant: "destructive",
+      });
     } finally {
-      setLoading(false);
+      setIsLinking(false);
     }
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
+  const isTelegramConnected = !!profile?.telegram_chat_id;
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Settings</h2>
+      <div>
+        <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+        <p className="text-muted-foreground">Manage your account and notification preferences</p>
+      </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="glass-panel">
-          <CardHeader>
-            <CardTitle>Profile Information</CardTitle>
-            <CardDescription>Update your account details</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleUpdateProfile} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Display Name</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter your name"
-                />
+      {/* Telegram Connection Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                <MessageSquare className="h-5 w-5 text-primary" />
               </div>
-
-              <div className="space-y-2">
-                <Label>Phone Number</Label>
-                <Input
-                  type="text"
-                  value={profile?.phone_e164 || ""}
-                  disabled
-                  className="bg-muted"
-                />
-                <p className="text-xs text-muted-foreground">Phone number cannot be changed</p>
-              </div>
-
-              {message && (
-                <div className={`px-4 py-3 rounded-lg text-sm ${
-                  message.includes("success") 
-                    ? "bg-primary/10 border border-primary/20 text-primary"
-                    : "bg-destructive/10 border border-destructive/20 text-destructive"
-                }`}>
-                  {message}
-                </div>
-              )}
-
-              <Button type="submit" className="w-full btn-primary" disabled={loading}>
-                <Save className="h-4 w-4 mr-2" />
-                {loading ? "Saving..." : "Save Changes"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-panel">
-          <CardHeader>
-            <CardTitle>Subscription</CardTitle>
-            <CardDescription>Manage your subscription and limits</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
               <div>
-                <p className="text-sm text-muted-foreground">Current Tier</p>
-                <p className="text-lg font-bold capitalize">{profile?.subscription_tier || "Free"}</p>
+                <CardTitle>Telegram Notifications</CardTitle>
+                <CardDescription>
+                  Get instant alerts directly in Telegram
+                </CardDescription>
               </div>
-              <Badge className="bg-primary text-primary-foreground">
-                Active
-              </Badge>
             </div>
-
-            <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
-              <div>
-                <p className="text-sm text-muted-foreground">Triggers Remaining</p>
-                <p className="text-lg font-bold">
-                  {profile?.trigger_limit ? Math.max(0, profile.trigger_limit - activeCount) : 0}
+            {isTelegramConnected && (
+              <Badge className="bg-green-500/10 text-green-700 border-green-500/20">
+                <Check className="h-3 w-3 mr-1" />
+                Connected
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isTelegramConnected ? (
+            <div className="space-y-3">
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Telegram Username</span>
+                  <span className="text-sm text-muted-foreground">
+                    @{profile.telegram_username || "Not set"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Name</span>
+                  <span className="text-sm text-muted-foreground">
+                    {profile.telegram_first_name}
+                  </span>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                ✅ You're all set! Alerts will be sent to your Telegram account.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-muted/50 rounded-lg p-4">
+                <p className="text-sm text-muted-foreground mb-4">
+                  Connect your Telegram account to receive instant alerts when your triggers hit.
+                  No phone number required!
+                </p>
+                {isLinking ? (
+                  <div className="flex items-center gap-3 py-2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
+                    <span className="text-sm text-muted-foreground">Connecting...</span>
+                  </div>
+                ) : (
+                  <TelegramLoginButton onAuth={handleTelegramLink} buttonSize="medium" />
+                )}
+              </div>
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
+                <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                  💡 Without Telegram connected, alerts will be sent via email (if configured)
                 </p>
               </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
 
-            <div className="pt-4 border-t border-border">
-              <p className="text-sm text-muted-foreground mb-4">
-                Upgrade to premium for unlimited triggers, priority alerts, and advanced features.
-              </p>
-              <Button variant="outline" className="w-full" disabled>
-                Upgrade Plan (Coming Soon)
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="glass-panel border-destructive/20">
+      {/* Account Actions Card */}
+      <Card>
         <CardHeader>
-          <CardTitle className="text-destructive">Danger Zone</CardTitle>
-          <CardDescription>Irreversible account actions</CardDescription>
+          <CardTitle>Account</CardTitle>
+          <CardDescription>Manage your account settings</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button
-            variant="outline"
-            className="text-destructive hover:bg-destructive/10 border-destructive/20"
-            onClick={signOut}
-          >
+          <Button variant="destructive" onClick={handleSignOut} className="w-full sm:w-auto">
             <LogOut className="h-4 w-4 mr-2" />
             Sign Out
           </Button>

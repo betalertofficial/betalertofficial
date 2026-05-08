@@ -1,350 +1,274 @@
-"use client";
-
+import { useState } from "react";
+import { useRouter } from "next/router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bell, Zap, Target, Shield, ArrowRight, ChevronDown, Settings } from "lucide-react";
-import Link from "next/link";
-import { SEO } from "@/components/SEO";
-import { useState, useEffect } from "react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useRouter } from "next/router";
 import { Badge } from "@/components/ui/badge";
+import { Bell, Zap, Target, Shield, ArrowRight, ChevronDown } from "lucide-react";
+import { SEO } from "@/components/SEO";
+import { TelegramLoginButton, type TelegramUser } from "@/components/auth/TelegramLoginButton";
+import { useToast } from "@/hooks/use-toast";
 
-const countryCodes = [
-  { code: "+1", country: "US", flag: "🇺🇸" },
-  { code: "+1", country: "CA", flag: "🇨🇦" },
-  { code: "+44", country: "GB", flag: "🇬🇧" },
-  { code: "+61", country: "AU", flag: "🇦🇺" },
-  { code: "+33", country: "FR", flag: "🇫🇷" },
-  { code: "+49", country: "DE", flag: "🇩🇪" },
-  { code: "+39", country: "IT", flag: "🇮🇹" },
-  { code: "+34", country: "ES", flag: "🇪🇸" },
-  { code: "+52", country: "MX", flag: "🇲🇽" },
-  { code: "+55", country: "BR", flag: "🇧🇷" },
-  { code: "+86", country: "CN", flag: "🇨🇳" },
-  { code: "+91", country: "IN", flag: "🇮🇳" },
-  { code: "+81", country: "JP", flag: "🇯🇵" },
-  { code: "+82", country: "KR", flag: "🇰🇷" },
-];
-
-export default function LandingPage() {
+export default function Home() {
   const router = useRouter();
-  const [countryCode, setCountryCode] = useState("+1");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [consentChecked, setConsentChecked] = useState(false);
-  const [emailInput, setEmailInput] = useState("");
+  const { toast } = useToast();
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-  useEffect(() => {
-    // Detect user's country based on IP
-    fetch("https://ipapi.co/json/")
-      .then((res) => res.json())
-      .then((data) => {
-        const userCountry = countryCodes.find((c) => c.country === data.country_code);
-        if (userCountry) {
-          setCountryCode(userCountry.code);
-        }
-      })
-      .catch(() => {
-        // Default to US if detection fails
-        setCountryCode("+1");
+  const handleTelegramAuth = async (user: TelegramUser) => {
+    setIsAuthenticating(true);
+    
+    try {
+      // Send auth data to backend for verification
+      const response = await fetch("/api/auth/telegram-callback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(user),
       });
-  }, []);
+
+      if (!response.ok) {
+        throw new Error("Authentication failed");
+      }
+
+      const data = await response.json();
+
+      toast({
+        title: "Welcome! 🎯",
+        description: `Logged in as ${user.first_name}`,
+      });
+
+      // Redirect to dashboard
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 500);
+    } catch (error) {
+      console.error("Telegram auth error:", error);
+      toast({
+        title: "Authentication Error",
+        description: "Failed to authenticate with Telegram. Please try again.",
+        variant: "destructive",
+      });
+      setIsAuthenticating(false);
+    }
+  };
 
   const handleGetStarted = () => {
     router.push("/dashboard");
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <>
       <SEO 
-        title="Hammer - Sports Betting Alerts"
-        description="Set highly specific triggers and get an SMS the moment it hits."
+        title="Bet Alert - Never Miss a Betting Opportunity"
+        description="Real-time odds alerts for smart bettors. Set custom triggers and get notified instantly when your betting opportunities hit."
       />
-
-      {/* Hero Section */}
-      <section className="container mx-auto px-4 py-12 md:py-32">
-        <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
-          {/* Trigger Card Mockup - Shows first on mobile */}
-          <div className="relative order-1 md:order-2">
-            <Card className="p-6 shadow-xl bg-white rounded-2xl">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="font-semibold text-lg">Create Trigger</h3>
-                <Settings className="h-5 w-5 text-gray-400" />
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">
-                    Team
-                  </label>
-                  <div className="bg-gray-100 rounded-lg px-4 py-3 flex items-center justify-between">
-                    <span className="text-gray-900">Lakers</span>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">
-                      Bet Type
-                    </label>
-                    <div className="bg-gray-100 rounded-lg px-4 py-3">
-                      <span className="text-gray-900">Moneyline</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">
-                      Odds Condition
-                    </label>
-                    <div className="bg-gray-100 rounded-lg px-4 py-3">
-                      <span className="text-gray-900">+300 or higher</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">
-                    Game Context
-                  </label>
-                  <div className="bg-gray-100 rounded-lg px-4 py-3">
-                    <span className="text-gray-900">3rd Quarter or later</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 text-green-600 bg-green-50 rounded-lg px-4 py-3">
-                  <Bell className="h-5 w-5" />
-                  <span className="font-medium">Condition Matched!</span>
-                </div>
-              </div>
-            </Card>
-
-            {/* SMS Notification Mockup with Pulse Animation */}
-            <div className="absolute -bottom-6 -right-6 md:-bottom-8 md:-right-8 bg-gray-900 text-white rounded-2xl p-3 md:p-4 shadow-2xl max-w-[280px] md:max-w-xs animate-pulse-float">
-              <div className="flex items-start gap-2 md:gap-3">
-                <div className="bg-green-500 rounded-lg p-1.5 md:p-2 flex-shrink-0">
-                  <Bell className="h-3 w-3 md:h-4 md:w-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-semibold mb-1">BET ALERT - NOW</div>
-                  <div className="text-xs md:text-sm">
-                    Lakers are at <span className="font-bold">+350</span> with 8 min left in the 3rd Quarter. Score is 85-74.
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Text Content - Shows second on mobile */}
-          <div className="order-2 md:order-1 mt-8 md:mt-0">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-4 md:mb-6">
-              We watch the games when you can't.
-            </h1>
-            <p className="text-base md:text-lg text-gray-600 mb-6 md:mb-8 leading-relaxed">
-              Set highly specific triggers and get an SMS the moment it hits.
-            </p>
-            <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row gap-3 max-w-md">
-                <div className="flex-1 flex items-center h-12 px-3 rounded-full border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-transparent">
-                  <Select value={countryCode} onValueChange={setCountryCode}>
-                    <SelectTrigger className="w-[90px] h-8 border-0 bg-transparent focus:ring-0 focus:ring-offset-0 pl-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {countryCodes.map((item) => (
-                        <SelectItem key={`${item.code}-${item.country}`} value={item.code}>
-                          {item.flag} {item.code}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="h-6 w-px bg-gray-300 mx-2"></div>
-                  <input
-                    type="tel"
-                    placeholder="Enter your phone number"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="flex-1 h-full bg-transparent border-0 focus:outline-none text-base"
-                  />
-                </div>
-                <Link href="/dashboard" className="w-full sm:w-auto">
-                  <Button 
-                    className="bg-green-500 hover:bg-green-600 text-white rounded-full h-12 px-6 text-base whitespace-nowrap w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!consentChecked || !phoneNumber}
-                  >
-                    Get Started
-                  </Button>
-                </Link>
-              </div>
-              <div className="flex items-start gap-2 max-w-md">
-                <input
-                  type="checkbox"
-                  id="consent"
-                  checked={consentChecked}
-                  onChange={(e) => setConsentChecked(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-green-500 focus:ring-green-500 cursor-pointer"
-                />
-                <label htmlFor="consent" className="text-xs text-gray-500 leading-relaxed cursor-pointer">
-                  I agree to receive SMS alerts from Hammer when my alerts trigger. Msg & data rates may apply. Reply STOP anytime to unsubscribe.
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Problem Statement Section */}
-      <section className="bg-white py-20">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6" style={{ textDecoration: "none" }}>
-            Always finding yourself hammering the comeback when a favored team gives up an early lead?
-          </h2>
-          <p className="text-lg text-gray-600">Tell us what to look for, and we will monitor and shoot you a text on any game or team you want so you don't have to obsessively check your phone.
-
-          </p>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section className="container mx-auto px-4 py-20">
-        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {/* Step 1 */}
-          <div className="relative">
-            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-7 h-7 flex items-center justify-center font-bold text-sm">
-              1
-            </div>
-            <Card className="p-8 h-full bg-gray-50 border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Set Parameters</h3>
-              <p className="text-gray-600">
-                Set specific time and target odds for your favorite teams.
+      
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+        {/* Hero Section */}
+        <section className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-grid-white/[0.02] -z-10" />
+          <div className="container mx-auto px-4 py-20 md:py-32">
+            <div className="max-w-4xl mx-auto text-center space-y-8">
+              <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">
+                🔥 Live Odds Tracking
+              </Badge>
+              
+              <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
+                Never Miss a
+                <span className="text-primary block mt-2">Betting Edge</span>
+              </h1>
+              
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+                Set custom odds alerts and get notified instantly via Telegram when your betting opportunities hit. Smart, fast, and reliable.
               </p>
-            </Card>
-          </div>
 
-          {/* Step 2 */}
-          <div className="relative">
-            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-7 h-7 flex items-center justify-center font-bold text-sm">
-              2
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-6">
+                <Button 
+                  size="lg" 
+                  className="btn-primary text-lg px-8 py-6 h-auto group"
+                  onClick={handleGetStarted}
+                >
+                  Get Started Free
+                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                </Button>
+                
+                <Button 
+                  size="lg" 
+                  variant="outline"
+                  className="text-lg px-8 py-6 h-auto"
+                  onClick={() => document.getElementById("telegram-section")?.scrollIntoView({ behavior: "smooth" })}
+                >
+                  View Demo
+                  <ChevronDown className="ml-2 h-5 w-5" />
+                </Button>
+              </div>
             </div>
-            <Card className="p-8 h-full bg-gray-50 border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Live Monitoring</h3>
-              <p className="text-gray-600">We monitor the game for you and shoot you a text when it hits.
-
-              </p>
-            </Card>
           </div>
+        </section>
 
-          {/* Step 3 */}
-          <div className="relative">
-            <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-7 h-7 flex items-center justify-center font-bold text-sm">
-              3
+        {/* Telegram Login Section */}
+        <section id="telegram-section" className="py-20 bg-muted/30">
+          <div className="container mx-auto px-4">
+            <div className="max-w-4xl mx-auto">
+              <Card className="glass-panel border-primary/20">
+                <CardHeader className="text-center">
+                  <CardTitle className="text-3xl">Login with Telegram</CardTitle>
+                  <CardDescription className="text-lg">
+                    One click to get started — no phone number, no SMS, no hassle
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-8">
+                  <div className="flex flex-col items-center justify-center gap-6">
+                    {/* Telegram Login Widget */}
+                    <div className="flex flex-col items-center gap-4">
+                      {isAuthenticating ? (
+                        <div className="flex items-center gap-3 py-4">
+                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
+                          <span className="text-muted-foreground">Authenticating...</span>
+                        </div>
+                      ) : (
+                        <TelegramLoginButton onAuth={handleTelegramAuth} />
+                      )}
+                    </div>
+
+                    {/* How it works */}
+                    <div className="max-w-md space-y-4 mt-8">
+                      <h3 className="font-semibold text-center mb-6">How it works</h3>
+                      
+                      <div className="flex items-start gap-3">
+                        <div className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                          1
+                        </div>
+                        <div>
+                          <h4 className="font-semibold mb-1">Click Login Button</h4>
+                          <p className="text-sm text-muted-foreground">
+                            Your Telegram app will open to authorize
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                          2
+                        </div>
+                        <div>
+                          <h4 className="font-semibold mb-1">Authorize in Telegram</h4>
+                          <p className="text-sm text-muted-foreground">
+                            Confirm your account — takes 2 seconds
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                          3
+                        </div>
+                        <div>
+                          <h4 className="font-semibold mb-1">Start Creating Triggers</h4>
+                          <p className="text-sm text-muted-foreground">
+                            You're in! Set up alerts and get notified via Telegram
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-muted/50 rounded-lg p-4 max-w-md mt-6">
+                      <p className="text-sm text-muted-foreground text-center">
+                        💡 <strong>Tip:</strong> Make sure you have Telegram installed on your device for the smoothest experience
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-            <Card className="p-8 h-full bg-gray-50 border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Secure the Win</h3>
-              <p className="text-gray-600">
-                Lock it in and cross your fingers.
+          </div>
+        </section>
+
+        {/* Features Section */}
+        <section className="py-20">
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold mb-4">Why Choose Bet Alert?</h2>
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+                Built for serious bettors who need speed, reliability, and precision
               </p>
-            </Card>
-          </div>
-        </div>
-      </section>
+            </div>
 
-      {/* Final CTA Section */}
-      <section className="container mx-auto px-4 py-20 mb-20">
-        <div className="bg-gradient-to-br from-gray-100 to-gray-50 rounded-3xl p-16 text-center max-w-5xl mx-auto">
-          <h2 className="text-5xl md:text-6xl font-bold text-gray-900 mb-8">Just set it and forget it.
-
-          </h2>
-          <Link href="/dashboard">
-            <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-10 py-7 text-xl font-semibold shadow-lg hover:shadow-xl transition-all">
-              Create Your First Trigger
-            </Button>
-          </Link>
-        </div>
-      </section>
-
-      {/* Telegram Bot Section */}
-      <section id="telegram-section" className="py-20 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
-            <Card className="glass-panel border-primary/20">
-              <CardHeader className="text-center">
-                <CardTitle className="text-3xl">Start with Telegram</CardTitle>
-                <CardDescription className="text-lg">
-                  Scan the QR code or click the button to get started in seconds
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-8">
-                <div className="flex flex-col md:flex-row items-center justify-center gap-8">
-                  {/* QR Code */}
-                  <div className="bg-white p-6 rounded-2xl shadow-lg">
-                    <img 
-                      src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://t.me/Hammer_notifs_bot?start=web"
-                      alt="Telegram Bot QR Code"
-                      className="w-48 h-48"
-                    />
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+              <Card className="glass-panel hover:shadow-xl transition-all duration-300 border-primary/20">
+                <CardHeader>
+                  <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
+                    <Bell className="h-6 w-6 text-primary" />
                   </div>
+                  <CardTitle>Instant Alerts</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CardDescription className="text-base">
+                    Get notified via Telegram the moment odds hit your target. No delays, no missed opportunities.
+                  </CardDescription>
+                </CardContent>
+              </Card>
 
-                  {/* Instructions */}
-                  <div className="space-y-4 max-w-md">
-                    <div className="flex items-start gap-3">
-                      <div className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                        1
-                      </div>
-                      <div>
-                        <h4 className="font-semibold mb-1">Scan or Click</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Open Telegram and scan the QR code, or click the button below
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <div className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                        2
-                      </div>
-                      <div>
-                        <h4 className="font-semibold mb-1">Send /start</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Send the /start command to activate your account
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <div className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                        3
-                      </div>
-                      <div>
-                        <h4 className="font-semibold mb-1">Create Triggers</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Set up your betting alerts and get notified instantly
-                        </p>
-                      </div>
-                    </div>
-
-                    <Button 
-                      size="lg" 
-                      className="w-full btn-primary mt-4"
-                      onClick={() => window.open("https://t.me/Hammer_notifs_bot?start=web", "_blank")}
-                    >
-                      Open @Hammer_notifs_bot
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </Button>
+              <Card className="glass-panel hover:shadow-xl transition-all duration-300 border-primary/20">
+                <CardHeader>
+                  <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
+                    <Target className="h-6 w-6 text-primary" />
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-    </div>);
+                  <CardTitle>Custom Triggers</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CardDescription className="text-base">
+                    Set precise odds thresholds for any sport, team, or betting market. You control the strategy.
+                  </CardDescription>
+                </CardContent>
+              </Card>
 
+              <Card className="glass-panel hover:shadow-xl transition-all duration-300 border-primary/20">
+                <CardHeader>
+                  <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
+                    <Zap className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle>Real-Time Odds</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CardDescription className="text-base">
+                    Live odds from top sportsbooks, updated every minute. Always have the edge.
+                  </CardDescription>
+                </CardContent>
+              </Card>
+
+              <Card className="glass-panel hover:shadow-xl transition-all duration-300 border-primary/20">
+                <CardHeader>
+                  <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
+                    <Shield className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle>No Phone Required</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CardDescription className="text-base">
+                    Telegram-first authentication. No SMS, no carrier restrictions, no hassle.
+                  </CardDescription>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </section>
+
+        {/* CTA Section */}
+        <section className="py-20 bg-primary/5">
+          <div className="container mx-auto px-4">
+            <div className="max-w-3xl mx-auto text-center space-y-6">
+              <h2 className="text-4xl font-bold">Ready to Start Winning?</h2>
+              <p className="text-xl text-muted-foreground">
+                Join smart bettors already using Bet Alert to stay ahead of the game.
+              </p>
+              <div className="flex justify-center">
+                <TelegramLoginButton onAuth={handleTelegramAuth} />
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </>
+  );
 }
