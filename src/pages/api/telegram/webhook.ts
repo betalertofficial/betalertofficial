@@ -129,28 +129,50 @@ export default async function handler(
 
     // Handle /start command
     if (text === "/start" || text.startsWith("/start ")) {
-      // Upsert profile with telegram data
-      // Note: Profile will be linked to auth user when they open the web app
-      const { error: profileError } = await supabase
+      // First check if profile exists with this telegram_chat_id
+      const { data: existingProfile } = await supabase
         .from("profiles")
-        .upsert(
-          {
-            telegram_chat_id: chatId.toString(),
+        .select("id")
+        .eq("telegram_chat_id", chatId.toString())
+        .maybeSingle();
+
+      if (existingProfile) {
+        // Update existing profile
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({
             telegram_username: username || null,
             telegram_first_name: firstName,
             updated_at: new Date().toISOString(),
-          },
-          { onConflict: "telegram_chat_id" }
-        );
+          })
+          .eq("id", existingProfile.id);
 
-      if (profileError) {
-        console.error("Error creating/updating profile:", profileError);
-        await sendTelegramMessage(
-          chatId,
-          "Sorry, there was an error setting up your account. Please try again."
-        );
-        res.status(200).json({ ok: true });
-        return;
+        if (updateError) {
+          console.error("Error updating profile:", updateError);
+        }
+      } else {
+        // Create new profile without auth user (will be linked when user opens web app)
+        // Use a temporary UUID that will be replaced when user authenticates
+        const tempId = `telegram_${chatId}`;
+        
+        const { error: insertError } = await supabase
+          .from("profiles")
+          .insert({
+            id: tempId,
+            telegram_chat_id: chatId.toString(),
+            telegram_username: username || null,
+            telegram_first_name: firstName,
+          });
+
+        if (insertError) {
+          console.error("Error creating profile:", insertError);
+          await sendTelegramMessage(
+            chatId,
+            "Sorry, there was an error setting up your account. Please try again."
+          );
+          res.status(200).json({ ok: true });
+          return;
+        }
       }
 
       // Send welcome message
