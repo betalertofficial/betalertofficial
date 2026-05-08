@@ -3,6 +3,7 @@ import { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { profileService } from "@/services/profileService";
 import { authService } from "@/services/authService";
+import { telegramAuthService } from "@/services/telegramAuthService";
 import type { Profile } from "@/types/database";
 import { useToast } from "@/hooks/use-toast";
 
@@ -47,7 +48,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         console.log("[AuthContext] Starting auth initialization");
         
-        // 1. Get Session directly first
+        // 0. Check if running in Telegram Web App
+        if (telegramAuthService.isTelegramWebApp()) {
+          console.log("[AuthContext] Telegram Web App detected, initializing...");
+          telegramAuthService.initWebApp();
+          
+          // Try Telegram authentication
+          const telegramAuth = await telegramAuthService.authenticateViaTelegram();
+          
+          if (telegramAuth.success && telegramAuth.userId) {
+            console.log("[AuthContext] Telegram auth successful:", telegramAuth.userId);
+            
+            // Get the authenticated user
+            const { data: { user: telegramUser } } = await supabase.auth.getUser();
+            
+            if (mounted && telegramUser) {
+              setUser(telegramUser);
+              setLoading(false);
+              
+              // Fetch profile in background
+              profileService.getProfile(telegramUser.id)
+                .then(profileData => {
+                  console.log("[AuthContext] Telegram profile loaded:", profileData);
+                  if (mounted) setProfile(profileData);
+                })
+                .catch(error => {
+                  console.error("[AuthContext] Error loading Telegram profile:", error);
+                  if (mounted) setProfile(null);
+                });
+              
+              if (mounted) {
+                toast({
+                  title: "Welcome back! 👋",
+                  description: "Logged in via Telegram",
+                });
+              }
+              return;
+            }
+          } else {
+            console.warn("[AuthContext] Telegram auth failed:", telegramAuth.error);
+          }
+        }
+        
+        // 1. Get Session directly first (non-Telegram flow)
         const { data: { session } } = await supabase.auth.getSession();
         console.log("[AuthContext] Session check complete:", session ? "session found" : "no session");
         

@@ -1,8 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Bell, Sliders, Radio, Wallet, Settings } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Bell, Zap, Target, Shield, ArrowRight, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { SEO } from "@/components/SEO";
 import { useState, useEffect } from "react";
@@ -13,6 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useRouter } from "next/router";
+import { Badge } from "@/components/ui/badge";
 
 const countryCodes = [
   { code: "+1", country: "US", flag: "🇺🇸" },
@@ -32,9 +34,11 @@ const countryCodes = [
 ];
 
 export default function LandingPage() {
+  const router = useRouter();
   const [countryCode, setCountryCode] = useState("+1");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [consentChecked, setConsentChecked] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
 
   useEffect(() => {
     // Detect user's country based on IP
@@ -51,6 +55,10 @@ export default function LandingPage() {
         setCountryCode("+1");
       });
   }, []);
+
+  const handleGetStarted = () => {
+    router.push("/dashboard");
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -259,6 +267,82 @@ export default function LandingPage() {
               Create Your First Trigger
             </Button>
           </Link>
+        </div>
+      </section>
+
+      {/* Telegram Bot Section */}
+      <section id="telegram-section" className="py-20 bg-muted/30">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto">
+            <Card className="glass-panel border-primary/20">
+              <CardHeader className="text-center">
+                <CardTitle className="text-3xl">Start with Telegram</CardTitle>
+                <CardDescription className="text-lg">
+                  Scan the QR code or click the button to get started in seconds
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-8">
+                <div className="flex flex-col md:flex-row items-center justify-center gap-8">
+                  {/* QR Code */}
+                  <div className="bg-white p-6 rounded-2xl shadow-lg">
+                    <img 
+                      src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://t.me/Hammer_notifs_bot?start=web"
+                      alt="Telegram Bot QR Code"
+                      className="w-48 h-48"
+                    />
+                  </div>
+
+                  {/* Instructions */}
+                  <div className="space-y-4 max-w-md">
+                    <div className="flex items-start gap-3">
+                      <div className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                        1
+                      </div>
+                      <div>
+                        <h4 className="font-semibold mb-1">Scan or Click</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Open Telegram and scan the QR code, or click the button below
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                        2
+                      </div>
+                      <div>
+                        <h4 className="font-semibold mb-1">Send /start</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Send the /start command to activate your account
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                        3
+                      </div>
+                      <div>
+                        <h4 className="font-semibold mb-1">Create Triggers</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Set up your betting alerts and get notified instantly
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button 
+                      size="lg" 
+                      className="w-full btn-primary mt-4"
+                      onClick={() => window.open("https://t.me/Hammer_notifs_bot?start=web", "_blank")}
+                    >
+                      Open @Hammer_notifs_bot
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </section>
     </div>);
