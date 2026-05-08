@@ -50,13 +50,16 @@ export default function Dashboard() {
           throw new Error("Authentication failed");
         }
 
+        const result = await response.json();
+        console.log("[Dashboard] Telegram auth successful:", result);
+
         toast({
           title: "Welcome! 🎯",
           description: `Logged in via Telegram as ${first_name}`,
         });
 
-        // Clean URL params
-        router.replace("/dashboard", undefined, { shallow: true });
+        // Clean URL and reload to pick up new session
+        window.location.href = "/dashboard";
       } catch (error) {
         console.error("Telegram auth error:", error);
         toast({

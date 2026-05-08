@@ -70,12 +70,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq("telegram_chat_id", chatId)
       .maybeSingle();
 
-    let profileId: string;
+    let userId: string;
 
     if (existingProfile) {
-      // Profile exists - update it
-      profileId = existingProfile.id;
+      // Profile exists - user already has an account
+      userId = existingProfile.id;
       
+      // Update Telegram info
       await supabase
         .from("profiles")
         .update({
@@ -83,44 +84,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           telegram_first_name: authData.first_name,
           updated_at: new Date().toISOString(),
         } as any)
-        .eq("id", profileId);
+        .eq("id", userId);
+        
+      console.log("[Telegram Auth] Updated existing profile:", userId);
     } else {
-      // Check if there's an anonymous session to link
-      const { data: { user } } = await supabase.auth.getUser();
+      // No existing profile - create new anonymous user
+      const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
       
-      if (user && user.is_anonymous) {
-        // Link Telegram to existing anonymous profile
-        profileId = user.id;
-        
-        await supabase
-          .from("profiles")
-          .update({
-            telegram_chat_id: chatId,
-            telegram_username: authData.username || null,
-            telegram_first_name: authData.first_name,
-            updated_at: new Date().toISOString(),
-          } as any)
-          .eq("id", profileId);
-      } else {
-        // Create new profile
-        const tempId = `telegram_${chatId}`;
-        profileId = tempId;
-        
-        await supabase
-          .from("profiles")
-          .insert({
-            id: tempId,
-            telegram_chat_id: chatId,
-            telegram_username: authData.username || null,
-            telegram_first_name: authData.first_name,
-          } as any);
+      if (anonError || !anonData.user) {
+        console.error("[Telegram Auth] Failed to create anonymous user:", anonError);
+        res.status(500).json({ error: "Failed to create session" });
+        return;
       }
+      
+      userId = anonData.user.id;
+      console.log("[Telegram Auth] Created anonymous user:", userId);
+      
+      // Update the auto-created profile with Telegram data
+      await supabase
+        .from("profiles")
+        .update({
+          telegram_chat_id: chatId,
+          telegram_username: authData.username || null,
+          telegram_first_name: authData.first_name,
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq("id", userId);
+        
+      console.log("[Telegram Auth] Linked Telegram data to profile:", userId);
     }
 
-    // Return success with profile data
+    // Return success with user data
     res.status(200).json({
       success: true,
-      profileId,
+      userId,
       telegram: {
         chat_id: chatId,
         username: authData.username,
