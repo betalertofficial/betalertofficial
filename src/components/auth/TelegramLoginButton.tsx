@@ -40,6 +40,12 @@ export function TelegramLoginButton({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    console.log("[TelegramLoginButton] Initializing with:", {
+      botName,
+      authUrl,
+      currentDomain: window.location.hostname,
+    });
+
     // Only set up callback if using onAuth mode (not auth-url)
     if (onAuth && !authUrl) {
       window.TelegramLoginWidget = {
@@ -59,11 +65,22 @@ export function TelegramLoginButton({
     // Use auth-url if provided, otherwise use onauth callback
     if (authUrl) {
       script.setAttribute("data-auth-url", authUrl);
+      console.log("[TelegramLoginButton] Using auth-url redirect:", authUrl);
     } else if (onAuth) {
       script.setAttribute("data-onauth", "TelegramLoginWidget.dataOnauth(user)");
+      console.log("[TelegramLoginButton] Using onauth callback");
     }
     
     script.async = true;
+
+    // Add error handler
+    script.onerror = (error) => {
+      console.error("[TelegramLoginButton] Failed to load widget script:", error);
+    };
+
+    script.onload = () => {
+      console.log("[TelegramLoginButton] Widget script loaded successfully");
+    };
 
     // Append script to container
     if (containerRef.current) {
@@ -81,5 +98,12 @@ export function TelegramLoginButton({
     };
   }, [botName, buttonSize, cornerRadius, requestAccess, usePic, authUrl, onAuth]);
 
-  return <div ref={containerRef} />;
+  return (
+    <div>
+      <div ref={containerRef} />
+      <div className="text-xs text-muted-foreground mt-2 text-center">
+        If you see "Bot domain invalid", the domain needs to be set in @BotFather
+      </div>
+    </div>
+  );
 }
