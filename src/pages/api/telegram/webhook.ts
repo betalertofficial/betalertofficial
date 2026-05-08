@@ -129,18 +129,18 @@ export default async function handler(
 
     // Handle /start command
     if (text === "/start" || text.startsWith("/start ")) {
-      // Create or update profile
+      // Upsert profile with telegram data
+      // Note: Profile will be linked to auth user when they open the web app
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert(
           {
-            id: userId, // Use the auth user ID as profile ID
-            telegram_chat_id: chatId,
+            telegram_chat_id: chatId.toString(),
             telegram_username: username || null,
             telegram_first_name: firstName,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: "id" }
+          { onConflict: "telegram_chat_id" }
         );
 
       if (profileError) {
@@ -153,6 +153,19 @@ export default async function handler(
         return;
       }
 
+      // Send welcome message
+      const welcomeMessage = `🎯 *Welcome to Hammer Notifs!*
+
+I'll send you instant notifications when your betting triggers hit.
+
+*How it works:*
+• Set up triggers in the dashboard
+• Get alerted when odds match your criteria
+• Never miss a betting opportunity
+
+To access your dashboard, tap the menu button below.`;
+
+      await sendTelegramMessage(chatId, welcomeMessage);
       res.status(200).json({ ok: true });
       return;
     }

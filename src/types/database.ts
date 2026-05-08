@@ -1,4 +1,3 @@
-
 export type BetType = "moneyline" | "spread";
 export type OddsComparator = ">=" | "<=" | ">" | "<" | "==";
 export type TriggerFrequency = "once" | "recurring";
@@ -39,6 +38,8 @@ export interface Trigger {
   status: TriggerStatus;
   vendor_id: string;
   bookmaker?: string | null;
+  time_period_type?: string | null;
+  time_period_min?: number | null;
   created_at: string;
   updated_at: string;
 }
