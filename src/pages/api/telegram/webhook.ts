@@ -1,42 +1,22 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "@/integrations/supabase/client";
 
-// Telegram Update types
-interface TelegramUpdate {
-  update_id: number;
-  message?: {
-    message_id: number;
-    from: {
-      id: number;
-      is_bot: boolean;
-      first_name: string;
-      last_name?: string;
-      username?: string;
-    };
-    chat: {
-      id: number;
-      first_name: string;
-      last_name?: string;
-      username?: string;
-      type: string;
-    };
-    date: number;
-    text?: string;
-  };
-}
-
-// Send message via Telegram Bot API
-async function sendTelegramMessage(chatId: number, text: string): Promise<boolean> {
+// Helper function to send Telegram messages
+async function sendTelegramMessage(chatId: number, text: string): Promise<void> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     console.error("TELEGRAM_BOT_TOKEN not set");
-    return false;
+    return;
   }
 
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  
   try {
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         chat_id: chatId,
         text,
@@ -44,91 +24,41 @@ async function sendTelegramMessage(chatId: number, text: string): Promise<boolea
       }),
     });
 
-    const data = await response.json();
-    if (!data.ok) {
-      console.error("Telegram API error:", data);
-      return false;
+    if (!response.ok) {
+      const error = await response.text();
+      console.error("Telegram API error:", error);
     }
-    return true;
   } catch (error) {
-    console.error("Failed to send Telegram message:", error);
-    return false;
+    console.error("Error sending Telegram message:", error);
   }
-}
-
-// Handle /start command
-async function handleStartCommand(
-  chatId: number,
-  username?: string,
-  firstName?: string
-): Promise<void> {
-  // Upsert profile with telegram_chat_id
-  const { error } = await supabase
-    .from("profiles")
-    .upsert(
-      {
-        telegram_chat_id: chatId.toString(),
-        telegram_username: username,
-        telegram_first_name: firstName,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: "telegram_chat_id",
-      }
-    );
-
-  if (error) {
-    console.error("Failed to create/update profile:", error);
-    await sendTelegramMessage(
-      chatId,
-      "Sorry, something went wrong. Please try again later."
-    );
-    return;
-  }
-
-  // Send welcome message
-  const welcomeMessage = `🎯 *Welcome to Hammer Notifs!*
-
-I'll send you instant notifications when your betting triggers hit.
-
-*How it works:*
-• Set up triggers in the dashboard
-• Get alerted when odds match your criteria
-• Never miss a betting opportunity
-
-To access your dashboard, tap the menu button below.`;
-
-  await sendTelegramMessage(chatId, welcomeMessage);
 }
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
-): Promise<void> {
-  // Only accept POST requests
+) {
   if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const update: TelegramUpdate = req.body;
-    console.log("Telegram webhook received:", JSON.stringify(update, null, 2));
-
+    const update = req.body;
+    
     // Extract message data
     const message = update.message;
-    if (!message || !message.text) {
-      res.status(200).json({ ok: true });
-      return;
+    if (!message) {
+      return res.status(200).json({ ok: true });
     }
 
     const chatId = message.chat.id;
-    const text = message.text.trim();
-    const username = message.from.username;
-    const firstName = message.from.first_name;
+    const text = message.text;
+    const username = message.from?.username;
+    const firstName = message.from?.first_name || "User";
+
+    console.log("Received message:", { chatId, text, username, firstName });
 
     // Handle /start command
-    if (text === "/start" || text.startsWith("/start ")) {
+    if (text === "/start" || text?.startsWith("/start ")) {
       // First check if profile exists with this telegram_chat_id
       const { data: existingProfile } = await supabase
         .from("profiles")
@@ -137,10 +67,11 @@ export default async function handler(
         .maybeSingle();
 
       if (existingProfile) {
-        // Update existing profile (type assertion needed for Supabase's strict types)
+        // Update existing profile - type assertion needed due to Supabase's strict types
         await supabase
           .from("profiles")
           .update({
+            id: existingProfile.id,
             telegram_username: username || null,
             telegram_first_name: firstName,
             updated_at: new Date().toISOString(),
@@ -177,11 +108,12 @@ To access your dashboard, tap the menu button below.`;
       return;
     }
 
-    // Unknown command
+    // Default response for other messages
     await sendTelegramMessage(
       chatId,
-      "Unknown command. Send /start to begin."
+      "Thanks for your message! Use /start to get started with Hammer Notifs."
     );
+
     res.status(200).json({ ok: true });
   } catch (error) {
     console.error("Webhook handler error:", error);
