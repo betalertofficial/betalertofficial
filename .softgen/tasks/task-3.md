@@ -10,7 +10,7 @@ position: 3
 ---
 
 ## Notes
-Set up Telegram bot infrastructure for @betalertofficial_bot. Bot already created, need webhook endpoint to handle incoming messages.
+Set up Telegram bot infrastructure for @Hammer_notifs_bot. Bot already created, need webhook endpoint to handle incoming messages.
 
 ## Checklist
 - [x] Create `/api/telegram/webhook.ts` endpoint — POST handler for Telegram updates

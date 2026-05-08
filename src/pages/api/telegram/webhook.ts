@@ -87,7 +87,7 @@ async function handleStartCommand(
   }
 
   // Send welcome message
-  const welcomeMessage = `🎯 *Welcome to Bet Alert!*
+  const welcomeMessage = `🎯 *Welcome to Hammer Notifs!*
 
 I'll send you instant notifications when your betting triggers hit.
 
