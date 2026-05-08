@@ -40,10 +40,17 @@ export function TelegramLoginButton({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const currentHostname = typeof window !== "undefined" ? window.location.hostname : "unknown";
+    const currentProtocol = typeof window !== "undefined" ? window.location.protocol : "unknown";
+    const currentOrigin = typeof window !== "undefined" ? window.location.origin : "unknown";
+    
     console.log("[TelegramLoginButton] Initializing with:", {
       botName,
       authUrl,
-      currentDomain: window.location.hostname,
+      currentHostname,
+      currentProtocol,
+      currentOrigin,
+      fullUrl: typeof window !== "undefined" ? window.location.href : "unknown",
     });
 
     // Only set up callback if using onAuth mode (not auth-url)
@@ -80,6 +87,10 @@ export function TelegramLoginButton({
 
     script.onload = () => {
       console.log("[TelegramLoginButton] Widget script loaded successfully");
+      console.log("[TelegramLoginButton] If you see 'Bot domain invalid', verify in @BotFather:");
+      console.log(`  1. /setdomain`);
+      console.log(`  2. Select @${botName}`);
+      console.log(`  3. Send EXACTLY: ${currentHostname}`);
     };
 
     // Append script to container
@@ -101,8 +112,12 @@ export function TelegramLoginButton({
   return (
     <div>
       <div ref={containerRef} />
-      <div className="text-xs text-muted-foreground mt-2 text-center">
-        If you see "Bot domain invalid", the domain needs to be set in @BotFather
+      <div className="text-xs text-muted-foreground mt-2 text-center space-y-1">
+        <div>If you see "Bot domain invalid":</div>
+        <div className="font-mono bg-muted/50 px-2 py-1 rounded">
+          Current domain: {typeof window !== "undefined" ? window.location.hostname : "loading..."}
+        </div>
+        <div>Set this EXACT value in @BotFather → /setdomain → @{botName}</div>
       </div>
     </div>
   );
