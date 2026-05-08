@@ -1,6 +1,6 @@
 ---
 title: "Telegram Database Schema"
-status: "todo"
+status: "done"
 priority: "urgent"
 type: "feature"
 tags: ["database", "telegram", "profiles"]
@@ -13,11 +13,11 @@ position: 4
 Add Telegram fields to profiles table alongside existing phone auth columns. Keep existing fields intact — Telegram is additive, not a replacement.
 
 ## Checklist
-- [ ] Add `telegram_chat_id` (TEXT, unique, nullable) to profiles
-- [ ] Add `telegram_username` (TEXT, nullable) to profiles
-- [ ] Add `telegram_first_name` (TEXT, nullable) to profiles
-- [ ] Update RLS policies to allow upserts by telegram_chat_id
-- [ ] Create index on telegram_chat_id for fast lookups
+- [x] Add `telegram_chat_id` (TEXT, unique, nullable) to profiles
+- [x] Add `telegram_username` (TEXT, nullable) to profiles
+- [x] Add `telegram_first_name` (TEXT, nullable) to profiles
+- [x] Update RLS policies to allow upserts by telegram_chat_id
+- [x] Create index on telegram_chat_id for fast lookups
 
 ## Acceptance
 - Bot can create/update profiles with telegram_chat_id

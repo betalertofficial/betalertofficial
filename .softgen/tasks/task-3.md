@@ -1,6 +1,6 @@
 ---
 title: "Telegram Bot Webhook Setup"
-status: "in_progress"
+status: "done"
 priority: "urgent"
 type: "feature"
 tags: ["telegram", "webhook", "bot"]
@@ -15,9 +15,9 @@ Set up Telegram bot infrastructure for @betalertofficial_bot. Bot already create
 ## Checklist
 - [x] Create `/api/telegram/webhook.ts` endpoint — POST handler for Telegram updates
 - [x] Handle `/start` command — welcome message + create/update profile
-- [ ] Add `TELEGRAM_BOT_TOKEN` env var support
-- [ ] Register webhook with Telegram API via `setWebhook`
-- [ ] Add error handling and logging
+- [x] Add `TELEGRAM_BOT_TOKEN` env var support
+- [x] Register webhook with Telegram API via `setWebhook`
+- [x] Add error handling and logging
 
 ## Acceptance
 - Message bot with /start, get welcome reply
