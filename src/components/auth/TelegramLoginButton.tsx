@@ -112,18 +112,5 @@ export function TelegramLoginButton({
     };
   }, [botName, buttonSize, cornerRadius, requestAccess, usePic, authUrl, onAuth]);
 
-  return (
-    <div>
-      <div ref={containerRef} />
-      {isMounted && (
-        <div className="text-xs text-muted-foreground mt-2 text-center space-y-1">
-          <div>If you see "Bot domain invalid":</div>
-          <div className="font-mono bg-muted/50 px-2 py-1 rounded">
-            Current domain: {window.location.hostname}
-          </div>
-          <div>Set this EXACT value in @BotFather → /setdomain → @{botName}</div>
-        </div>
-      )}
-    </div>
-  );
+  return <div ref={containerRef} />;
 }

@@ -303,7 +303,7 @@ export default function LandingPage() {
             </div>
 
             {/* Telegram Login Button */}
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center items-center py-8">
               <TelegramLoginButton 
                 authUrl="https://www.hammer-app.com/dashboard"
                 usePic={false}
