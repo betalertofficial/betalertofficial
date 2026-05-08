@@ -186,49 +186,14 @@ export default function LandingPage() {
               Set highly specific triggers and get an SMS the moment it hits.
             </p>
             <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row gap-3 max-w-md">
-                <div className="flex-1 flex items-center h-12 px-3 rounded-full border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-transparent">
-                  <Select value={countryCode} onValueChange={setCountryCode}>
-                    <SelectTrigger className="w-[90px] h-8 border-0 bg-transparent focus:ring-0 focus:ring-offset-0 pl-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {countryCodes.map((item) => (
-                        <SelectItem key={`${item.code}-${item.country}`} value={item.code}>
-                          {item.flag} {item.code}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="h-6 w-px bg-gray-300 mx-2"></div>
-                  <input
-                    type="tel"
-                    placeholder="Enter your phone number"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="flex-1 h-full bg-transparent border-0 focus:outline-none text-base"
+              <div className="space-y-3">
+                {/* Telegram Login Button */}
+                <div className="flex justify-center items-center">
+                  <TelegramLoginButton 
+                    authUrl="https://www.hammer-app.com/dashboard"
+                    usePic={false}
                   />
                 </div>
-                <Link href="/dashboard" className="w-full sm:w-auto">
-                  <Button 
-                    className="bg-green-500 hover:bg-green-600 text-white rounded-full h-12 px-6 text-base whitespace-nowrap w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!consentChecked || !phoneNumber}
-                  >
-                    Get Started
-                  </Button>
-                </Link>
-              </div>
-              <div className="flex items-start gap-2 max-w-md">
-                <input
-                  type="checkbox"
-                  id="consent"
-                  checked={consentChecked}
-                  onChange={(e) => setConsentChecked(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-green-500 focus:ring-green-500 cursor-pointer"
-                />
-                <label htmlFor="consent" className="text-xs text-gray-500 leading-relaxed cursor-pointer">
-                  I agree to receive SMS alerts from Hammer when my alerts trigger. Msg & data rates may apply. Reply STOP anytime to unsubscribe.
-                </label>
               </div>
               {/* CTA Section */}
               <div className="flex justify-center items-center">
