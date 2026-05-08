@@ -144,7 +144,7 @@ export default async function handler(
             telegram_username: username || null,
             telegram_first_name: firstName,
             updated_at: new Date().toISOString(),
-          })
+          } as any)
           .eq("id", existingProfile.id);
 
         if (updateError) {
