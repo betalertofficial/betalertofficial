@@ -107,7 +107,7 @@ export default function Dashboard() {
             </div>
 
             {/* Stats Overview */}
-            <TriggerStats />
+            <TriggerStats active={0} completed={0} remaining={0} />
 
             {/* Main Content */}
             <Tabs defaultValue="create" className="space-y-6">
