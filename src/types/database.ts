@@ -7,12 +7,10 @@ export type Bookmaker = "FanDuel" | "DraftKings";
 
 export interface Profile {
   id: string;
-  phone_e164: string;
-  country_code: string;
-  name?: string;
-  role: "user" | "admin" | "super_admin";
-  subscription_tier: string;
-  trigger_limit: number;
+  phone_number?: string | null;
+  telegram_chat_id?: string | null;
+  telegram_username?: string | null;
+  telegram_first_name?: string | null;
   created_at: string;
   updated_at: string;
 }
