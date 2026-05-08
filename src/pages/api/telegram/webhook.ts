@@ -137,7 +137,7 @@ export default async function handler(
         .maybeSingle();
 
       if (existingProfile) {
-        // Update existing profile
+        // Update existing profile (type assertion needed for Supabase's strict types)
         await supabase
           .from("profiles")
           .update({
