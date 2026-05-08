@@ -290,76 +290,65 @@ export default function LandingPage() {
       </section>
 
       {/* Telegram Login Section */}
-      <section id="telegram-section" className="container mx-auto px-4 py-20">
-        <div className="max-w-4xl mx-auto">
-          <Card className="p-8 bg-gradient-to-br from-gray-50 to-white border-gray-200">
-            <CardHeader className="text-center pb-6">
-              <CardTitle className="text-3xl font-bold text-gray-900">Or Login with Telegram</CardTitle>
-              <CardDescription className="text-lg text-gray-600">
+      <section className="py-20 bg-gradient-to-b from-background to-background/50">
+        <div className="container mx-auto px-4">
+          <div className="max-w-3xl mx-auto text-center space-y-8">
+            <div className="space-y-4">
+              <h2 className="text-4xl md:text-5xl font-bold">
+                Or Login with Telegram
+              </h2>
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
                 One click to get started — no phone number, no SMS, no hassle
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex flex-col items-center justify-center gap-6">
-                {/* Telegram Login Widget */}
-                <div className="flex flex-col items-center gap-4">
-                  {isAuthenticating ? (
-                    <div className="flex items-center gap-3 py-4">
-                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-green-500 border-t-transparent" />
-                      <span className="text-gray-600">Authenticating...</span>
-                    </div>
-                  ) : (
-                    <TelegramLoginButton onAuth={handleTelegramAuth} />
-                  )}
+              </p>
+            </div>
+
+            {/* Telegram Login Button */}
+            <div className="flex justify-center py-8">
+              <TelegramLoginButton 
+                authUrl="https://www.hammer-app.com/dashboard"
+                usePic={false}
+              />
+            </div>
+
+            {/* How it works */}
+            <div className="grid md:grid-cols-3 gap-6 max-w-2xl mx-auto mt-12">
+              <div className="space-y-3">
+                <div className="bg-primary text-primary-foreground w-12 h-12 rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+                  1
                 </div>
-
-                {/* How it works */}
-                <div className="max-w-md space-y-3 mt-4">
-                  <div className="flex items-start gap-3">
-                    <div className="bg-green-500 text-white w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm">
-                      1
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-900 mb-1">Click Login Button</h4>
-                      <p className="text-sm text-gray-600">
-                        Your Telegram app will open to authorize
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3">
-                    <div className="bg-green-500 text-white w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm">
-                      2
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-900 mb-1">Authorize in Telegram</h4>
-                      <p className="text-sm text-gray-600">
-                        Confirm your account — takes 2 seconds
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3">
-                    <div className="bg-green-500 text-white w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm">
-                      3
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-900 mb-1">Start Creating Triggers</h4>
-                      <p className="text-sm text-gray-600">
-                        You're in! Set up alerts and get notified via Telegram
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-gray-100 rounded-lg p-4 max-w-md mt-4">
-                  <p className="text-sm text-gray-600 text-center">
-                    💡 <strong>Tip:</strong> Make sure you have Telegram installed on your device for the smoothest experience
-                  </p>
-                </div>
+                <h3 className="font-semibold">Click Login Button</h3>
+                <p className="text-sm text-muted-foreground">
+                  Your Telegram app will open to authorize
+                </p>
               </div>
-            </CardContent>
-          </Card>
+
+              <div className="space-y-3">
+                <div className="bg-primary text-primary-foreground w-12 h-12 rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+                  2
+                </div>
+                <h3 className="font-semibold">Authorize in Telegram</h3>
+                <p className="text-sm text-muted-foreground">
+                  Confirm your account — takes 2 seconds
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="bg-primary text-primary-foreground w-12 h-12 rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+                  3
+                </div>
+                <h3 className="font-semibold">Start Creating Triggers</h3>
+                <p className="text-sm text-muted-foreground">
+                  You're in! Set up alerts and get notified via Telegram
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-muted/50 rounded-lg p-4 max-w-md mx-auto mt-8">
+              <p className="text-sm text-muted-foreground text-center">
+                💡 <strong>Tip:</strong> Make sure you have Telegram installed on your device for the smoothest experience
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 

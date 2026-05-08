@@ -3,50 +3,10 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquare, LogOut, Check } from "lucide-react";
-import { TelegramLoginButton, type TelegramUser } from "@/components/auth/TelegramLoginButton";
-import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { TelegramLoginButton } from "@/components/auth/TelegramLoginButton";
 
 export function Settings() {
-  const { profile, signOut, refreshProfile } = useAuth();
-  const { toast } = useToast();
-  const [isLinking, setIsLinking] = useState(false);
-
-  const handleTelegramLink = async (user: TelegramUser) => {
-    setIsLinking(true);
-    
-    try {
-      // Send auth data to backend for verification and linking
-      const response = await fetch("/api/auth/telegram-callback", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(user),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to link Telegram account");
-      }
-
-      // Refresh profile to show updated telegram data
-      await refreshProfile();
-
-      toast({
-        title: "Telegram Connected! 🎯",
-        description: "You'll now receive alerts via Telegram",
-      });
-    } catch (error) {
-      console.error("Telegram link error:", error);
-      toast({
-        title: "Connection Error",
-        description: "Failed to link Telegram account. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLinking(false);
-    }
-  };
+  const { profile, signOut } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
@@ -107,19 +67,16 @@ export function Settings() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="bg-muted/50 rounded-lg p-4">
-                <p className="text-sm text-muted-foreground mb-4">
+              <div className="bg-muted/50 rounded-lg p-4 space-y-4">
+                <p className="text-sm text-muted-foreground">
                   Connect your Telegram account to receive instant alerts when your triggers hit.
                   No phone number required!
                 </p>
-                {isLinking ? (
-                  <div className="flex items-center gap-3 py-2">
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
-                    <span className="text-sm text-muted-foreground">Connecting...</span>
-                  </div>
-                ) : (
-                  <TelegramLoginButton onAuth={handleTelegramLink} buttonSize="medium" />
-                )}
+                <TelegramLoginButton 
+                  authUrl="https://www.hammer-app.com/dashboard?settings=telegram"
+                  buttonSize="medium"
+                  usePic={false}
+                />
               </div>
               <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
                 <p className="text-sm text-yellow-700 dark:text-yellow-400">

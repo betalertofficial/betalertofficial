@@ -1,118 +1,158 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 import { useAuth } from "@/contexts/AuthContext";
-import { PhoneAuth } from "@/components/auth/PhoneAuth";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CreateTrigger } from "@/components/dashboard/CreateTrigger";
 import { MyTriggers } from "@/components/dashboard/MyTriggers";
 import { History } from "@/components/dashboard/History";
 import { Settings } from "@/components/dashboard/Settings";
-import { CreateTrigger } from "@/components/dashboard/CreateTrigger";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Bell } from "lucide-react";
-import { useEffect, useRef } from "react";
-import { useRouter } from "next/router";
+import { TriggerStats } from "@/components/dashboard/TriggerStats";
+import { Bell, Target, Clock, Settings as SettingsIcon } from "lucide-react";
+import { SEO } from "@/components/SEO";
+import { useToast } from "@/hooks/use-toast";
 
-type TabValue = "triggers" | "history" | "settings";
-type ViewMode = "dashboard" | "create";
-
-export default function DashboardPage() {
-  const { user, loading } = useAuth();
+export default function Dashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabValue>("triggers");
-  const [viewMode, setViewMode] = useState<ViewMode>("dashboard");
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const hasCheckedParam = useRef(false);
+  const { user, profile, loading } = useAuth();
+  const { toast } = useToast();
+  const [isTelegramAuthenticating, setIsTelegramAuthenticating] = useState(false);
 
-  // Check for createTrigger URL param on mount
+  // Handle Telegram auth callback from URL params
   useEffect(() => {
-    if (!hasCheckedParam.current && router.isReady && router.query.createTrigger === "true") {
-      hasCheckedParam.current = true;
-      setShowCreateModal(true);
-      // Clean up URL param
-      const { createTrigger, ...cleanQuery } = router.query;
-      router.replace({ query: cleanQuery }, undefined, { shallow: true });
-    }
-  }, [router.isReady]);
+    const handleTelegramAuth = async () => {
+      // Check if URL has Telegram auth params
+      const { id, first_name, last_name, username, photo_url, auth_date, hash } = router.query;
+      
+      if (!id || !hash || isTelegramAuthenticating) return;
 
-  if (loading) {
+      setIsTelegramAuthenticating(true);
+
+      try {
+        // Send auth data to backend for verification
+        const response = await fetch("/api/auth/telegram-callback", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: parseInt(id as string),
+            first_name: first_name as string,
+            last_name: last_name as string | undefined,
+            username: username as string | undefined,
+            photo_url: photo_url as string | undefined,
+            auth_date: parseInt(auth_date as string),
+            hash: hash as string,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Authentication failed");
+        }
+
+        toast({
+          title: "Welcome! 🎯",
+          description: `Logged in via Telegram as ${first_name}`,
+        });
+
+        // Clean URL params
+        router.replace("/dashboard", undefined, { shallow: true });
+      } catch (error) {
+        console.error("Telegram auth error:", error);
+        toast({
+          title: "Authentication Error",
+          description: "Failed to authenticate with Telegram. Please try again.",
+          variant: "destructive",
+        });
+        
+        // Clean URL params even on error
+        router.replace("/dashboard", undefined, { shallow: true });
+      } finally {
+        setIsTelegramAuthenticating(false);
+      }
+    };
+
+    handleTelegramAuth();
+  }, [router.query, isTelegramAuthenticating, router, toast]);
+
+  if (loading || isTelegramAuthenticating) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto"></div>
+          <p className="text-muted-foreground">
+            {isTelegramAuthenticating ? "Authenticating with Telegram..." : "Loading..."}
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (!user) {
-    return <PhoneAuth />;
-  }
-
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border glass-panel sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Bell className="h-6 w-6 text-primary" />
-              </div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Bet Alert
-              </h1>
+    <>
+      <SEO 
+        title="Dashboard - Bet Alert"
+        description="Manage your betting triggers and track your alerts"
+      />
+      
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+        <div className="container mx-auto px-4 py-8">
+          <div className="space-y-8">
+            {/* Header */}
+            <div>
+              <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
+              <p className="text-muted-foreground mt-2">
+                Manage your betting triggers and track your alerts
+              </p>
             </div>
+
+            {/* Stats Overview */}
+            <TriggerStats />
+
+            {/* Main Content */}
+            <Tabs defaultValue="create" className="space-y-6">
+              <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+                <TabsTrigger value="create" className="gap-2">
+                  <Target className="h-4 w-4" />
+                  <span className="hidden sm:inline">Create Trigger</span>
+                  <span className="sm:hidden">Create</span>
+                </TabsTrigger>
+                <TabsTrigger value="triggers" className="gap-2">
+                  <Bell className="h-4 w-4" />
+                  <span className="hidden sm:inline">My Triggers</span>
+                  <span className="sm:hidden">Triggers</span>
+                </TabsTrigger>
+                <TabsTrigger value="history" className="gap-2">
+                  <Clock className="h-4 w-4" />
+                  <span className="hidden sm:inline">History</span>
+                  <span className="sm:hidden">History</span>
+                </TabsTrigger>
+                <TabsTrigger value="settings" className="gap-2">
+                  <SettingsIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">Settings</span>
+                  <span className="sm:hidden">Settings</span>
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="create">
+                <CreateTrigger />
+              </TabsContent>
+
+              <TabsContent value="triggers">
+                <MyTriggers />
+              </TabsContent>
+
+              <TabsContent value="history">
+                <History />
+              </TabsContent>
+
+              <TabsContent value="settings">
+                <Settings />
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
-        {viewMode === "create" ? (
-          <CreateTrigger
-            onBack={() => setViewMode("dashboard")}
-            onSuccess={() => {
-              setViewMode("dashboard");
-              setActiveTab("triggers");
-            }}
-          />
-        ) : (
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
-            <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8">
-              <TabsTrigger value="triggers">My Triggers</TabsTrigger>
-              <TabsTrigger value="history">History</TabsTrigger>
-              <TabsTrigger value="settings">Settings</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="triggers">
-              <MyTriggers onCreateNew={() => setShowCreateModal(true)} />
-            </TabsContent>
-
-            <TabsContent value="history">
-              <History />
-            </TabsContent>
-
-            <TabsContent value="settings">
-              <Settings />
-            </TabsContent>
-          </Tabs>
-        )}
-
-        {/* Create Trigger Modal */}
-        <CreateTrigger
-          open={showCreateModal}
-          onOpenChange={setShowCreateModal}
-          onSuccess={() => {
-            setShowCreateModal(false);
-            setActiveTab("triggers");
-          }}
-        />
-      </main>
-
-      <footer className="border-t border-border mt-16 py-8">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-sm text-muted-foreground">
-            I agree to receive SMS alerts from Hammer when my alerts trigger. Msg & data rates may apply. Reply STOP anytime to unsubscribe.
-          </p>
-          <p className="text-xs text-muted-foreground mt-2">
-            © {new Date().getFullYear()} Bet Alert. All rights reserved.
-          </p>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </>
   );
 }

@@ -6,7 +6,8 @@ interface TelegramLoginButtonProps {
   cornerRadius?: number;
   requestAccess?: boolean;
   usePic?: boolean;
-  onAuth: (user: TelegramUser) => void;
+  authUrl?: string;
+  onAuth?: (user: TelegramUser) => void;
 }
 
 export interface TelegramUser {
@@ -32,26 +33,36 @@ export function TelegramLoginButton({
   buttonSize = "large",
   cornerRadius = 20,
   requestAccess = true,
-  usePic = true,
+  usePic = false,
+  authUrl,
   onAuth,
 }: TelegramLoginButtonProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Set up the callback function
-    window.TelegramLoginWidget = {
-      dataOnauth: onAuth,
-    };
+    // Only set up callback if using onAuth mode (not auth-url)
+    if (onAuth && !authUrl) {
+      window.TelegramLoginWidget = {
+        dataOnauth: onAuth,
+      };
+    }
 
     // Create script element
     const script = document.createElement("script");
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.src = "https://telegram.org/js/telegram-widget.js?23";
     script.setAttribute("data-telegram-login", botName);
     script.setAttribute("data-size", buttonSize);
     script.setAttribute("data-radius", cornerRadius.toString());
     script.setAttribute("data-request-access", requestAccess ? "write" : "read");
     script.setAttribute("data-userpic", usePic.toString());
-    script.setAttribute("data-onauth", "TelegramLoginWidget.dataOnauth(user)");
+    
+    // Use auth-url if provided, otherwise use onauth callback
+    if (authUrl) {
+      script.setAttribute("data-auth-url", authUrl);
+    } else if (onAuth) {
+      script.setAttribute("data-onauth", "TelegramLoginWidget.dataOnauth(user)");
+    }
+    
     script.async = true;
 
     // Append script to container
@@ -64,9 +75,11 @@ export function TelegramLoginButton({
       if (containerRef.current && containerRef.current.contains(script)) {
         containerRef.current.removeChild(script);
       }
-      delete window.TelegramLoginWidget;
+      if (!authUrl) {
+        delete window.TelegramLoginWidget;
+      }
     };
-  }, [botName, buttonSize, cornerRadius, requestAccess, usePic, onAuth]);
+  }, [botName, buttonSize, cornerRadius, requestAccess, usePic, authUrl, onAuth]);
 
   return <div ref={containerRef} />;
 }
