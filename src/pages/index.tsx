@@ -230,6 +230,13 @@ export default function LandingPage() {
                   I agree to receive SMS alerts from Hammer when my alerts trigger. Msg & data rates may apply. Reply STOP anytime to unsubscribe.
                 </label>
               </div>
+              {/* CTA Section */}
+              <div className="flex justify-center items-center">
+                <TelegramLoginButton 
+                  authUrl="https://www.hammer-app.com/dashboard"
+                  usePic={false}
+                />
+              </div>
             </div>
           </div>
         </div>
