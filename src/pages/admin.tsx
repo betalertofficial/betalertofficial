@@ -54,16 +54,17 @@ export default function AdminPage() {
 
   useEffect(() => {
     const checkAdmin = async () => {
-      if (!user) {
+      if (!profile) {
         setCheckingAdmin(false);
         return;
       }
 
       try {
-        const adminCheck = await adminService.checkIsAdmin(user.id);
-        setIsAdmin(adminCheck);
+        // Check role directly from profile (already loaded via session API)
+        const isAdminUser = profile.role === "admin" || profile.role === "super_admin";
+        setIsAdmin(isAdminUser);
         
-        if (adminCheck) {
+        if (isAdminUser) {
           loadAdminData();
         }
       } catch (error) {
@@ -75,7 +76,7 @@ export default function AdminPage() {
     };
 
     checkAdmin();
-  }, [user]);
+  }, [profile]);
 
   // Load tracked leagues and event schedules
   useEffect(() => {
