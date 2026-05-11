@@ -82,6 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await supabase
         .from("profiles")
         .update({
+          telegram_chat_id: chatId,
           telegram_username: authData.username || null,
           telegram_first_name: authData.first_name,
           updated_at: new Date().toISOString(),
