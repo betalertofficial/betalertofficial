@@ -43,8 +43,8 @@ Dashboard → /api/auth/session → Returns profile (checks both auth methods)
 - [x] Add `JWT_SECRET` environment variable (generate secure random string)
 - [x] Create `src/lib/jwt.ts` with JWT sign/verify utilities
 - [x] Update `/api/auth/telegram-callback.ts` to issue JWT cookie instead of creating Supabase session
-- [ ] Create `/api/auth/session.ts` unified session endpoint (checks JWT + Supabase)
-- [ ] Update `AuthContext.tsx` to call session API instead of direct Supabase auth
+- [x] Create `/api/auth/session.ts` unified session endpoint (checks JWT + Supabase)
+- [x] Update `AuthContext.tsx` to call session API instead of direct Supabase auth
 - [ ] Update profile queries to use service role for Telegram users (bypass RLS)
 - [ ] Test: Fresh Telegram login creates profile + JWT cookie + loads dashboard
 - [ ] Test: Existing Telegram user logs in, keeps same UUID, sees existing triggers
