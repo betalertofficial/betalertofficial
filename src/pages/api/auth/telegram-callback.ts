@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "@/integrations/supabase/client";
 import crypto from "crypto";
+import { signTelegramJWT } from "@/lib/jwt";
+import { serialize } from "cookie";
 
 interface TelegramAuthData {
   id: number;
@@ -64,6 +66,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const chatId = authData.id.toString();
 
     // Check if profile exists with this telegram_chat_id
+    // Use service role to bypass RLS (Telegram users don't have auth.uid())
     const { data: existingProfile } = await supabase
       .from("profiles")
       .select("id")
@@ -73,10 +76,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let userId: string;
 
     if (existingProfile) {
-      // Profile exists - user already has an account
+      // Profile exists - update Telegram info
       userId = existingProfile.id;
       
-      // Update Telegram info
       await supabase
         .from("profiles")
         .update({
@@ -88,31 +90,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         
       console.log("[Telegram Auth] Updated existing profile:", userId);
     } else {
-      // No existing profile - create new anonymous user
-      const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
+      // No existing profile - create new one
+      // Generate a new UUID for the profile
+      const newUserId = crypto.randomUUID();
       
-      if (anonError || !anonData.user) {
-        console.error("[Telegram Auth] Failed to create anonymous user:", anonError);
-        res.status(500).json({ error: "Failed to create session" });
-        return;
-      }
-      
-      userId = anonData.user.id;
-      console.log("[Telegram Auth] Created anonymous user:", userId);
-      
-      // Update the auto-created profile with Telegram data
-      await supabase
+      const { error: insertError } = await supabase
         .from("profiles")
-        .update({
+        .insert({
+          id: newUserId,
           telegram_chat_id: chatId,
           telegram_username: authData.username || null,
           telegram_first_name: authData.first_name,
-          updated_at: new Date().toISOString(),
-        } as any)
-        .eq("id", userId);
-        
-      console.log("[Telegram Auth] Linked Telegram data to profile:", userId);
+          name: authData.first_name,
+          subscription_tier: "free",
+          trigger_limit: 3,
+        } as any);
+      
+      if (insertError) {
+        console.error("[Telegram Auth] Failed to create profile:", insertError);
+        res.status(500).json({ error: "Failed to create profile" });
+        return;
+      }
+      
+      userId = newUserId;
+      console.log("[Telegram Auth] Created new profile:", userId);
     }
+
+    // Generate JWT for this Telegram user
+    const token = signTelegramJWT({
+      userId,
+      telegramChatId: chatId,
+      telegramUsername: authData.username,
+      telegramFirstName: authData.first_name,
+    });
+
+    // Set HttpOnly cookie
+    const cookie = serialize("telegram_session", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 30 * 24 * 60 * 60, // 30 days
+      path: "/",
+    });
+
+    res.setHeader("Set-Cookie", cookie);
 
     // Return success with user data
     res.status(200).json({
