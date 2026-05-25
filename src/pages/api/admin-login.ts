@@ -109,7 +109,7 @@ export default async function handler(
     // Set HttpOnly cookie
     const cookie = serialize("telegram_session", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: false, // Always false since this only runs in development
       sameSite: "lax",
       maxAge: 30 * 24 * 60 * 60, // 30 days
       path: "/",
