@@ -1,8 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { supabase } from "@/integrations/supabase/client";
+import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 import { signTelegramJWT } from "@/lib/jwt";
 import { serialize } from "cookie";
+
+// Create server-side Supabase client with service role (bypasses RLS)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
 
 interface TelegramAuthData {
   id: number;
