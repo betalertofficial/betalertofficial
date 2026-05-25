@@ -29,7 +29,7 @@ declare global {
 }
 
 export function TelegramLoginButton({
-  botName = "betalertofficial_bot",
+  botName = "Hammer_notifs_bot",
   buttonSize = "large",
   cornerRadius = 20,
   requestAccess = true,
