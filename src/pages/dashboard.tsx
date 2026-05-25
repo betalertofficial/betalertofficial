@@ -113,7 +113,10 @@ export default function Dashboard() {
               </div>
               <Button 
                 size="lg" 
-                onClick={() => setActiveTab("create")}
+                onClick={() => {
+                  console.log("Create Trigger button clicked, switching to create tab");
+                  setActiveTab("create");
+                }}
                 className="gap-2"
               >
                 <Plus className="h-5 w-5" />
