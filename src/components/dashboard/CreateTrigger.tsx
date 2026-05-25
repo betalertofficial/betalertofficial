@@ -333,7 +333,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
         time_period_min: timePeriodMin
       });
 
-      const trigger = await triggerService.createTrigger({
+      const trigger = await triggerService.createTrigger(user.id, {
         sport: selectedSport,
         team_or_player: selectedTeam,
         team_id: selectedTeamId || null,
