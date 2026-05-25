@@ -55,15 +55,47 @@ export function formatTelegramAlert(alert: {
   detail: string;
   currentOdds: number;
   targetOdds: number;
+  espnData?: {
+    home_score?: number;
+    away_score?: number;
+    period?: number;
+    detail?: string;
+    status?: string;
+  };
 }): string {
-  return `🚨 *Betting Alert!*
+  let message = `🚨 *Betting Alert!*
 
 *Game:* ${alert.game}
 *Market:* ${alert.market}
 *Detail:* ${alert.detail}
 
 *Target Odds:* ${alert.targetOdds}
-*Current Odds:* ${alert.currentOdds}
+*Current Odds:* ${alert.currentOdds}`;
 
-Time to place your bet! 🎯`;
+  // Add ESPN live game data if available
+  if (alert.espnData) {
+    const { home_score, away_score, period, detail, status } = alert.espnData;
+    
+    message += '\n\n*Live Game Info:*';
+    
+    if (home_score !== undefined && away_score !== undefined) {
+      message += `\n📊 Score: ${away_score} - ${home_score}`;
+    }
+    
+    if (period !== undefined && period > 0) {
+      message += `\n⏱️ Period: ${period}`;
+    }
+    
+    if (detail) {
+      message += `\n🎮 Status: ${detail}`;
+    }
+    
+    if (status) {
+      message += `\n⚡ Game: ${status}`;
+    }
+  }
+
+  message += '\n\nTime to place your bet! 🎯';
+  
+  return message;
 }

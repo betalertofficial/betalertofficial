@@ -155,12 +155,25 @@ export const alertService = {
       if (profile.telegram_chat_id) {
         console.log(`Routing alert to Telegram for user ${profileId}`);
         
+        // Extract ESPN game data from scores_data if available
+        let espnData = undefined;
+        if (snapshot.scores_data) {
+          espnData = {
+            home_score: snapshot.scores_data.home_score,
+            away_score: snapshot.scores_data.away_score,
+            period: snapshot.scores_data.period,
+            detail: snapshot.scores_data.detail,
+            status: snapshot.scores_data.status,
+          };
+        }
+        
         const telegramMessage = formatTelegramAlert({
           game: trigger.team_or_player,
           market: trigger.bet_type,
           detail: snapshot.bookmaker,
           currentOdds: snapshot.odds_value,
           targetOdds: trigger.odds_value,
+          espnData,
         });
 
         const result = await sendTelegramMessage({
