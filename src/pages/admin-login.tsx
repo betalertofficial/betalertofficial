@@ -1,7 +1,5 @@
-
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/router";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, Loader2 } from "lucide-react";
@@ -11,28 +9,17 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    // Check if already authenticated
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        router.push("/");
-      }
-    };
-    checkAuth();
-  }, [router]);
-
-  const handleSuperAdminLogin = async () => {
+  const handleAdminLogin = async () => {
     setError("");
     setLoading(true);
 
     try {
-      // Call the dev-admin-login API to create a real Supabase session
-      const response = await fetch("/api/dev-admin-login", {
+      const response = await fetch("/api/admin-login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
-        }
+        },
+        credentials: "include" // Important: include cookies
       });
 
       if (!response.ok) {
@@ -40,21 +27,17 @@ export default function AdminLoginPage() {
         throw new Error(errorData.error || "Failed to create admin session");
       }
 
-      const { access_token, refresh_token } = await response.json();
+      const { success } = await response.json();
 
-      // Set the session in Supabase client
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token,
-        refresh_token
-      });
-
-      if (sessionError) throw sessionError;
-
-      // Redirect to main dashboard after successful login
-      router.push("/");
+      if (success) {
+        // Redirect to admin page
+        router.push("/admin");
+      } else {
+        throw new Error("Login failed");
+      }
     } catch (err: any) {
-      console.error("Super admin login error:", err);
-      setError(err.message || "Failed to sign in as super admin");
+      console.error("Admin login error:", err);
+      setError(err.message || "Failed to sign in as admin");
       setLoading(false);
     }
   };
@@ -68,20 +51,19 @@ export default function AdminLoginPage() {
               <Shield className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-3xl font-bold">Super Admin Login</CardTitle>
+          <CardTitle className="text-3xl font-bold">Admin Login</CardTitle>
           <CardDescription className="text-muted-foreground mt-2">
-            Development access - no OTP required
+            Development access - creates admin profile with JWT cookie
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="bg-card/50 border border-border rounded-lg p-4 space-y-2">
-              <p className="text-sm font-medium">Super Admin Credentials:</p>
+              <p className="text-sm font-medium">Admin Access:</p>
               <div className="space-y-1 text-xs text-muted-foreground">
-                <p><strong>Phone:</strong> +15555550001</p>
-                <p><strong>Email:</strong> admin@betalert.dev</p>
                 <p><strong>Role:</strong> super_admin</p>
                 <p><strong>Trigger Limit:</strong> 999</p>
+                <p><strong>Subscription:</strong> pro</p>
               </div>
             </div>
 
@@ -94,7 +76,7 @@ export default function AdminLoginPage() {
             <Button
               type="button"
               className="w-full btn-primary h-12"
-              onClick={handleSuperAdminLogin}
+              onClick={handleAdminLogin}
               disabled={loading}
             >
               {loading ? (
@@ -105,14 +87,14 @@ export default function AdminLoginPage() {
               ) : (
                 <>
                   <Shield className="h-4 w-4 mr-2" />
-                  Sign in as Super Admin
+                  Sign in as Admin
                 </>
               )}
             </Button>
 
             <div className="bg-accent/10 border border-accent/20 text-accent px-4 py-3 rounded-lg text-xs">
-              <strong>⚠️ Development Only:</strong> This creates a real authenticated session with full system access. 
-              The super admin can create triggers, manage users, and control all system functions.
+              <strong>⚠️ Development Only:</strong> This creates an admin profile and sets a JWT cookie. 
+              The admin can access /admin page and manage system settings.
             </div>
 
             <Button
@@ -121,7 +103,7 @@ export default function AdminLoginPage() {
               className="w-full"
               onClick={() => router.push("/")}
             >
-              Back to Phone Login
+              Back to Home
             </Button>
           </div>
         </CardContent>
