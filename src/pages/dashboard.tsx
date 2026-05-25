@@ -8,15 +8,17 @@ import { MyTriggers } from "@/components/dashboard/MyTriggers";
 import { History } from "@/components/dashboard/History";
 import { Settings } from "@/components/dashboard/Settings";
 import { TriggerStats } from "@/components/dashboard/TriggerStats";
-import { Bell, Target, Clock, Settings as SettingsIcon } from "lucide-react";
+import { Bell, Target, Clock, Settings as SettingsIcon, Plus } from "lucide-react";
 import { SEO } from "@/components/SEO";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
   const router = useRouter();
   const { user, profile, loading } = useAuth();
   const { toast } = useToast();
   const [isTelegramAuthenticating, setIsTelegramAuthenticating] = useState(false);
+  const [activeTab, setActiveTab] = useState("create");
 
   // Handle Telegram auth callback from URL params
   useEffect(() => {
@@ -102,18 +104,28 @@ export default function Dashboard() {
         <div className="container mx-auto px-4 py-8">
           <div className="space-y-8">
             {/* Header */}
-            <div>
-              <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
-              <p className="text-muted-foreground mt-2">
-                Manage your betting triggers and track your alerts
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
+                <p className="text-muted-foreground mt-2">
+                  Manage your betting triggers and track your alerts
+                </p>
+              </div>
+              <Button 
+                size="lg" 
+                onClick={() => setActiveTab("create")}
+                className="gap-2"
+              >
+                <Plus className="h-5 w-5" />
+                Create Trigger
+              </Button>
             </div>
 
             {/* Stats Overview */}
             <TriggerStats active={0} completed={0} remaining={0} />
 
             {/* Main Content */}
-            <Tabs defaultValue="create" className="space-y-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
               <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
                 <TabsTrigger value="create" className="gap-2">
                   <Target className="h-4 w-4" />
