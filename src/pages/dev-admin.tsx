@@ -1,26 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, Loader2 } from "lucide-react";
 
-export default function AdminLoginPage() {
+export default function DevAdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    console.log("[AdminLoginPage] Component mounted");
-    console.log("[AdminLoginPage] Current pathname:", router.pathname);
-    console.log("[AdminLoginPage] Current asPath:", router.asPath);
-    
-    return () => {
-      console.log("[AdminLoginPage] Component unmounting");
-    };
-  }, [router]);
-
   const handleAdminLogin = async () => {
-    console.log("[AdminLoginPage] handleAdminLogin called");
     setError("");
     setLoading(true);
 
@@ -30,7 +19,7 @@ export default function AdminLoginPage() {
         headers: {
           "Content-Type": "application/json"
         },
-        credentials: "include" // Important: include cookies
+        credentials: "include"
       });
 
       if (!response.ok) {
@@ -41,7 +30,7 @@ export default function AdminLoginPage() {
       const { success } = await response.json();
 
       if (success) {
-        // Redirect to admin page
+        console.log("Admin login successful, redirecting to /admin");
         router.push("/admin");
       } else {
         throw new Error("Login failed");
@@ -62,19 +51,20 @@ export default function AdminLoginPage() {
               <Shield className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-3xl font-bold">Admin Login</CardTitle>
+          <CardTitle className="text-3xl font-bold">Dev Admin Access</CardTitle>
           <CardDescription className="text-muted-foreground mt-2">
-            Development access - creates admin profile with JWT cookie
+            Development-only admin login
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="bg-card/50 border border-border rounded-lg p-4 space-y-2">
-              <p className="text-sm font-medium">Admin Access:</p>
+              <p className="text-sm font-medium">What happens:</p>
               <div className="space-y-1 text-xs text-muted-foreground">
-                <p><strong>Role:</strong> super_admin</p>
-                <p><strong>Trigger Limit:</strong> 999</p>
-                <p><strong>Subscription:</strong> pro</p>
+                <p>✓ Creates admin profile (telegram_chat_id: 999999999)</p>
+                <p>✓ Sets JWT cookie for authentication</p>
+                <p>✓ Grants super_admin role</p>
+                <p>✓ Redirects to /admin dashboard</p>
               </div>
             </div>
 
@@ -98,14 +88,13 @@ export default function AdminLoginPage() {
               ) : (
                 <>
                   <Shield className="h-4 w-4 mr-2" />
-                  Sign in as Admin
+                  Grant Admin Access
                 </>
               )}
             </Button>
 
             <div className="bg-accent/10 border border-accent/20 text-accent px-4 py-3 rounded-lg text-xs">
-              <strong>⚠️ Development Only:</strong> This creates an admin profile and sets a JWT cookie. 
-              The admin can access /admin page and manage system settings.
+              <strong>⚠️ Dev Only:</strong> This only works in development mode (NODE_ENV !== production)
             </div>
 
             <Button
