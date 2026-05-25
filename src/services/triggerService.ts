@@ -48,12 +48,9 @@ export const triggerService = {
     return data as ProfileTrigger[];
   },
 
-  async createTrigger(params: CreateTriggerParams): Promise<ProfileTrigger> {
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      throw new Error("User not authenticated");
+  async createTrigger(userId: string, params: CreateTriggerParams): Promise<ProfileTrigger> {
+    if (!userId) {
+      throw new Error("User ID is required");
     }
 
     // Insert trigger
@@ -86,7 +83,7 @@ export const triggerService = {
       .from("profile_triggers")
       .insert([
         {
-          profile_id: user.id,
+          profile_id: userId,
           trigger_id: trigger.id
         }
       ])
