@@ -116,11 +116,17 @@ export default async function handler(
     });
 
     res.setHeader("Set-Cookie", cookie);
-    console.log("[Admin Login] Cookie set, responding with success");
+    console.log("[Admin Login] Cookie set successfully");
+    console.log("[Admin Login] Cookie value:", cookie.substring(0, 50) + "...");
 
     res.status(200).json({
       success: true,
       userId,
+      debug: {
+        cookieSet: true,
+        userId,
+        role: "super_admin"
+      }
     });
   } catch (error: any) {
     console.error("[Admin Login] Error:", error);

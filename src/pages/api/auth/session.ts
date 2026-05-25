@@ -25,6 +25,10 @@ export default async function handler(
     const cookies = parse(req.headers.cookie || "");
     const telegramToken = cookies.telegram_session;
 
+    console.log("[Session API] Cookie header:", req.headers.cookie ? "present" : "missing");
+    console.log("[Session API] Parsed cookies:", Object.keys(cookies));
+    console.log("[Session API] telegram_session cookie:", telegramToken ? "found" : "missing");
+
     if (telegramToken) {
       const payload = verifyTelegramJWT(telegramToken);
       

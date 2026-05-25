@@ -29,8 +29,14 @@ export default function DevAdminPage() {
 
       const { success } = await response.json();
 
+      console.log("[Dev Admin] Login response:", { success });
+
       if (success) {
-        console.log("Admin login successful, redirecting to /admin");
+        console.log("[Dev Admin] Login successful, redirecting to /admin");
+        
+        // Small delay to ensure cookie is set
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         router.push("/admin");
       } else {
         throw new Error("Login failed");
