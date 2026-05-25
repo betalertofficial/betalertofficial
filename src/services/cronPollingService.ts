@@ -12,6 +12,7 @@ import { Database } from "@/integrations/supabase/types";
 import { getActiveSports, markEventsAsLive, markEventsAsCompleted } from "./scheduleService";
 import { findMatches, deduplicateMatches } from "./matchingEngine";
 import { espnService } from "./espnService";
+import { alertService } from "./alertService";
 
 type Trigger = Database["public"]["Tables"]["triggers"]["Row"];
 
@@ -546,7 +547,7 @@ export async function runCronPoll(
     
     console.log(`[CronPoll] Found ${uniqueMatches.length} unique matches`);
 
-    // Step 12: Create trigger_matches and alerts
+    // Step 12: Create trigger_matches and send alerts
     let matchesCreated = 0;
     let alertsCreated = 0;
     let webhooksSent = 0;
@@ -607,107 +608,40 @@ export async function runCronPoll(
           }
         }
 
-        // Fetch ESPN game data for alert
-        const oddsSnapshot = allOdds.find(o => 
-          o.event_id === match.eventId && 
-          o.team_or_player === match.teamOrPlayer &&
-          o.bookmaker === match.bookmaker &&
-          o.bet_type === match.betType
-        );
-
-        let espnData = null;
-        if (oddsSnapshot?.event_data) {
-          const eventData = oddsSnapshot.event_data;
-          console.log(`[CronPoll] Fetching ESPN data for alert: ${eventData.away_team} @ ${eventData.home_team} (${match.sport})`);
-          
-          espnData = await espnService.findGameScore(
-            match.sport,
-            eventData.home_team,
-            eventData.away_team
-          );
-          
-          if (espnData.found) {
-            console.log(`[CronPoll] ESPN data found: ${espnService.formatScore(espnData)}`);
-          } else {
-            console.log(`[CronPoll] ESPN data not found for this game`);
-          }
-        }
-
-        // Build alert message with ESPN game data
-        let alertMessage = `${match.teamOrPlayer} ${match.betType} hit! ${match.bookmaker}: ${formatOdds(match.oddsValue)}`;
-        
-        if (espnData?.found) {
-          alertMessage += `\n\n📊 Game Status: ${espnService.formatScore(espnData)}`;
-        }
-
-        // Create alert with profile_id and ESPN game data
-        const { data: alert, error: alertError } = await supabase
-          .from("alerts")
-          .insert({
-            trigger_match_id: triggerMatch.id,
-            profile_id: profileTrigger.profile_id,
-            message: alertMessage,
-            game_status: espnData?.state || null,
-            game_detail: espnData?.detail || null,
-            home_team: espnData?.homeTeam || null,
-            away_team: espnData?.awayTeam || null,
-            home_score: espnData?.homeScore || null,
-            away_score: espnData?.awayScore || null,
-            period: espnData?.period || null,
-            clock: espnData?.clock || null,
-            score_summary: espnData?.found ? espnService.formatScore(espnData) : null,
-          })
-          .select()
+        // Get trigger and snapshot data for alert
+        const { data: triggerData } = await supabase
+          .from("triggers")
+          .select("*")
+          .eq("id", match.triggerId)
           .single();
 
-        if (alertError) {
-          console.error(`[CronPoll] Failed to create alert:`, alertError);
+        const { data: snapshotData } = await supabase
+          .from("odds_snapshots")
+          .select("*")
+          .eq("id", snapshotId)
+          .single();
+
+        if (!triggerData || !snapshotData) {
+          console.error(`[CronPoll] Missing trigger or snapshot data for match`);
           continue;
         }
 
-        alertsCreated++;
-        console.log(`[CronPoll] Created alert for trigger ${match.triggerId}: ${match.eventDetails} @ ${match.oddsValue}`);
+        // Use alertService.sendAlert which routes to Telegram or webhook
+        console.log(`[CronPoll] Sending alert via alertService for user ${profileTrigger.profile_id}`);
+        const alertSent = await alertService.sendAlert(
+          supabase,
+          profileTrigger.profile_id,
+          triggerData,
+          snapshotData,
+          triggerMatch.id
+        );
 
-        // Send webhook if URL is configured
-        if (webhookUrl) {
-          try {
-            const { data: triggerData } = await supabase
-              .from("triggers")
-              .select("*")
-              .eq("id", match.triggerId)
-              .single();
-
-            await fetch(webhookUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                trigger_id: match.triggerId,
-                alert_id: alert.id,
-                message: alert.message,
-                event: match.eventDetails,
-                sport: match.sport,
-                team: match.teamOrPlayer,
-                bet_type: match.betType,
-                odds: match.oddsValue,
-                bookmaker: match.bookmaker,
-                game_status: alert.game_status,
-                game_detail: alert.game_detail,
-                home_team: alert.home_team,
-                away_team: alert.away_team,
-                home_score: alert.home_score,
-                away_score: alert.away_score,
-                period: alert.period,
-                clock: alert.clock,
-                score_summary: alert.score_summary,
-                matched_at: triggerMatch.matched_at,
-                delivery_status: alert.delivery_status,
-                trigger: triggerData,
-              }),
-            });
-            webhooksSent++;
-          } catch (webhookError) {
-            console.error("[CronPoll] Webhook failed:", webhookError);
-          }
+        if (alertSent) {
+          alertsCreated++;
+          webhooksSent++; // Count as webhook even if it went to Telegram
+          console.log(`[CronPoll] Alert sent successfully for trigger ${match.triggerId}`);
+        } else {
+          console.error(`[CronPoll] Failed to send alert for trigger ${match.triggerId}`);
         }
       } catch (error) {
         console.error("[CronPoll] Error processing match:", error);
