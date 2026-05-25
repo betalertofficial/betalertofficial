@@ -31,8 +31,8 @@ Current setup mixes Supabase Auth with Telegram auth, causing complexity and bug
 ## Checklist
 
 - [x] Create task file for tracking
-- [ ] Database: get current schema, identify auth.users dependencies
-- [ ] Database: remove profiles FK to auth.users, update RLS policies to use telegram_chat_id instead of auth.uid()
+- [x] Database: get current schema, identify auth.users dependencies
+- [x] Database: remove profiles FK to auth.users, update RLS policies to use telegram_chat_id instead of auth.uid()
 - [ ] Backend: create JWT middleware for verifying cookies in API routes
 - [ ] Backend: update all API routes to use JWT verification instead of Supabase session
 - [ ] Frontend: create new TelegramAuthContext (replace AuthContext with Telegram-only logic)
