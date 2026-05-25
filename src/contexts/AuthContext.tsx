@@ -45,18 +45,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    console.log("[AuthContext] Starting auth initialization");
     let mounted = true;
 
-    const initializeAuth = async () => {
+    const initAuth = async () => {
       try {
-        setLoading(true);
-        console.log("[AuthContext] Starting auth initialization");
+        // Check for dev admin profile in localStorage first (for iframe/dev environments)
+        const devAdminProfile = localStorage.getItem("dev_admin_profile");
+        if (devAdminProfile) {
+          try {
+            const profile = JSON.parse(devAdminProfile);
+            console.log("[AuthContext] Found dev admin profile in localStorage:", profile.id);
+            
+            if (mounted) {
+              setUser({ id: profile.id } as any);
+              setProfile(profile);
+              setLoading(false);
+            }
+            return; // Skip Supabase session check
+          } catch (e) {
+            console.error("[AuthContext] Invalid dev admin profile in localStorage:", e);
+            localStorage.removeItem("dev_admin_profile");
+          }
+        }
+
+        // Check for Telegram JWT cookie
+        const sessionResponse = await fetch("/api/auth/session", {
+          credentials: "include"
+        });
         
-        // Call unified session API - checks both JWT cookie and Supabase session
-        const response = await fetch("/api/auth/session");
-        
-        if (response.ok) {
-          const data = await response.json();
+        if (sessionResponse.ok) {
+          const data = await sessionResponse.json();
           
           if (data.authenticated && data.profile) {
             console.log(`[AuthContext] Session found via ${data.authMethod}:`, data.userId);
@@ -104,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    initializeAuth();
+    initAuth();
 
     // Setup listener for Supabase auth changes (only affects phone auth users)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(

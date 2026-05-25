@@ -14,35 +14,37 @@ export default function DevAdminPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/admin-login", {
+      console.log("[Dev Admin] Starting login...");
+      
+      const response = await fetch("/api/dev-admin-login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        credentials: "include"
       });
+
+      console.log("[Dev Admin] Response status:", response.status);
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to create admin session");
       }
 
-      const { success } = await response.json();
+      const { success, profile } = await response.json();
+      console.log("[Dev Admin] Login response:", { success, profile });
 
-      console.log("[Dev Admin] Login response:", { success });
-
-      if (success) {
-        console.log("[Dev Admin] Login successful, redirecting to /admin");
+      if (success && profile) {
+        // Store profile in localStorage for AuthContext to read
+        localStorage.setItem("dev_admin_profile", JSON.stringify(profile));
+        console.log("[Dev Admin] Profile stored in localStorage");
         
-        // Small delay to ensure cookie is set
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        router.push("/admin");
+        // Force reload to pick up the new profile
+        window.location.href = "/admin";
       } else {
-        throw new Error("Login failed");
+        throw new Error("Login failed - no profile returned");
       }
     } catch (err: any) {
-      console.error("Admin login error:", err);
+      console.error("[Dev Admin] Login error:", err);
       setError(err.message || "Failed to sign in as admin");
       setLoading(false);
     }
@@ -59,7 +61,7 @@ export default function DevAdminPage() {
           </div>
           <CardTitle className="text-3xl font-bold">Dev Admin Access</CardTitle>
           <CardDescription className="text-muted-foreground mt-2">
-            Development-only admin login
+            Development-only admin login (localStorage-based)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -68,7 +70,7 @@ export default function DevAdminPage() {
               <p className="text-sm font-medium">What happens:</p>
               <div className="space-y-1 text-xs text-muted-foreground">
                 <p>✓ Creates admin profile (telegram_chat_id: 999999999)</p>
-                <p>✓ Sets JWT cookie for authentication</p>
+                <p>✓ Stores profile in localStorage (iframe-compatible)</p>
                 <p>✓ Grants super_admin role</p>
                 <p>✓ Redirects to /admin dashboard</p>
               </div>
@@ -100,7 +102,7 @@ export default function DevAdminPage() {
             </Button>
 
             <div className="bg-accent/10 border border-accent/20 text-accent px-4 py-3 rounded-lg text-xs">
-              <strong>⚠️ Dev Only:</strong> This only works in development mode (NODE_ENV !== production)
+              <strong>⚠️ Dev Only:</strong> Uses localStorage instead of cookies for iframe compatibility. Only works in development mode.
             </div>
 
             <Button
