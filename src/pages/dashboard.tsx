@@ -18,7 +18,8 @@ export default function Dashboard() {
   const { user, profile, loading } = useAuth();
   const { toast } = useToast();
   const [isTelegramAuthenticating, setIsTelegramAuthenticating] = useState(false);
-  const [activeTab, setActiveTab] = useState("create");
+  const [activeTab, setActiveTab] = useState("triggers");
+  const [showCreateTriggerModal, setShowCreateTriggerModal] = useState(false);
 
   // Handle Telegram auth callback from URL params
   useEffect(() => {
@@ -114,8 +115,8 @@ export default function Dashboard() {
               <Button 
                 size="lg" 
                 onClick={() => {
-                  console.log("Create Trigger button clicked, switching to create tab");
-                  setActiveTab("create");
+                  console.log("Create Trigger button clicked, opening modal");
+                  setShowCreateTriggerModal(true);
                 }}
                 className="gap-2"
               >
@@ -129,12 +130,7 @@ export default function Dashboard() {
 
             {/* Main Content */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
-                <TabsTrigger value="create" className="gap-2">
-                  <Target className="h-4 w-4" />
-                  <span className="hidden sm:inline">Create Trigger</span>
-                  <span className="sm:hidden">Create</span>
-                </TabsTrigger>
+              <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
                 <TabsTrigger value="triggers" className="gap-2">
                   <Bell className="h-4 w-4" />
                   <span className="hidden sm:inline">My Triggers</span>
@@ -152,10 +148,6 @@ export default function Dashboard() {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="create">
-                <CreateTrigger />
-              </TabsContent>
-
               <TabsContent value="triggers">
                 <MyTriggers />
               </TabsContent>
@@ -171,6 +163,16 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Create Trigger Modal */}
+      <CreateTrigger 
+        open={showCreateTriggerModal}
+        onOpenChange={setShowCreateTriggerModal}
+        onSuccess={() => {
+          setShowCreateTriggerModal(false);
+          setActiveTab("triggers");
+        }}
+      />
     </>
   );
 }

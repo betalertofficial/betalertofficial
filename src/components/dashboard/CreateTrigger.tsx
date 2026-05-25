@@ -6,12 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Bell, TrendingUp, Phone, Calendar } from "lucide-react";
+import { Loader2, Search, Bell, TrendingUp, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
 import { teamsService, type Team } from "@/services/teamsService";
-import { PhoneAuth } from "@/components/auth/PhoneAuth";
 import type { BetType, TriggerFrequency } from "@/types/database";
 
 export interface CreateTriggerProps {
@@ -86,7 +85,6 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [showPhoneAuth, setShowPhoneAuth] = useState(false);
   
   const [subjectType, setSubjectType] = useState<"team" | "player">("team");
   const [sports, setSports] = useState<any[]>([]);
@@ -112,9 +110,6 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
   const [frequency, setFrequency] = useState<TriggerFrequency>("once");
 
   const gameTimeOptions = GAME_TIME_CONTEXTS[selectedSport as keyof typeof GAME_TIME_CONTEXTS] || GAME_TIME_CONTEXTS.default;
-
-  // Check if user needs phone authentication
-  const needsPhoneAuth = !profile?.phone_e164 || user?.is_anonymous;
 
   useEffect(() => {
     loadSports();
@@ -268,22 +263,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
     setTeamOdds(odds);
   };
 
-  const handlePhoneAuthSuccess = async () => {
-    setShowPhoneAuth(false);
-    await refreshProfile();
-    toast({
-      title: "Phone Verified! 📱",
-      description: "You can now create triggers and receive SMS alerts",
-    });
-  };
-
   const handleCreateTrigger = async () => {
-    // Check if user needs phone authentication
-    if (needsPhoneAuth) {
-      setShowPhoneAuth(true);
-      return;
-    }
-
     if (!user || !selectedTeam || !oddsValue) {
       toast({
         title: "Missing Information",
@@ -484,26 +464,6 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
           </DialogHeader>
 
           <div className="space-y-6 py-4">
-            {needsPhoneAuth && (
-              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Phone className="h-5 w-5 text-primary" />
-                  <h3 className="font-semibold text-foreground">Phone Verification Required</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  To receive SMS alerts when your triggers are hit, you need to verify your phone number first.
-                </p>
-                <Button
-                  type="button"
-                  className="w-full btn-primary"
-                  onClick={() => setShowPhoneAuth(true)}
-                >
-                  <Phone className="h-4 w-4 mr-2" />
-                  Verify Phone Number
-                </Button>
-              </div>
-            )}
-
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">Subject Type</Label>
               <div className="grid grid-cols-2 gap-3">
@@ -870,11 +830,6 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Creating...
                 </>
-              ) : needsPhoneAuth ? (
-                <>
-                  <Phone className="h-4 w-4 mr-2" />
-                  Verify Phone to Continue
-                </>
               ) : (
                 <>
                   <Bell className="h-4 w-4 mr-2" />
@@ -883,13 +838,6 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
               )}
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Phone Authentication Modal */}
-      <Dialog open={showPhoneAuth} onOpenChange={setShowPhoneAuth}>
-        <DialogContent className="max-w-md p-0 bg-transparent border-none">
-          <PhoneAuth onSuccess={handlePhoneAuthSuccess} />
         </DialogContent>
       </Dialog>
     </>
