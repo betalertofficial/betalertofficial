@@ -16,19 +16,34 @@ interface MyTriggersProps {
 export function MyTriggers({ onCreateNew }: MyTriggersProps) {
   const { user, profile, loading: authLoading } = useAuth();
   const [triggers, setTriggers] = useState<ProfileTrigger[]>([]);
+  const [completedTriggers, setCompletedTriggers] = useState<ProfileTrigger[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
 
   const loadTriggers = async () => {
     if (!user) return;
-    
+
     try {
       setLoading(true);
       console.log("[MyTriggers] Loading triggers for user:", user.id);
-      const data = await triggerService.getUserTriggers(user.id);
-      console.log("[MyTriggers] Triggers loaded:", data.length);
-      setTriggers(data);
+
+      // Fetch active/paused triggers via anon client (works with existing RLS)
+      // and completed triggers via server-side route (bypasses RLS on trigger_matches)
+      const [activeData, completedRes] = await Promise.all([
+        triggerService.getUserTriggers(user.id),
+        fetch("/api/user/completed-triggers", { credentials: "include" }),
+      ]);
+
+      const completedJson = await completedRes.json();
+      const allActive = activeData.filter(
+        (t) => t.trigger?.status !== "completed"
+      );
+      const allCompleted: ProfileTrigger[] = completedJson.data ?? [];
+
+      console.log("[MyTriggers] Active:", allActive.length, "Completed:", allCompleted.length);
+      setTriggers(allActive);
+      setCompletedTriggers(allCompleted);
     } catch (error) {
       console.error("[MyTriggers] Error loading triggers:", error);
     } finally {
@@ -83,9 +98,8 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
     console.log("Edit trigger:", triggerId);
   };
 
-  // Filter triggers based on active tab
+  // Active/paused triggers come from the anon client fetch (stored in `triggers`)
   const activeTriggers = triggers.filter(t => t.trigger?.status === "active" || t.trigger?.status === "paused");
-  const completedTriggers = triggers.filter(t => t.trigger?.status === "completed");
 
   // Calculate active triggers count for the limit check
   const activeCount = triggers.filter(t => t.trigger?.status === "active").length;
