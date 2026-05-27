@@ -228,9 +228,17 @@ export const pollingService = {
         console.warn(`[PollingService] WARNING: Lost ${profileTriggers.length - triggersWithProfiles.length} triggers during transformation!`);
       }
 
-      // 4. Fetch odds from vendor
+      // 4. Fetch odds directly from the Odds API (server-side; cannot use the browser proxy)
       console.log("[PollingService] Fetching latest odds data...");
-      const oddsData = await oddsApiService.fetchOdds(oddsApiKey);
+      const sports = ["basketball_nba", "americanfootball_nfl", "baseball_mlb", "icehockey_nhl", "soccer_epl"];
+      const oddsResults = await Promise.all(
+        sports.map((sport) =>
+          fetch(`https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${oddsApiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=fanduel,draftkings&oddsFormat=american`)
+            .then((r) => (r.ok ? r.json() : []))
+            .catch(() => [])
+        )
+      );
+      const oddsData = oddsResults.flat();
 
       if (!oddsData || oddsData.length === 0) {
         console.log("[PollingService] No odds data available");
