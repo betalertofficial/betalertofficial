@@ -44,7 +44,7 @@ export interface GameOddsStory {
   teamOptions: { home: string; away: string };
 }
 
-const ODDS_API_KEY = process.env.NEXT_PUBLIC_ODDS_API_KEY || "39012db31f4c088f772e5eaf34a3ce8e";
+const ODDS_API_KEY = process.env.NEXT_PUBLIC_ODDS_API_KEY || "769cb07182ad562f17eff9c5359224dc";
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
 
 /**
