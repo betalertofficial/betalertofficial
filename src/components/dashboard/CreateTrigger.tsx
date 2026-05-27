@@ -100,7 +100,15 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
   const [selectedEvent, setSelectedEvent] = useState<OddsApiEvent | null>(null);
   const [teamOdds, setTeamOdds] = useState<TeamOdds | null>(null);
   const [gameScores, setGameScores] = useState<Map<string, GameScore>>(new Map());
+  // Maps odds event.id → ESPN live period string, e.g. "Q3 10:15" or "Top 4th"
+  const [espnGameDetails, setEspnGameDetails] = useState<Map<string, string>>(new Map());
   const [showNextDay, setShowNextDay] = useState(false);
+
+  // ESPN public scoreboard URLs (no auth, CORS-friendly)
+  const ESPN_SPORT_URLS: Record<string, string> = {
+    basketball_nba: "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard",
+    baseball_mlb:   "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard",
+  };
   
   const [betType, setBetType] = useState<BetType>("moneyline");
   const [oddsSign, setOddsSign] = useState<"+" | "-">("+");
@@ -184,35 +192,86 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
     }
   };
 
+  /**
+   * Fetch ESPN scoreboard for the sport and match each live game to an
+   * Odds API event by team-name substring. Stores period detail strings
+   * (e.g. "Q3 10:15", "Top 4th") in espnGameDetails keyed by event.id.
+   */
+  const loadESPNGameTimes = async (sport: string, oddsEvents: OddsApiEvent[]) => {
+    const espnUrl = ESPN_SPORT_URLS[sport];
+    if (!espnUrl || oddsEvents.length === 0) return;
+
+    try {
+      const response = await fetch(espnUrl);
+      if (!response.ok) return;
+      const data = await response.json();
+
+      const detailsMap = new Map<string, string>();
+
+      for (const espnEvent of data.events || []) {
+        const competition = espnEvent.competitions?.[0];
+        if (!competition) continue;
+
+        const status = competition.status;
+        if (status?.type?.state !== "in") continue; // only care about in-progress games
+
+        const espnHome = competition.competitors?.find((c: any) => c.homeAway === "home");
+        const espnAway = competition.competitors?.find((c: any) => c.homeAway === "away");
+        if (!espnHome || !espnAway) continue;
+
+        const espnHomeName: string = espnHome.team.displayName;
+        const espnAwayName: string = espnAway.team.displayName;
+        // shortDetail is compact: "Q3 10:15", "Top 4th", "HT", etc.
+        const detail: string = status.type.shortDetail || status.type.detail || "";
+
+        for (const oddsEvent of oddsEvents) {
+          const homeMatch =
+            oddsEvent.home_team.toLowerCase().includes(espnHomeName.toLowerCase()) ||
+            espnHomeName.toLowerCase().includes(oddsEvent.home_team.toLowerCase());
+          const awayMatch =
+            oddsEvent.away_team.toLowerCase().includes(espnAwayName.toLowerCase()) ||
+            espnAwayName.toLowerCase().includes(oddsEvent.away_team.toLowerCase());
+
+          if (homeMatch && awayMatch) {
+            detailsMap.set(oddsEvent.id, detail);
+            break;
+          }
+        }
+      }
+
+      setEspnGameDetails(detailsMap);
+    } catch (err) {
+      console.error("[CreateTrigger] ESPN game times error:", err);
+    }
+  };
+
   const loadOddsForSport = async () => {
     if (!selectedSport) return;
-    
+
     try {
       setLoading(true);
       const data = await oddsApiService.getOddsForSport(selectedSport);
       setEvents(data);
-      
-      // Also load scores for the sport
-      try {
-        const scores = await oddsApiService.getScores(selectedSport);
+
+      // Load scores + ESPN period info in parallel (both non-critical)
+      const [, scores] = await Promise.allSettled([
+        loadESPNGameTimes(selectedSport, data),
+        oddsApiService.getScores(selectedSport),
+      ]);
+
+      if (scores.status === "fulfilled") {
         const scoresMap = new Map<string, GameScore>();
-        
-        scores.forEach(scoreData => {
+        scores.value.forEach(scoreData => {
           if (scoreData.scores && Array.isArray(scoreData.scores)) {
             const homeScore = scoreData.scores.find(s => s.name === scoreData.home_team);
             const awayScore = scoreData.scores.find(s => s.name === scoreData.away_team);
-            
             scoresMap.set(scoreData.id, {
               home_score: homeScore?.score,
-              away_score: awayScore?.score
+              away_score: awayScore?.score,
             });
           }
         });
-        
         setGameScores(scoresMap);
-      } catch (scoreError) {
-        console.error("Error loading scores:", scoreError);
-        // Continue even if scores fail
       }
     } catch (error) {
       console.error("Error loading odds:", error);
@@ -549,11 +608,17 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                     const awayOdds = getTeamOddsForGame(event, event.away_team);
                     const homeOdds = getTeamOddsForGame(event, event.home_team);
                     
+                    const espnDetail = espnGameDetails.get(event.id);
+
                     return (
                       <div key={event.id} className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary transition-colors">
                         <div className="p-3 space-y-2">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs text-muted-foreground">{gameTime}</span>
+                          <div className="flex items-center justify-between mb-1">
+                            {isLive && espnDetail ? (
+                              <span className="text-xs font-semibold text-orange-500">{espnDetail}</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">{gameTime}</span>
+                            )}
                             {isLive && (
                               <Badge className="bg-red-600 text-white text-xs">LIVE</Badge>
                             )}
