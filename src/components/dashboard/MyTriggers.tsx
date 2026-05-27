@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { triggerService } from "@/services/triggerService";
 import { CreateTrigger } from "./CreateTrigger";
 import { TriggerCard } from "./TriggerCard";
+import { CompletedTriggerRow } from "./CompletedTriggerRow";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Loader2 } from "lucide-react";
@@ -159,15 +160,12 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
               <p className="text-muted-foreground">No completed triggers yet.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="flex flex-col gap-3">
               {completedTriggers.map((pt) => (
-                <TriggerCard
+                <CompletedTriggerRow
                   key={pt.id}
                   profileTrigger={pt}
-                  onPause={handlePause}
-                  onResume={handleResume}
                   onDelete={handleDelete}
-                  onEdit={handleEdit}
                 />
               ))}
             </div>

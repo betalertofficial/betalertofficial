@@ -37,15 +37,29 @@ export const triggerService = {
           status,
           bookmaker,
           vendor_id,
+          time_period_type,
+          time_period_min,
           created_at,
-          updated_at
+          updated_at,
+          trigger_matches (
+            id,
+            matched_value,
+            matched_at,
+            odds_snapshot:odds_snapshots (
+              bookmaker,
+              bet_type,
+              odds_value,
+              scores_data,
+              snapshot_at
+            )
+          )
         )
       `)
       .eq("profile_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-    return data as ProfileTrigger[];
+    return data as unknown as ProfileTrigger[];
   },
 
   async createTrigger(userId: string, params: CreateTriggerParams): Promise<ProfileTrigger> {

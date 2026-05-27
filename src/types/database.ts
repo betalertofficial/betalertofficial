@@ -53,7 +53,10 @@ export interface ProfileTrigger {
   profile_id: string;
   trigger_id: string;
   created_at: string;
-  trigger?: Trigger;
+  trigger?: Trigger & {
+    /** Most-recent matches, populated for completed triggers. Sorted newest-first client-side. */
+    trigger_matches?: TriggerMatch[];
+  };
 }
 
 export interface OddsFeedEvent {
@@ -76,6 +79,20 @@ export interface OddsSnapshot {
   deep_link_url?: string;
   commence_time?: string;
   snapshot_at: string;
+  /** ESPN live game data stored at snapshot time (camelCase from espnService) */
+  scores_data?: {
+    found: boolean;
+    homeTeam?: string;
+    awayTeam?: string;
+    homeScore?: number;
+    awayScore?: number;
+    period?: number;
+    clock?: string;
+    state?: string;
+    detail?: string;
+    espnGameId?: string;
+  } | null;
+  event_data?: any;
 }
 
 export interface TriggerMatch {
