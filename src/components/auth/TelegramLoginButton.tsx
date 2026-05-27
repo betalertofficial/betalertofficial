@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 interface TelegramLoginButtonProps {
   botName?: string;
@@ -38,32 +38,21 @@ export function TelegramLoginButton({
   onAuth,
 }: TelegramLoginButtonProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
-    
-    const currentHostname = window.location.hostname;
-    const currentProtocol = window.location.protocol;
-    const currentOrigin = window.location.origin;
-    
-    console.log("[TelegramLoginButton] Initializing with:", {
-      botName,
-      authUrl,
-      currentHostname,
-      currentProtocol,
-      currentOrigin,
-      fullUrl: window.location.href,
-    });
+    const container = containerRef.current;
+    if (!container) return;
 
-    // Only set up callback if using onAuth mode (not auth-url)
+    // Clear any previous widget content (script + Telegram-injected iframe)
+    // Without this, the stale iframe causes the widget to skip re-rendering on remount
+    container.innerHTML = "";
+
     if (onAuth && !authUrl) {
       window.TelegramLoginWidget = {
         dataOnauth: onAuth,
       };
     }
 
-    // Create script element
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-widget.js?23";
     script.setAttribute("data-telegram-login", botName);
@@ -71,41 +60,18 @@ export function TelegramLoginButton({
     script.setAttribute("data-radius", cornerRadius.toString());
     script.setAttribute("data-request-access", requestAccess ? "write" : "read");
     script.setAttribute("data-userpic", usePic.toString());
-    
-    // Use auth-url if provided, otherwise use onauth callback
+
     if (authUrl) {
       script.setAttribute("data-auth-url", authUrl);
-      console.log("[TelegramLoginButton] Using auth-url redirect:", authUrl);
     } else if (onAuth) {
       script.setAttribute("data-onauth", "TelegramLoginWidget.dataOnauth(user)");
-      console.log("[TelegramLoginButton] Using onauth callback");
-    }
-    
-    script.async = true;
-
-    // Add error handler
-    script.onerror = (error) => {
-      console.error("[TelegramLoginButton] Failed to load widget script:", error);
-    };
-
-    script.onload = () => {
-      console.log("[TelegramLoginButton] Widget script loaded successfully");
-      console.log("[TelegramLoginButton] If you see 'Bot domain invalid', verify in @BotFather:");
-      console.log(`  1. /setdomain`);
-      console.log(`  2. Select @${botName}`);
-      console.log(`  3. Send EXACTLY: ${currentHostname}`);
-    };
-
-    // Append script to container
-    if (containerRef.current) {
-      containerRef.current.appendChild(script);
     }
 
-    // Cleanup
+    container.appendChild(script);
+
     return () => {
-      if (containerRef.current && containerRef.current.contains(script)) {
-        containerRef.current.removeChild(script);
-      }
+      // Clear the whole container so the injected iframe doesn't linger
+      container.innerHTML = "";
       if (!authUrl) {
         delete window.TelegramLoginWidget;
       }
