@@ -49,8 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (!webhookUrl) {
-      console.error("[Cron] Webhook URL not configured");
-      return res.status(500).json({ error: "Webhook URL not configured" });
+      console.warn("[Cron] ZAPIER_WEBHOOK_URL not configured - Telegram-only alerts will still work");
     }
 
     // Create admin Supabase client

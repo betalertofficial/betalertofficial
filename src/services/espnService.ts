@@ -163,13 +163,9 @@ export const espnService = {
    */
   async findGameScore(sport: string, homeTeam: string, awayTeam: string, date?: string): Promise<ESPNScore> {
     try {
-      // If no date provided, use current date in Pacific timezone
+      // If no date provided, use current date in Pacific timezone (handles PST/PDT automatically)
       if (!date) {
-        const now = new Date();
-        // Convert to Pacific timezone (UTC-8 or UTC-7 depending on DST)
-        const pacificOffset = -8 * 60; // PST offset in minutes
-        const pacificDate = new Date(now.getTime() + (pacificOffset + now.getTimezoneOffset()) * 60000);
-        date = pacificDate.toISOString().split('T')[0].replace(/-/g, ''); // Format: YYYYMMDD
+        date = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }).replace(/-/g, ""); // Format: YYYYMMDD
         console.log(`[ESPN] Using Pacific date: ${date}`);
       }
       

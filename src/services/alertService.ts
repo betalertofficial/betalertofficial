@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Alert } from "@/types/database";
 import { sendTelegramMessage, formatTelegramAlert } from "./telegramService";
 
-const ZAPIER_WEBHOOK_URL = "https://hooks.zapier.com/hooks/catch/7723146/u140xkd/";
+const ZAPIER_WEBHOOK_URL = process.env.ZAPIER_WEBHOOK_URL || "https://hooks.zapier.com/hooks/catch/7723146/u140xkd/";
 
 export const alertService = {
   async getUserAlerts(userId: string, limit = 50): Promise<Alert[]> {
