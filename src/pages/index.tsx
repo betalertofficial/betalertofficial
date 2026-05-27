@@ -1,100 +1,11 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bell, Settings, ArrowRight } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Bell, Settings } from "lucide-react";
 import Link from "next/link";
 import { SEO } from "@/components/SEO";
-import { useState, useEffect } from "react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useRouter } from "next/router";
-import { TelegramLoginButton, type TelegramUser } from "@/components/auth/TelegramLoginButton";
-import { useToast } from "@/hooks/use-toast";
-
-const countryCodes = [
-  { code: "+1", country: "US", flag: "🇺🇸" },
-  { code: "+1", country: "CA", flag: "🇨🇦" },
-  { code: "+44", country: "GB", flag: "🇬🇧" },
-  { code: "+61", country: "AU", flag: "🇦🇺" },
-  { code: "+33", country: "FR", flag: "🇫🇷" },
-  { code: "+49", country: "DE", flag: "🇩🇪" },
-  { code: "+39", country: "IT", flag: "🇮🇹" },
-  { code: "+34", country: "ES", flag: "🇪🇸" },
-  { code: "+52", country: "MX", flag: "🇲🇽" },
-  { code: "+55", country: "BR", flag: "🇧🇷" },
-  { code: "+86", country: "CN", flag: "🇨🇳" },
-  { code: "+91", country: "IN", flag: "🇮🇳" },
-  { code: "+81", country: "JP", flag: "🇯🇵" },
-  { code: "+82", country: "KR", flag: "🇰🇷" },
-];
+import { TelegramLoginButton } from "@/components/auth/TelegramLoginButton";
 
 export default function LandingPage() {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [countryCode, setCountryCode] = useState("+1");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [consentChecked, setConsentChecked] = useState(false);
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
-
-  useEffect(() => {
-    // Detect user's country based on IP
-    fetch("https://ipapi.co/json/")
-      .then((res) => res.json())
-      .then((data) => {
-        const userCountry = countryCodes.find((c) => c.country === data.country_code);
-        if (userCountry) {
-          setCountryCode(userCountry.code);
-        }
-      })
-      .catch(() => {
-        // Default to US if detection fails
-        setCountryCode("+1");
-      });
-  }, []);
-
-  const handleGetStarted = () => {
-    router.push("/dashboard");
-  };
-
-  const handleTelegramAuth = async (user: TelegramUser) => {
-    setIsAuthenticating(true);
-    
-    try {
-      const response = await fetch("/api/auth/telegram-callback", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(user),
-      });
-
-      if (!response.ok) {
-        throw new Error("Authentication failed");
-      }
-
-      toast({
-        title: "Welcome! 🎯",
-        description: `Logged in as ${user.first_name}`,
-      });
-
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 500);
-    } catch (error) {
-      console.error("Telegram auth error:", error);
-      toast({
-        title: "Authentication Error",
-        description: "Failed to authenticate with Telegram. Please try again.",
-        variant: "destructive",
-      });
-      setIsAuthenticating(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <SEO 
@@ -186,22 +97,10 @@ export default function LandingPage() {
               Set highly specific triggers and get an SMS the moment it hits.
             </p>
             <div className="space-y-3">
-              <div className="space-y-3">
-                {/* Telegram Login Button */}
-                <div className="flex justify-center items-center">
-                  <TelegramLoginButton 
-                    authUrl="https://www.hammer-app.com/dashboard"
-                    usePic={false}
-                  />
-                </div>
-              </div>
-              {/* CTA Section */}
-              <div className="flex justify-center items-center">
-                <TelegramLoginButton 
-                  authUrl="https://www.hammer-app.com/dashboard"
-                  usePic={false}
-                />
-              </div>
+              <TelegramLoginButton
+                authUrl="https://www.hammer-app.com/dashboard"
+                usePic={false}
+              />
             </div>
           </div>
         </div>
