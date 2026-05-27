@@ -5,13 +5,21 @@ import { runCronPoll } from "@/services/cronPollingService";
 /**
  * Smart cron endpoint for trigger evaluation
  * GET /api/cron/poll-triggers
- * 
+ *
  * Runs every minute via Vercel Cron, but only executes polling if:
  * 1. admin_settings.odds_polling_status = 'true'
  * 2. Enough time has passed since last poll (based on polling_interval_seconds)
- * 
+ *
  * Requires: Authorization: Bearer CRON_SECRET
  */
+
+// Extend Vercel's function timeout to 5 minutes.
+// A full poll run chains: Odds API fetch → ESPN calls → DB batch insert → match
+// evaluation → Telegram delivery, which can exceed the default 10-15s limit.
+// Without this, Vercel silently kills the function mid-run while last_poll_at
+// is already stamped, causing the next invocation to skip its interval check.
+export const config = { maxDuration: 300 };
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -126,8 +134,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Continue anyway - non-critical
     }
 
-    // Run cron poll
-    const result = await runCronPoll(supabase, oddsApiKey, webhookUrl);
+    // Run cron poll (webhookUrl is read from process.env inside alertService directly)
+    const result = await runCronPoll(supabase, oddsApiKey, webhookUrl ?? "");
 
     return res.status(200).json({
       success: result.success,
