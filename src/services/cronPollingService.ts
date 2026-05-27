@@ -311,7 +311,11 @@ export async function runCronPoll(
 
     // Step 5: Get live events for sports with time-period triggers
     const sportsNeedingValidation = [...new Set(triggersWithTimePeriod.map(t => t.sport))];
-    const validatedEventIds = new Set<string>();
+    // Maps event_id → actual current period number and period type from ESPN.
+    // Keyed per-event (not per-trigger) so Step 8 can independently check each
+    // trigger's own time_period_min rather than sharing a single validated set.
+    const eventPeriods = new Map<string, number>(); // event_id → current period (1-based)
+    const eventPeriodTypes = new Map<string, string>(); // event_id → "quarter" | "inning" | "period" | "half"
     const espnDataCache = new Map<string, any>(); // Cache ESPN data by event_id
 
     if (sportsNeedingValidation.length > 0) {
@@ -385,42 +389,22 @@ export async function runCronPoll(
 
           console.log(`[CronPoll] 📊 Parsed game state: ${currentPeriodType} ${currentPeriod}`);
 
-          // Check if any triggers for this event pass time period validation
-          const eventTriggers = triggersWithTimePeriod.filter(t => 
-            t.sport === event.league_key &&
-            (t.team_or_player.toLowerCase().includes(event.home_team.toLowerCase()) ||
-             t.team_or_player.toLowerCase().includes(event.away_team.toLowerCase()) ||
-             event.home_team.toLowerCase().includes(t.team_or_player.toLowerCase()) ||
-             event.away_team.toLowerCase().includes(t.team_or_player.toLowerCase()))
-          );
-
-          console.log(`[CronPoll] Found ${eventTriggers.length} triggers for this event`);
-
-          for (const trigger of eventTriggers) {
-            console.log(`[CronPoll] Checking trigger ${trigger.id}: ${trigger.team_or_player} - ${trigger.time_period_type} >= ${trigger.time_period_min}`);
-            
-            // Validate period type matches
-            if (trigger.time_period_type !== currentPeriodType) {
-              console.log(`[CronPoll] ❌ Period type mismatch for trigger ${trigger.id}: ${currentPeriodType} != ${trigger.time_period_type}`);
-              continue;
-            }
-
-            // Validate period number meets minimum
-            if (currentPeriod < (trigger.time_period_min || 0)) {
-              console.log(`[CronPoll] ❌ Period too early for trigger ${trigger.id}: ${currentPeriod} < ${trigger.time_period_min}`);
-              continue;
-            }
-
-            console.log(`[CronPoll] ✅ Event ${event.event_id} passes time period validation for trigger ${trigger.id}`);
-            validatedEventIds.add(event.event_id);
-          }
+          // Store period data for this event so Step 8 can independently evaluate
+          // each trigger's own time_period_min against the actual period.
+          // Previously a shared validatedEventIds Set caused cross-trigger contamination:
+          // if trigger A (min=2) validated the event, trigger B (min=3) would also pass.
+          eventPeriods.set(event.event_id, currentPeriod);
+          eventPeriodTypes.set(event.event_id, currentPeriodType);
+          console.log(`[CronPoll] ✅ Stored period data for event ${event.event_id}: ${currentPeriodType} ${currentPeriod}`);
         } catch (error) {
           console.error(`[CronPoll] Error validating event ${event.event_id}:`, error);
         }
       }
 
-      console.log(`[CronPoll] ${validatedEventIds.size} events passed time period validation`);
-      console.log(`[CronPoll] Validated event IDs:`, Array.from(validatedEventIds));
+      console.log(`[CronPoll] ${eventPeriods.size} events have ESPN period data`);
+      console.log(`[CronPoll] Event periods:`, Object.fromEntries(
+        [...eventPeriods.entries()].map(([id, p]) => [id, `${eventPeriodTypes.get(id)} ${p}`])
+      ));
     }
 
     // Step 6: Create evaluation run
@@ -453,21 +437,33 @@ export async function runCronPoll(
 
       console.log(`[CronPoll] Validating trigger ${trigger.id} (${trigger.team_or_player}, ${trigger.time_period_type} >= ${trigger.time_period_min})...`);
 
-      // If trigger has time period constraint, check if any odds for this trigger
-      // come from a validated event
+      // Check if any odds for this trigger come from an event whose current period
+      // meets THIS trigger's own time_period_min. Each trigger is evaluated
+      // independently so a looser trigger (min=2) cannot validate a stricter one (min=3).
       const hasValidatedOdds = allOdds.some(odds => {
-        // Check if odds match this trigger's team
-        const teamMatch = 
+        const teamMatch =
           odds.team_or_player.toLowerCase().includes(trigger.team_or_player.toLowerCase()) ||
           trigger.team_or_player.toLowerCase().includes(odds.team_or_player.toLowerCase());
-        
-        if (teamMatch) {
-          console.log(`[CronPoll]   - Found odds for ${odds.team_or_player} on event ${odds.event_id}`);
-          console.log(`[CronPoll]   - Event validated? ${validatedEventIds.has(odds.event_id)}`);
-        }
 
-        // Check if event passed validation
-        return teamMatch && validatedEventIds.has(odds.event_id);
+        if (!teamMatch) return false;
+
+        const eventPeriod = eventPeriods.get(odds.event_id);
+        const eventPeriodType = eventPeriodTypes.get(odds.event_id);
+
+        console.log(`[CronPoll]   - Found odds for ${odds.team_or_player} on event ${odds.event_id}`);
+        console.log(`[CronPoll]   - Event period: ${eventPeriodType} ${eventPeriod ?? "unknown"}, trigger needs: ${trigger.time_period_type} >= ${trigger.time_period_min}`);
+
+        if (eventPeriod === undefined || eventPeriodType === undefined) {
+          console.log(`[CronPoll]   - No ESPN period data for this event → failing validation`);
+          return false;
+        }
+        if (eventPeriodType !== trigger.time_period_type) {
+          console.log(`[CronPoll]   - Period type mismatch: ${eventPeriodType} != ${trigger.time_period_type}`);
+          return false;
+        }
+        const passes = eventPeriod >= (trigger.time_period_min || 0);
+        console.log(`[CronPoll]   - Period check: ${eventPeriod} >= ${trigger.time_period_min} → ${passes}`);
+        return passes;
       });
 
       if (!hasValidatedOdds) {
@@ -671,7 +667,7 @@ export async function runCronPoll(
       alertsCreated,
       webhooksSent,
       durationMs,
-      liveEventsCount: validatedEventIds.size,
+      liveEventsCount: eventPeriods.size,
       activeSports,
     };
   } catch (error) {
