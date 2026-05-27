@@ -2,21 +2,18 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { triggerService } from "@/services/triggerService";
 import { CreateTrigger } from "./CreateTrigger";
-import { TriggerCard } from "./TriggerCard";
+import { ActiveTriggerRow } from "./ActiveTriggerRow";
 import { CompletedTriggerRow } from "./CompletedTriggerRow";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Loader2 } from "lucide-react";
 import type { ProfileTrigger } from "@/types/database";
 
-interface MyTriggersProps {
-  onCreateNew?: () => void;
-}
-
-export function MyTriggers({ onCreateNew }: MyTriggersProps) {
+export function MyTriggers() {
   const { user, profile, loading: authLoading } = useAuth();
   const [triggers, setTriggers] = useState<ProfileTrigger[]>([]);
   const [completedTriggers, setCompletedTriggers] = useState<ProfileTrigger[]>([]);
+  const [lastPollAt, setLastPollAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
@@ -26,24 +23,19 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
 
     try {
       setLoading(true);
-      console.log("[MyTriggers] Loading triggers for user:", user.id);
 
-      // Fetch active/paused triggers via anon client (works with existing RLS)
-      // and completed triggers via server-side route (bypasses RLS on trigger_matches)
-      const [activeData, completedRes] = await Promise.all([
+      const [activeData, completedRes, pollRes] = await Promise.all([
         triggerService.getUserTriggers(user.id),
         fetch("/api/user/completed-triggers", { credentials: "include" }),
+        fetch("/api/user/poll-status"),
       ]);
 
       const completedJson = await completedRes.json();
-      const allActive = activeData.filter(
-        (t) => t.trigger?.status !== "completed"
-      );
-      const allCompleted: ProfileTrigger[] = completedJson.data ?? [];
+      const pollJson = await pollRes.json();
 
-      console.log("[MyTriggers] Active:", allActive.length, "Completed:", allCompleted.length);
-      setTriggers(allActive);
-      setCompletedTriggers(allCompleted);
+      setTriggers(activeData.filter((t) => t.trigger?.status !== "completed"));
+      setCompletedTriggers(completedJson.data ?? []);
+      setLastPollAt(pollJson.last_poll_at ?? null);
     } catch (error) {
       console.error("[MyTriggers] Error loading triggers:", error);
     } finally {
@@ -52,12 +44,9 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
   };
 
   useEffect(() => {
-    // Only reload triggers when the user's ID changes (on login/logout),
-    // not when the session token is refreshed in the background.
     if (user?.id) {
       loadTriggers();
     } else if (!authLoading) {
-      // If auth has loaded and there's no user, clear the state.
       setTriggers([]);
       setLoading(false);
     }
@@ -83,9 +72,7 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
 
   const handleDelete = async (triggerId: string) => {
     if (!user) return;
-    
     if (!confirm("Are you sure you want to delete this trigger?")) return;
-    
     try {
       await triggerService.deleteTrigger(user.id, triggerId);
       loadTriggers();
@@ -94,15 +81,10 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
     }
   };
 
-  const handleEdit = (triggerId: string) => {
-    console.log("Edit trigger:", triggerId);
-  };
-
-  // Active/paused triggers come from the anon client fetch (stored in `triggers`)
-  const activeTriggers = triggers.filter(t => t.trigger?.status === "active" || t.trigger?.status === "paused");
-
-  // Calculate active triggers count for the limit check
-  const activeCount = triggers.filter(t => t.trigger?.status === "active").length;
+  const activeTriggers = triggers.filter(
+    (t) => t.trigger?.status === "active" || t.trigger?.status === "paused"
+  );
+  const activeCount = triggers.filter((t) => t.trigger?.status === "active").length;
   const remaining = profile?.trigger_limit ? profile.trigger_limit - activeCount : 3;
 
   if (loading || authLoading) {
@@ -117,7 +99,7 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">My Triggers</h2>
-        <Button 
+        <Button
           onClick={() => setCreateModalOpen(true)}
           disabled={remaining <= 0}
           className="btn-primary"
@@ -133,35 +115,37 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "active" | "completed")} className="w-full">
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as "active" | "completed")}
+        className="w-full"
+      >
         <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="active">
-            Active ({activeTriggers.length})
-          </TabsTrigger>
-          <TabsTrigger value="completed">
-            Completed ({completedTriggers.length})
-          </TabsTrigger>
+          <TabsTrigger value="active">Active ({activeTriggers.length})</TabsTrigger>
+          <TabsTrigger value="completed">Completed ({completedTriggers.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="active" className="mt-6">
           {activeTriggers.length === 0 ? (
             <div className="text-center py-12 glass-panel rounded-lg">
-              <p className="text-muted-foreground mb-4">No active triggers yet. Create your first trigger to get started!</p>
+              <p className="text-muted-foreground mb-4">
+                No active triggers yet. Create your first trigger to get started!
+              </p>
               <Button onClick={() => setCreateModalOpen(true)} className="btn-primary">
                 <Plus className="h-4 w-4 mr-2" />
                 Create Your First Trigger
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="flex flex-col gap-3">
               {activeTriggers.map((pt) => (
-                <TriggerCard
+                <ActiveTriggerRow
                   key={pt.id}
                   profileTrigger={pt}
+                  lastPollAt={lastPollAt}
                   onPause={handlePause}
                   onResume={handleResume}
                   onDelete={handleDelete}
-                  onEdit={handleEdit}
                 />
               ))}
             </div>
@@ -187,7 +171,7 @@ export function MyTriggers({ onCreateNew }: MyTriggersProps) {
         </TabsContent>
       </Tabs>
 
-      <CreateTrigger 
+      <CreateTrigger
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
         onSuccess={loadTriggers}
