@@ -1,43 +1,35 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CreateTrigger } from "@/components/dashboard/CreateTrigger";
-import { MyTriggers } from "@/components/dashboard/MyTriggers";
-import { History } from "@/components/dashboard/History";
-import { Settings } from "@/components/dashboard/Settings";
 import { TriggerStats } from "@/components/dashboard/TriggerStats";
-import { Bell, Target, Clock, Settings as SettingsIcon, Plus } from "lucide-react";
+import { MyTriggers } from "@/components/dashboard/MyTriggers";
+import { Settings } from "@/components/dashboard/Settings";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { User } from "lucide-react";
 import { SEO } from "@/components/SEO";
 import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
   const router = useRouter();
-  const { user, profile, loading } = useAuth();
+  const { profile, loading } = useAuth();
   const { toast } = useToast();
   const [isTelegramAuthenticating, setIsTelegramAuthenticating] = useState(false);
-  const [activeTab, setActiveTab] = useState("triggers");
-  const [showCreateTriggerModal, setShowCreateTriggerModal] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Handle Telegram auth callback from URL params
   useEffect(() => {
     const handleTelegramAuth = async () => {
-      // Check if URL has Telegram auth params
       const { id, first_name, last_name, username, photo_url, auth_date, hash } = router.query;
-      
+
       if (!id || !hash || isTelegramAuthenticating) return;
 
       setIsTelegramAuthenticating(true);
 
       try {
-        // Send auth data to backend for verification
         const response = await fetch("/api/auth/telegram-callback", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id: parseInt(id as string),
             first_name: first_name as string,
@@ -49,9 +41,7 @@ export default function Dashboard() {
           }),
         });
 
-        if (!response.ok) {
-          throw new Error("Authentication failed");
-        }
+        if (!response.ok) throw new Error("Authentication failed");
 
         const result = await response.json();
         console.log("[Dashboard] Telegram auth successful:", result);
@@ -61,7 +51,6 @@ export default function Dashboard() {
           description: `Logged in via Telegram as ${first_name}`,
         });
 
-        // Clean URL and reload to pick up new session
         window.location.href = "/dashboard";
       } catch (error) {
         console.error("Telegram auth error:", error);
@@ -70,8 +59,6 @@ export default function Dashboard() {
           description: "Failed to authenticate with Telegram. Please try again.",
           variant: "destructive",
         });
-        
-        // Clean URL params even on error
         router.replace("/dashboard", undefined, { shallow: true });
       } finally {
         setIsTelegramAuthenticating(false);
@@ -96,14 +83,15 @@ export default function Dashboard() {
 
   return (
     <>
-      <SEO 
+      <SEO
         title="Dashboard - Bet Alert"
         description="Manage your betting triggers and track your alerts"
       />
-      
+
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
         <div className="container mx-auto px-4 py-8">
           <div className="space-y-8">
+
             {/* Header */}
             <div className="flex items-center justify-between">
               <div>
@@ -112,67 +100,48 @@ export default function Dashboard() {
                   Manage your betting triggers and track your alerts
                 </p>
               </div>
-              <Button 
-                size="lg" 
-                onClick={() => {
-                  console.log("Create Trigger button clicked, opening modal");
-                  setShowCreateTriggerModal(true);
-                }}
-                className="gap-2"
+
+              {/* Profile / Settings icon */}
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 rounded-full"
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Open settings"
               >
-                <Plus className="h-5 w-5" />
-                Create Trigger
+                {profile?.telegram_first_name ? (
+                  <span className="text-sm font-semibold">
+                    {profile.telegram_first_name.charAt(0).toUpperCase()}
+                  </span>
+                ) : (
+                  <User className="h-5 w-5" />
+                )}
               </Button>
             </div>
 
-            {/* Stats Overview */}
+            {/* Stats */}
             <TriggerStats active={0} completed={0} remaining={0} />
 
-            {/* Main Content */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
-                <TabsTrigger value="triggers" className="gap-2">
-                  <Bell className="h-4 w-4" />
-                  <span className="hidden sm:inline">My Triggers</span>
-                  <span className="sm:hidden">Triggers</span>
-                </TabsTrigger>
-                <TabsTrigger value="history" className="gap-2">
-                  <Clock className="h-4 w-4" />
-                  <span className="hidden sm:inline">History</span>
-                  <span className="sm:hidden">History</span>
-                </TabsTrigger>
-                <TabsTrigger value="settings" className="gap-2">
-                  <SettingsIcon className="h-4 w-4" />
-                  <span className="hidden sm:inline">Settings</span>
-                  <span className="sm:hidden">Settings</span>
-                </TabsTrigger>
-              </TabsList>
+            {/* Triggers (active + completed tabs are inside MyTriggers itself) */}
+            <MyTriggers />
 
-              <TabsContent value="triggers">
-                <MyTriggers />
-              </TabsContent>
-
-              <TabsContent value="history">
-                <History />
-              </TabsContent>
-
-              <TabsContent value="settings">
-                <Settings />
-              </TabsContent>
-            </Tabs>
           </div>
         </div>
       </div>
 
-      {/* Create Trigger Modal */}
-      <CreateTrigger 
-        open={showCreateTriggerModal}
-        onOpenChange={setShowCreateTriggerModal}
-        onSuccess={() => {
-          setShowCreateTriggerModal(false);
-          setActiveTab("triggers");
-        }}
-      />
+      {/* Settings sheet */}
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader className="mb-6">
+            <SheetTitle>
+              {profile?.telegram_first_name
+                ? `Hi, ${profile.telegram_first_name} 👋`
+                : "Settings"}
+            </SheetTitle>
+          </SheetHeader>
+          <Settings />
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
