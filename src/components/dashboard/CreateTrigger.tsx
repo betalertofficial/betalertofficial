@@ -532,9 +532,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
       setOddsSign(ml >= 0 ? "+" : "-");
       setOddsValue(Math.abs(ml).toString());
     } else if (type === "spread" && teamOdds?.spread) {
-      const pt = teamOdds.spread.point;
-      setOddsSign(pt >= 0 ? "+" : "-");
-      setOddsValue(Math.abs(pt).toString());
+      const odds = teamOdds.spread.odds;
+      setOddsSign(odds >= 0 ? "+" : "-");
+      setOddsValue(Math.abs(odds).toString());
     }
   };
 
@@ -1079,8 +1079,8 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                   <p className="text-sm font-semibold text-foreground">Spread</p>
                   {teamOdds?.spread ? (
                     <div className="mt-0.5">
-                      <span className="text-xl font-bold text-primary">{formatOdds(teamOdds.spread.point)}</span>
-                      <span className="text-sm text-muted-foreground ml-1.5">({formatOdds(teamOdds.spread.odds)})</span>
+                      <span className="text-xl font-bold text-primary">{formatOdds(teamOdds.spread.odds)}</span>
+                      <span className="text-sm text-muted-foreground ml-1.5">({formatOdds(teamOdds.spread.point)})</span>
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground mt-1">select a game first</p>
