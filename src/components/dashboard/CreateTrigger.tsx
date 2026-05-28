@@ -1148,9 +1148,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                   }`}
                   onClick={() => setFrequency("once")}
                 >
-                  <p className="font-semibold text-foreground mb-1">One Time</p>
+                  <p className="font-semibold text-foreground mb-1">Just this game</p>
                   <p className="text-sm text-muted-foreground text-left">
-                    Get notified once when the threshold is met
+                    Alert fires once for the current game
                   </p>
                 </button>
                 <button
@@ -1162,9 +1162,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                   }`}
                   onClick={() => setFrequency("recurring")}
                 >
-                  <p className="font-semibold text-foreground mb-1">Once Per Game</p>
+                  <p className="font-semibold text-foreground mb-1">This game and future games</p>
                   <p className="text-sm text-muted-foreground text-left">
-                    Get notified each game the threshold is met
+                    Alert fires each game the threshold is met
                   </p>
                 </button>
               </div>
