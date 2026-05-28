@@ -173,6 +173,7 @@ export const alertService = {
           detail: snapshot.bookmaker,
           currentOdds: snapshot.odds_value,
           targetOdds: trigger.odds_value,
+          comparator: trigger.odds_comparator,
           espnData,
         });
 

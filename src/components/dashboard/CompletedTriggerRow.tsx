@@ -19,6 +19,12 @@ function getComparatorLabel(comp: string): string {
   return labels[comp] || comp;
 }
 
+function getDirectionLabel(comp: string): string {
+  if (comp === ">=" || comp === ">") return "or higher";
+  if (comp === "<=" || comp === "<") return "or lower";
+  return "";
+}
+
 function getBetTypeLabel(betType: string): string {
   const labels: Record<string, string> = {
     moneyline: "Moneyline", h2h: "Moneyline",
@@ -119,7 +125,8 @@ export function CompletedTriggerRow({ profileTrigger, onDelete }: CompletedTrigg
                   {formatOdds(latestMatch.matched_value)}
                 </span>
                 <span className="text-muted-foreground text-xs ml-1.5">
-                  target {formatOdds(Number(trigger.odds_value))}
+                  target {formatOdds(Number(trigger.odds_value))}{" "}
+                  {getDirectionLabel(trigger.odds_comparator)}
                 </span>
               </p>
             </>
