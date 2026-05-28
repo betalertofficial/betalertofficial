@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Bell, TrendingUp, Calendar } from "lucide-react";
+import { Loader2, Search, Bell, TrendingUp, Calendar, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
@@ -736,8 +736,25 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                 )}
               </div>
               {selectedTeam && (
-                <div className="text-sm text-muted-foreground">
-                  Selected: <span className="text-foreground font-medium">{selectedTeam}</span>
+                <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-lg px-4 py-3 mt-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">Selected team</p>
+                    <p className="font-semibold text-foreground">{selectedTeam}</p>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+                    title="Clear selection"
+                    onClick={() => {
+                      setSelectedTeam("");
+                      setSelectedTeamId("");
+                      setSelectedEvent(null);
+                      setTeamOdds(null);
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
               )}
             </div>
@@ -751,7 +768,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
 
                 {/* Live game state banner */}
                 {selectedGameIsLive && (
-                  <div className="flex items-center gap-2 flex-wrap bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2 flex-wrap bg-muted/50 border border-border rounded-lg px-3 py-2">
                     <Badge className="bg-red-600 text-white shrink-0 text-xs">LIVE</Badge>
                     {selectedLiveDetail && (
                       <span className="text-sm font-semibold text-orange-500">{selectedLiveDetail}</span>
@@ -773,36 +790,25 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                   </span>
                 </div>
 
-                {teamOdds.moneyline !== undefined && (
+                {(teamOdds.moneyline !== undefined || teamOdds.spread) && (
                   <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Live moneyline odds for {selectedTeam} on {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}:
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} — {selectedTeam}
                     </p>
-                    <div className="bg-muted rounded-lg p-3">
-                      <Badge className="bg-secondary text-secondary-foreground mb-2">
-                        {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}: {formatOdds(teamOdds.moneyline)}
-                      </Badge>
-                      <p className="text-sm text-foreground">
-                        Current {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} odds:{" "}
-                        <span className="text-primary font-bold">{formatOdds(teamOdds.moneyline)}</span>
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {teamOdds.spread && (
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Live spread odds for {selectedTeam} on {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}:
-                    </p>
-                    <div className="bg-muted rounded-lg p-3">
-                      <Badge className="bg-secondary text-secondary-foreground mb-2">
-                        {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"}: {formatOdds(teamOdds.spread.point)} ({formatOdds(teamOdds.spread.odds)})
-                      </Badge>
-                      <p className="text-sm text-foreground">
-                        Current {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} odds:{" "}
-                        <span className="text-primary font-bold">{formatOdds(teamOdds.spread.point)}</span>
-                      </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {teamOdds.moneyline !== undefined && (
+                        <div className="bg-muted rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-1">Moneyline</p>
+                          <p className="text-xl font-bold text-primary">{formatOdds(teamOdds.moneyline)}</p>
+                        </div>
+                      )}
+                      {teamOdds.spread && (
+                        <div className="bg-muted rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-1">Spread</p>
+                          <p className="text-xl font-bold text-primary">{formatOdds(teamOdds.spread.point)}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{formatOdds(teamOdds.spread.odds)}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
