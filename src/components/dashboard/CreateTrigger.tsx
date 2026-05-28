@@ -435,7 +435,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
     }
   };
 
-  const filteredTeams = teams.filter(team => 
+  const filteredTeams = teams.filter(team =>
     team.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -449,6 +449,11 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
     const diffHours = (now.getTime() - gameTime.getTime()) / (1000 * 60 * 60);
     return diffHours > 0 && diffHours < 3;
   };
+
+  // Live context for the selected game — shown in the form after team selection
+  const selectedLiveDetail = selectedEvent ? espnGameDetails.get(selectedEvent.id) : undefined;
+  const selectedLiveScore = selectedEvent ? gameScores.get(selectedEvent.id) : undefined;
+  const selectedGameIsLive = selectedEvent ? isGameLive(selectedEvent.commence_time) : false;
 
   const isGameToday = (commenceTime: string) => {
     const gameTime = new Date(commenceTime);
@@ -744,14 +749,28 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                   <h3 className="font-semibold text-foreground">Current Market Context</h3>
                 </div>
 
+                {/* Live game state banner */}
+                {selectedGameIsLive && (
+                  <div className="flex items-center gap-2 flex-wrap bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                    <Badge className="bg-red-600 text-white shrink-0 text-xs">LIVE</Badge>
+                    {selectedLiveDetail && (
+                      <span className="text-sm font-semibold text-orange-500">{selectedLiveDetail}</span>
+                    )}
+                    {selectedLiveScore?.away_score && selectedLiveScore?.home_score && (
+                      <span className="text-sm font-medium text-foreground ml-auto">
+                        {selectedEvent.away_team} <strong>{selectedLiveScore.away_score}</strong>
+                        {" — "}
+                        {selectedEvent.home_team} <strong>{selectedLiveScore.home_score}</strong>
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                   <span>Current game:</span>
                   <span className="text-foreground font-medium">
                     {selectedEvent.home_team} vs {selectedEvent.away_team}
                   </span>
-                  {isGameLive(selectedEvent.commence_time) && (
-                    <Badge className="bg-red-600 text-white">LIVE</Badge>
-                  )}
                 </div>
 
                 {teamOdds.moneyline !== undefined && (
