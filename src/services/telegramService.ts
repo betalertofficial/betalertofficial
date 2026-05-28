@@ -48,6 +48,12 @@ export async function sendTelegramMessage(
   }
 }
 
+function oddsDirection(comparator: string): string {
+  if (comparator === ">=" || comparator === ">") return " or higher";
+  if (comparator === "<=" || comparator === "<") return " or lower";
+  return "";
+}
+
 // Format an alert message for Telegram
 export function formatTelegramAlert(alert: {
   game: string;
@@ -55,6 +61,7 @@ export function formatTelegramAlert(alert: {
   detail: string;
   currentOdds: number;
   targetOdds: number;
+  comparator?: string;
   espnData?: {
     home_score?: number;
     away_score?: number;
@@ -63,13 +70,14 @@ export function formatTelegramAlert(alert: {
     status?: string;
   };
 }): string {
+  const direction = alert.comparator ? oddsDirection(alert.comparator) : "";
   let message = `🚨 *Betting Alert!*
 
 *Game:* ${alert.game}
 *Market:* ${alert.market}
 *Detail:* ${alert.detail}
 
-*Target Odds:* ${alert.targetOdds}
+*Target Odds:* ${alert.targetOdds}${direction}
 *Current Odds:* ${alert.currentOdds}`;
 
   // Add ESPN live game data if available
