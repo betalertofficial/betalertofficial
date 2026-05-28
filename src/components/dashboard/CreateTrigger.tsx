@@ -498,14 +498,21 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
   const getTeamOddsForGame = (event: OddsApiEvent, teamName: string): number | null => {
     const bookmakerKey = sportsbook === "fanduel" ? "fanduel" : "draftkings";
     const bookmaker = event.bookmakers.find(b => b.key === bookmakerKey);
-    
     if (!bookmaker) return null;
-    
     const h2hMarket = bookmaker.markets.find(m => m.key === "h2h");
     if (!h2hMarket) return null;
-    
     const outcome = h2hMarket.outcomes.find(o => o.name === teamName);
     return outcome ? outcome.price : null;
+  };
+
+  const getTeamSpreadForGame = (event: OddsApiEvent, teamName: string): { point: number; odds: number } | null => {
+    const bookmakerKey = sportsbook === "fanduel" ? "fanduel" : "draftkings";
+    const bookmaker = event.bookmakers.find(b => b.key === bookmakerKey);
+    if (!bookmaker) return null;
+    const spreadMarket = bookmaker.markets.find(m => m.key === "spreads");
+    if (!spreadMarket) return null;
+    const outcome = spreadMarket.outcomes.find(o => o.name === teamName);
+    return outcome && outcome.point !== undefined ? { point: outcome.point, odds: outcome.price } : null;
   };
 
   // Filter events into today's and tomorrow's games
@@ -612,7 +619,8 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                     const score = gameScores.get(event.id);
                     const awayOdds = getTeamOddsForGame(event, event.away_team);
                     const homeOdds = getTeamOddsForGame(event, event.home_team);
-                    
+                    const awaySpread = getTeamSpreadForGame(event, event.away_team);
+                    const homeSpread = getTeamSpreadForGame(event, event.home_team);
                     const espnDetail = espnGameDetails.get(event.id);
 
                     return (
@@ -645,8 +653,17 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                               )}
                             </div>
                             {awayOdds !== null && (
-                              <div className="text-xs text-muted-foreground">
-                                {formatOdds(awayOdds)}
+                              <div className="text-xs text-muted-foreground space-y-0.5">
+                                <div>
+                                  {formatOdds(awayOdds)}
+                                  <span className="opacity-50 ml-1">ML</span>
+                                </div>
+                                {awaySpread && (
+                                  <div>
+                                    {formatOdds(awaySpread.odds)}
+                                    <span className="opacity-50 ml-1">({formatOdds(awaySpread.point)})</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </button>
@@ -669,8 +686,17 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                               )}
                             </div>
                             {homeOdds !== null && (
-                              <div className="text-xs text-muted-foreground">
-                                {formatOdds(homeOdds)}
+                              <div className="text-xs text-muted-foreground space-y-0.5">
+                                <div>
+                                  {formatOdds(homeOdds)}
+                                  <span className="opacity-50 ml-1">ML</span>
+                                </div>
+                                {homeSpread && (
+                                  <div>
+                                    {formatOdds(homeSpread.odds)}
+                                    <span className="opacity-50 ml-1">({formatOdds(homeSpread.point)})</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </button>
