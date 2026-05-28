@@ -6,7 +6,7 @@ import { ActiveTriggerRow } from "./ActiveTriggerRow";
 import { CompletedTriggerRow } from "./CompletedTriggerRow";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, RefreshCw } from "lucide-react";
 import type { ProfileTrigger } from "@/types/database";
 
 export function MyTriggers() {
@@ -120,10 +120,26 @@ export function MyTriggers() {
         onValueChange={(v) => setActiveTab(v as "active" | "completed")}
         className="w-full"
       >
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="active">Active ({activeTriggers.length})</TabsTrigger>
-          <TabsTrigger value="completed">Completed ({completedTriggers.length})</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center gap-2">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="active">Active ({activeTriggers.length})</TabsTrigger>
+            <TabsTrigger value="completed">Completed ({completedTriggers.length})</TabsTrigger>
+          </TabsList>
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-9 w-9 shrink-0"
+            title="Refresh"
+            disabled={loading}
+            onClick={loadTriggers}
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
 
         <TabsContent value="active" className="mt-6">
           {activeTriggers.length === 0 ? (
