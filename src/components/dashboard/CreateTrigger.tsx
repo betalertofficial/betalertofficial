@@ -30,6 +30,15 @@ interface GameScore {
   away_score?: string;
 }
 
+interface ESPNSituation {
+  balls: number;
+  strikes: number;
+  outs: number;
+  onFirst: boolean;
+  onSecond: boolean;
+  onThird: boolean;
+}
+
 const GAME_TIME_CONTEXTS = {
   basketball_nba: [
     { value: "anytime", label: "Anytime" },
@@ -102,6 +111,8 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
   const [gameScores, setGameScores] = useState<Map<string, GameScore>>(new Map());
   // Maps odds event.id → ESPN live period string, e.g. "Q3 10:15" or "Top 4th"
   const [espnGameDetails, setEspnGameDetails] = useState<Map<string, string>>(new Map());
+  // Maps odds event.id → live baseball situation (BSO + bases)
+  const [espnSituations, setEspnSituations] = useState<Map<string, ESPNSituation>>(new Map());
   const [showNextDay, setShowNextDay] = useState(false);
 
   // ESPN public scoreboard URLs (no auth, CORS-friendly)
@@ -207,6 +218,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
       const data = await response.json();
 
       const detailsMap = new Map<string, string>();
+      const situationsMap = new Map<string, ESPNSituation>();
 
       for (const espnEvent of data.events || []) {
         const competition = espnEvent.competitions?.[0];
@@ -224,6 +236,19 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
         // shortDetail is compact: "Q3 10:15", "Top 4th", "HT", etc.
         const detail: string = status.type.shortDetail || status.type.detail || "";
 
+        // MLB live situation: balls, strikes, outs, bases
+        const sit = competition.situation;
+        const situation: ESPNSituation | null = sit
+          ? {
+              balls:    sit.balls    ?? 0,
+              strikes:  sit.strikes  ?? 0,
+              outs:     sit.outs     ?? 0,
+              onFirst:  sit.onFirst  ?? false,
+              onSecond: sit.onSecond ?? false,
+              onThird:  sit.onThird  ?? false,
+            }
+          : null;
+
         for (const oddsEvent of oddsEvents) {
           const homeMatch =
             oddsEvent.home_team.toLowerCase().includes(espnHomeName.toLowerCase()) ||
@@ -234,12 +259,14 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
 
           if (homeMatch && awayMatch) {
             detailsMap.set(oddsEvent.id, detail);
+            if (situation) situationsMap.set(oddsEvent.id, situation);
             break;
           }
         }
       }
 
       setEspnGameDetails(detailsMap);
+      setEspnSituations(situationsMap);
     } catch (err) {
       console.error("[CreateTrigger] ESPN game times error:", err);
     }
@@ -612,7 +639,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                     Available Games ({showNextDay ? events.length : todayEvents.length})
                   </Label>
                 </div>
-                <div className="grid grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
+                <div className={`grid gap-3 max-h-[400px] overflow-y-auto ${selectedSport === "baseball_mlb" ? "grid-cols-1" : "grid-cols-3"}`}>
                   {(showNextDay ? events : todayEvents).map((event) => {
                     const gameTime = formatGameTime(event.commence_time);
                     const isLive = isGameLive(event.commence_time);
@@ -622,7 +649,122 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                     const awaySpread = getTeamSpreadForGame(event, event.away_team);
                     const homeSpread = getTeamSpreadForGame(event, event.home_team);
                     const espnDetail = espnGameDetails.get(event.id);
+                    const situation = espnSituations.get(event.id);
 
+                    // ── Wide baseball card ──────────────────────────────────────
+                    if (selectedSport === "baseball_mlb") {
+                      return (
+                        <div key={event.id} className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary transition-colors">
+                          {/* Header: inning + LIVE */}
+                          <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-border/40">
+                            <span className={`text-sm font-semibold ${isLive && espnDetail ? "text-orange-500" : "text-muted-foreground"}`}>
+                              {isLive && espnDetail ? espnDetail : gameTime}
+                            </span>
+                            {isLive && <Badge className="bg-red-600 text-white text-xs">LIVE</Badge>}
+                          </div>
+
+                          {/* Away | Home two-column */}
+                          <div className="grid grid-cols-2 divide-x divide-border/40">
+                            <button
+                              type="button"
+                              className="text-left p-4 hover:bg-muted/40 transition-colors"
+                              onClick={() => handleGameSelect(event, event.away_team)}
+                            >
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="font-semibold text-foreground truncate pr-2">{event.away_team}</span>
+                                {score?.away_score && (
+                                  <span className="text-2xl font-bold text-foreground shrink-0">{score.away_score}</span>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground space-y-0.5">
+                                {awayOdds !== null && (
+                                  <div>{formatOdds(awayOdds)} <span className="opacity-50">ML</span></div>
+                                )}
+                                {awaySpread && (
+                                  <div>{formatOdds(awaySpread.odds)} <span className="opacity-50">({formatOdds(awaySpread.point)})</span></div>
+                                )}
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              className="text-left p-4 hover:bg-muted/40 transition-colors"
+                              onClick={() => handleGameSelect(event, event.home_team)}
+                            >
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="font-semibold text-foreground truncate pr-2">{event.home_team}</span>
+                                {score?.home_score && (
+                                  <span className="text-2xl font-bold text-foreground shrink-0">{score.home_score}</span>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground space-y-0.5">
+                                {homeOdds !== null && (
+                                  <div>{formatOdds(homeOdds)} <span className="opacity-50">ML</span></div>
+                                )}
+                                {homeSpread && (
+                                  <div>{formatOdds(homeSpread.odds)} <span className="opacity-50">({formatOdds(homeSpread.point)})</span></div>
+                                )}
+                              </div>
+                            </button>
+                          </div>
+
+                          {/* Live situation strip: bases diamond + BSO */}
+                          {isLive && situation && (
+                            <div className="border-t border-border/40 px-4 py-2.5 flex items-center gap-5">
+                              {/* Base diamond */}
+                              <div className="relative shrink-0" style={{ width: 30, height: 24 }}>
+                                {/* 2B - top center */}
+                                <div
+                                  style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%) rotate(45deg)", width: 10, height: 10 }}
+                                  className={`rounded-sm ${situation.onSecond ? "bg-yellow-400" : "border border-muted-foreground/40"}`}
+                                />
+                                {/* 3B - middle left */}
+                                <div
+                                  style={{ position: "absolute", top: "50%", left: 0, transform: "translateY(-50%) rotate(45deg)", width: 10, height: 10 }}
+                                  className={`rounded-sm ${situation.onThird ? "bg-yellow-400" : "border border-muted-foreground/40"}`}
+                                />
+                                {/* 1B - middle right */}
+                                <div
+                                  style={{ position: "absolute", top: "50%", right: 0, transform: "translateY(-50%) rotate(45deg)", width: 10, height: 10 }}
+                                  className={`rounded-sm ${situation.onFirst ? "bg-yellow-400" : "border border-muted-foreground/40"}`}
+                                />
+                              </div>
+
+                              {/* Balls (max 3) */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground">B</span>
+                                <div className="flex gap-0.5">
+                                  {[0,1,2,3].map(i => (
+                                    <div key={i} className={`w-2 h-2 rounded-full ${i < situation.balls ? "bg-green-400" : "bg-muted-foreground/25"}`} />
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Strikes (max 2) */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground">S</span>
+                                <div className="flex gap-0.5">
+                                  {[0,1,2].map(i => (
+                                    <div key={i} className={`w-2 h-2 rounded-full ${i < situation.strikes ? "bg-yellow-400" : "bg-muted-foreground/25"}`} />
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Outs (max 2) */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground">O</span>
+                                <div className="flex gap-0.5">
+                                  {[0,1,2].map(i => (
+                                    <div key={i} className={`w-2 h-2 rounded-full ${i < situation.outs ? "bg-red-400" : "bg-muted-foreground/25"}`} />
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    // ── Compact card (NBA / other sports) ───────────────────────
                     return (
                       <div key={event.id} className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary transition-colors">
                         <div className="p-3 space-y-2">
@@ -636,66 +778,46 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                               <Badge className="bg-red-600 text-white text-xs">LIVE</Badge>
                             )}
                           </div>
-                          
+
                           <button
                             type="button"
                             className="w-full text-left hover:bg-muted/50 p-2 rounded transition-colors"
                             onClick={() => handleGameSelect(event, event.away_team)}
                           >
                             <div className="flex items-center justify-between mb-1">
-                              <div className="text-sm font-medium text-foreground truncate">
-                                {event.away_team}
-                              </div>
+                              <div className="text-sm font-medium text-foreground truncate">{event.away_team}</div>
                               {score?.away_score && (
-                                <div className="text-sm font-bold text-foreground ml-2">
-                                  {score.away_score}
-                                </div>
+                                <div className="text-sm font-bold text-foreground ml-2">{score.away_score}</div>
                               )}
                             </div>
                             {awayOdds !== null && (
                               <div className="text-xs text-muted-foreground space-y-0.5">
-                                <div>
-                                  {formatOdds(awayOdds)}
-                                  <span className="opacity-50 ml-1">ML</span>
-                                </div>
+                                <div>{formatOdds(awayOdds)} <span className="opacity-50">ML</span></div>
                                 {awaySpread && (
-                                  <div>
-                                    {formatOdds(awaySpread.odds)}
-                                    <span className="opacity-50 ml-1">({formatOdds(awaySpread.point)})</span>
-                                  </div>
+                                  <div>{formatOdds(awaySpread.odds)} <span className="opacity-50">({formatOdds(awaySpread.point)})</span></div>
                                 )}
                               </div>
                             )}
                           </button>
-                          
+
                           <div className="text-xs text-muted-foreground text-center">@</div>
-                          
+
                           <button
                             type="button"
                             className="w-full text-left hover:bg-muted/50 p-2 rounded transition-colors"
                             onClick={() => handleGameSelect(event, event.home_team)}
                           >
                             <div className="flex items-center justify-between mb-1">
-                              <div className="text-sm font-medium text-foreground truncate">
-                                {event.home_team}
-                              </div>
+                              <div className="text-sm font-medium text-foreground truncate">{event.home_team}</div>
                               {score?.home_score && (
-                                <div className="text-sm font-bold text-foreground ml-2">
-                                  {score.home_score}
-                                </div>
+                                <div className="text-sm font-bold text-foreground ml-2">{score.home_score}</div>
                               )}
                             </div>
                             {homeOdds !== null && (
                               <div className="text-xs text-muted-foreground space-y-0.5">
-                                <div>
-                                  {formatOdds(homeOdds)}
-                                  <span className="opacity-50 ml-1">ML</span>
-                                </div>
+                                <div>{formatOdds(homeOdds)} <span className="opacity-50">ML</span></div>
                                 {homeSpread && (
-                                  <div>
-                                    {formatOdds(homeSpread.odds)}
-                                    <span className="opacity-50 ml-1">({formatOdds(homeSpread.point)})</span>
-                                  </div>
+                                  <div>{formatOdds(homeSpread.odds)} <span className="opacity-50">({formatOdds(homeSpread.point)})</span></div>
                                 )}
                               </div>
                             )}
