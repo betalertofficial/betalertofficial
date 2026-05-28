@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Bell, TrendingUp, Calendar, X } from "lucide-react";
+import { Loader2, Search, Bell, TrendingUp, Calendar, X, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
@@ -114,6 +114,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
   // Maps odds event.id → live baseball situation (BSO + bases)
   const [espnSituations, setEspnSituations] = useState<Map<string, ESPNSituation>>(new Map());
   const [showNextDay, setShowNextDay] = useState(false);
+  const [gameFilterQuery, setGameFilterQuery] = useState("");
 
   // ESPN public scoreboard URLs (no auth, CORS-friendly)
   const ESPN_SPORT_URLS: Record<string, string> = {
@@ -648,14 +649,56 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
             {/* Game Selection Grid */}
             {selectedSport && events.length > 0 && !selectedTeam && (
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-primary" />
-                  <Label className="text-sm font-medium text-foreground">
-                    Available Games ({showNextDay ? events.length : todayEvents.length})
-                  </Label>
+                {/* Header: label + refresh */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-primary" />
+                    <Label className="text-sm font-medium text-foreground">
+                      Available Games ({
+                        (() => {
+                          const base = showNextDay ? events : todayEvents;
+                          return gameFilterQuery
+                            ? base.filter(e =>
+                                e.away_team.toLowerCase().includes(gameFilterQuery.toLowerCase()) ||
+                                e.home_team.toLowerCase().includes(gameFilterQuery.toLowerCase())
+                              ).length
+                            : base.length;
+                        })()
+                      })
+                    </Label>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    title="Refresh odds & game data"
+                    disabled={loading}
+                    onClick={loadOddsForSport}
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  </Button>
                 </div>
+
+                {/* Search filter */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Filter by team…"
+                    value={gameFilterQuery}
+                    onChange={(e) => setGameFilterQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-card border border-border rounded-md text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+
                 <div className={`grid gap-3 max-h-[400px] overflow-y-auto ${selectedSport === "baseball_mlb" ? "grid-cols-1" : "grid-cols-3"}`}>
-                  {(showNextDay ? events : todayEvents).map((event) => {
+                  {(showNextDay ? events : todayEvents)
+                    .filter(event =>
+                      !gameFilterQuery ||
+                      event.away_team.toLowerCase().includes(gameFilterQuery.toLowerCase()) ||
+                      event.home_team.toLowerCase().includes(gameFilterQuery.toLowerCase())
+                    )
+                    .map((event) => {
                     const gameTime = formatGameTime(event.commence_time);
                     const isLive = isGameLive(event.commence_time);
                     const score = gameScores.get(event.id);
@@ -867,38 +910,40 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">Team</Label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder={loading ? "Loading teams..." : "Search teams..."}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  disabled={loading || !selectedSport}
-                  className="w-full px-4 py-2 bg-card border border-border rounded-md text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
-                />
-                {searchQuery && filteredTeams.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-md shadow-lg max-h-60 overflow-auto">
-                    {filteredTeams.map((team) => (
-                      <button
-                        key={team.id}
-                        type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-muted rounded-md transition-colors"
-                        onClick={() => {
-                          setSelectedTeam(team.name);
-                          setSelectedTeamId(team.id);
-                          setSearchQuery("");
-                        }}
-                      >
-                        <div className="font-medium text-foreground">{team.name}</div>
-                        <div className="text-sm text-muted-foreground">{team.abbrev}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+            {!selectedTeam && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-foreground">Team</Label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder={loading ? "Loading teams..." : "Search teams..."}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    disabled={loading || !selectedSport}
+                    className="w-full px-4 py-2 bg-card border border-border rounded-md text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                  />
+                  {searchQuery && filteredTeams.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-md shadow-lg max-h-60 overflow-auto">
+                      {filteredTeams.map((team) => (
+                        <button
+                          key={team.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 hover:bg-muted rounded-md transition-colors"
+                          onClick={() => {
+                            setSelectedTeam(team.name);
+                            setSelectedTeamId(team.id);
+                            setSearchQuery("");
+                          }}
+                        >
+                          <div className="font-medium text-foreground">{team.name}</div>
+                          <div className="text-sm text-muted-foreground">{team.abbrev}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* ── Persistent game card (shown after team selection) ── */}
             {selectedTeam && selectedEvent && (
