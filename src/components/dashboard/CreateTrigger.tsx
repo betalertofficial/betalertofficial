@@ -481,6 +481,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
   const selectedLiveDetail = selectedEvent ? espnGameDetails.get(selectedEvent.id) : undefined;
   const selectedLiveScore = selectedEvent ? gameScores.get(selectedEvent.id) : undefined;
   const selectedGameIsLive = selectedEvent ? isGameLive(selectedEvent.commence_time) : false;
+  const selectedSituation = selectedEvent ? espnSituations.get(selectedEvent.id) : undefined;
 
   const isGameToday = (commenceTime: string) => {
     const gameTime = new Date(commenceTime);
@@ -520,6 +521,20 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
     setSelectedTeam(team);
     setSelectedTeamId(selectedTeamData?.id || "");
     setSearchQuery("");
+  };
+
+  // Select bet type and pre-fill odds threshold from current live odds
+  const handleBetTypeSelect = (type: BetType) => {
+    setBetType(type);
+    if (type === "moneyline" && teamOdds?.moneyline !== undefined) {
+      const ml = teamOdds.moneyline;
+      setOddsSign(ml >= 0 ? "+" : "-");
+      setOddsValue(Math.abs(ml).toString());
+    } else if (type === "spread" && teamOdds?.spread) {
+      const pt = teamOdds.spread.point;
+      setOddsSign(pt >= 0 ? "+" : "-");
+      setOddsValue(Math.abs(pt).toString());
+    }
   };
 
   const getTeamOddsForGame = (event: OddsApiEvent, teamName: string): number | null => {
@@ -883,97 +898,150 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
                   </div>
                 )}
               </div>
-              {selectedTeam && (
-                <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-lg px-4 py-3 mt-2">
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Selected team</p>
-                    <p className="font-semibold text-foreground">{selectedTeam}</p>
-                  </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
-                    title="Clear selection"
-                    onClick={() => {
-                      setSelectedTeam("");
-                      setSelectedTeamId("");
-                      setSelectedEvent(null);
-                      setTeamOdds(null);
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
             </div>
 
-            {selectedEvent && teamOdds && (
-              <div className="bg-card border border-border rounded-lg p-4 space-y-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                  <h3 className="font-semibold text-foreground">Current Market Context</h3>
+            {/* ── Persistent game card (shown after team selection) ── */}
+            {selectedTeam && selectedEvent && (
+              <div className="bg-card border-2 border-primary/30 rounded-lg overflow-hidden">
+                {/* Header */}
+                <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-border/40">
+                  <span className={`text-sm font-semibold ${selectedGameIsLive && selectedLiveDetail ? "text-orange-500" : "text-muted-foreground"}`}>
+                    {selectedGameIsLive && selectedLiveDetail ? selectedLiveDetail : formatGameTime(selectedEvent.commence_time)}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {selectedGameIsLive && <Badge className="bg-red-600 text-white text-xs">LIVE</Badge>}
+                    <Button
+                      size="icon" variant="ghost"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      title="Change selection"
+                      onClick={() => { setSelectedTeam(""); setSelectedTeamId(""); setSelectedEvent(null); setTeamOdds(null); }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
 
-                {/* Live game state banner */}
-                {selectedGameIsLive && (
-                  <div className="flex items-center gap-2 flex-wrap bg-muted/50 border border-border rounded-lg px-3 py-2">
-                    <Badge className="bg-red-600 text-white shrink-0 text-xs">LIVE</Badge>
-                    {selectedLiveDetail && (
-                      <span className="text-sm font-semibold text-orange-500">{selectedLiveDetail}</span>
-                    )}
-                    {selectedLiveScore?.away_score && selectedLiveScore?.home_score && (
-                      <span className="text-sm font-medium text-foreground ml-auto">
-                        {selectedEvent.away_team} <strong>{selectedLiveScore.away_score}</strong>
-                        {" — "}
-                        {selectedEvent.home_team} <strong>{selectedLiveScore.home_score}</strong>
-                      </span>
+                {/* Teams — 2-col for baseball, vertical for others */}
+                {selectedSport === "baseball_mlb" ? (
+                  <div className="grid grid-cols-2 divide-x divide-border/40">
+                    {[
+                      { name: selectedEvent.away_team, score: selectedLiveScore?.away_score },
+                      { name: selectedEvent.home_team, score: selectedLiveScore?.home_score },
+                    ].map(({ name, score }) => (
+                      <div key={name} className={`p-4 ${selectedTeam === name ? "bg-primary/5" : ""}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`font-semibold truncate pr-2 ${selectedTeam === name ? "text-primary" : "text-foreground"}`}>
+                            {name}
+                          </span>
+                          {score && <span className="text-2xl font-bold text-foreground shrink-0">{score}</span>}
+                        </div>
+                        {selectedTeam === name && (
+                          <p className="text-xs text-primary/70 font-medium">your pick</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 space-y-1">
+                    {[
+                      { name: selectedEvent.away_team, score: selectedLiveScore?.away_score },
+                      null,
+                      { name: selectedEvent.home_team, score: selectedLiveScore?.home_score },
+                    ].map((item, i) =>
+                      item === null ? (
+                        <div key="sep" className="text-xs text-muted-foreground text-center py-0.5">@</div>
+                      ) : (
+                        <div key={item.name} className={`flex items-center justify-between px-2 py-1.5 rounded ${selectedTeam === item.name ? "bg-primary/5" : ""}`}>
+                          <span className={`font-semibold ${selectedTeam === item.name ? "text-primary" : "text-foreground"}`}>
+                            {item.name}
+                            {selectedTeam === item.name && <span className="text-xs text-primary/70 font-normal ml-2">your pick</span>}
+                          </span>
+                          {item.score && <span className="text-xl font-bold text-foreground">{item.score}</span>}
+                        </div>
+                      )
                     )}
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                  <span>Current game:</span>
-                  <span className="text-foreground font-medium">
-                    {selectedEvent.home_team} vs {selectedEvent.away_team}
-                  </span>
-                </div>
-
-                {(teamOdds.moneyline !== undefined || teamOdds.spread) && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      {sportsbook === "fanduel" ? "FanDuel" : "DraftKings"} — {selectedTeam}
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      {teamOdds.moneyline !== undefined && (
-                        <div className="bg-muted rounded-lg p-3">
-                          <p className="text-xs text-muted-foreground mb-1">Moneyline</p>
-                          <p className="text-xl font-bold text-primary">{formatOdds(teamOdds.moneyline)}</p>
-                        </div>
-                      )}
-                      {teamOdds.spread && (
-                        <div className="bg-muted rounded-lg p-3">
-                          <p className="text-xs text-muted-foreground mb-1">Spread</p>
-                          <p className="text-xl font-bold text-primary">{formatOdds(teamOdds.spread.point)}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{formatOdds(teamOdds.spread.odds)}</p>
-                        </div>
-                      )}
+                {/* Live situation strip (baseball) */}
+                {selectedGameIsLive && selectedSituation && (
+                  <div className="border-t border-border/40 px-4 py-2.5 flex items-center gap-5">
+                    <div className="relative shrink-0" style={{ width: 30, height: 24 }}>
+                      <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%) rotate(45deg)", width: 10, height: 10 }}
+                           className={`rounded-sm ${selectedSituation.onSecond ? "bg-yellow-400" : "border border-muted-foreground/40"}`} />
+                      <div style={{ position: "absolute", top: "50%", left: 0, transform: "translateY(-50%) rotate(45deg)", width: 10, height: 10 }}
+                           className={`rounded-sm ${selectedSituation.onThird ? "bg-yellow-400" : "border border-muted-foreground/40"}`} />
+                      <div style={{ position: "absolute", top: "50%", right: 0, transform: "translateY(-50%) rotate(45deg)", width: 10, height: 10 }}
+                           className={`rounded-sm ${selectedSituation.onFirst ? "bg-yellow-400" : "border border-muted-foreground/40"}`} />
                     </div>
+                    {[
+                      { label: "B", max: 4, count: selectedSituation.balls,   color: "bg-green-400" },
+                      { label: "S", max: 3, count: selectedSituation.strikes, color: "bg-yellow-400" },
+                      { label: "O", max: 3, count: selectedSituation.outs,    color: "bg-red-400" },
+                    ].map(({ label, max, count, color }) => (
+                      <div key={label} className="flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">{label}</span>
+                        <div className="flex gap-0.5">
+                          {Array.from({ length: max }).map((_, i) => (
+                            <div key={i} className={`w-2 h-2 rounded-full ${i < count ? color : "bg-muted-foreground/25"}`} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             )}
 
+            {/* Fallback pill when team was selected via search (no event context) */}
+            {selectedTeam && !selectedEvent && (
+              <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-lg px-4 py-3">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Selected team</p>
+                  <p className="font-semibold text-foreground">{selectedTeam}</p>
+                </div>
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+                  onClick={() => { setSelectedTeam(""); setSelectedTeamId(""); setSelectedEvent(null); setTeamOdds(null); }}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">Bet Type</Label>
-              <Select value={betType} onValueChange={(v) => setBetType(v as BetType)}>
-                <SelectTrigger className="bg-card border-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="moneyline">Moneyline</SelectItem>
-                  <SelectItem value="spread">Spread</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  className={`flex flex-col items-start p-4 rounded-lg border-2 transition-all ${
+                    betType === "moneyline" ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"
+                  }`}
+                  onClick={() => handleBetTypeSelect("moneyline")}
+                >
+                  <p className="text-sm font-semibold text-foreground">Moneyline</p>
+                  {teamOdds?.moneyline !== undefined ? (
+                    <p className="text-xl font-bold text-primary mt-0.5">{formatOdds(teamOdds.moneyline)}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">select a game first</p>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className={`flex flex-col items-start p-4 rounded-lg border-2 transition-all ${
+                    betType === "spread" ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"
+                  }`}
+                  onClick={() => handleBetTypeSelect("spread")}
+                >
+                  <p className="text-sm font-semibold text-foreground">Spread</p>
+                  {teamOdds?.spread ? (
+                    <div className="mt-0.5">
+                      <span className="text-xl font-bold text-primary">{formatOdds(teamOdds.spread.point)}</span>
+                      <span className="text-sm text-muted-foreground ml-1.5">({formatOdds(teamOdds.spread.odds)})</span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">select a game first</p>
+                  )}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-2">
