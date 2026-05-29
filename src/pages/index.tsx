@@ -7,7 +7,7 @@ import { TelegramLoginButton } from "@/components/auth/TelegramLoginButton";
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white overflow-x-hidden">
       <SEO 
         title="Hammer - Sports Betting Alerts"
         description="Set highly specific triggers and get an SMS the moment it hits."
@@ -17,7 +17,7 @@ export default function LandingPage() {
       <section className="container mx-auto px-4 py-12 md:py-32">
         <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
           {/* Trigger Card Mockup - Shows first on mobile */}
-          <div className="relative order-1 md:order-2">
+          <div className="relative order-1 md:order-2 pb-16 md:pb-0">
             <Card className="p-6 shadow-xl bg-white rounded-2xl">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="font-semibold text-lg">Create Trigger</h3>
@@ -73,7 +73,7 @@ export default function LandingPage() {
             </Card>
 
             {/* SMS Notification Mockup with Pulse Animation */}
-            <div className="absolute -bottom-6 -right-6 md:-bottom-8 md:-right-8 bg-gray-900 text-white rounded-2xl p-3 md:p-4 shadow-2xl max-w-[280px] md:max-w-xs animate-pulse-float">
+            <div className="absolute bottom-0 right-0 md:-bottom-8 md:-right-8 bg-gray-900 text-white rounded-2xl p-3 md:p-4 shadow-2xl w-[240px] md:max-w-xs animate-pulse-float z-10">
               <div className="flex items-start gap-2 md:gap-3">
                 <div className="bg-green-500 rounded-lg p-1.5 md:p-2 flex-shrink-0">
                   <Bell className="h-3 w-3 md:h-4 md:w-4" />
@@ -100,6 +100,7 @@ export default function LandingPage() {
               <TelegramLoginButton
                 authUrl="https://www.hammer-app.com/dashboard"
                 usePic={false}
+                widgetId="hero"
               />
             </div>
           </div>
@@ -109,10 +110,10 @@ export default function LandingPage() {
       {/* Problem Statement Section */}
       <section className="bg-white py-20">
         <div className="max-w-4xl mx-auto text-center px-4">
-          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6" style={{ textDecoration: "none" }}>
+          <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-6" style={{ textDecoration: "none" }}>
             Always finding yourself hammering the comeback when a favored team gives up an early lead?
           </h2>
-          <p className="text-lg text-gray-600">Tell us what to look for, and we will monitor and shoot you a text on any game or team you want so you don't have to obsessively check your phone.
+          <p className="text-base md:text-lg text-gray-600">Tell us what to look for, and we will monitor and shoot you a text on any game or team you want so you don't have to obsessively check your phone.
           </p>
         </div>
       </section>
@@ -125,7 +126,7 @@ export default function LandingPage() {
             <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-7 h-7 flex items-center justify-center font-bold text-sm">
               1
             </div>
-            <Card className="p-8 h-full bg-gray-50 border-gray-200">
+            <Card className="p-6 md:p-8 h-full bg-gray-50 border-gray-200">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Set Parameters</h3>
               <p className="text-gray-600">
                 Set specific time and target odds for your favorite teams.
@@ -138,7 +139,7 @@ export default function LandingPage() {
             <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-7 h-7 flex items-center justify-center font-bold text-sm">
               2
             </div>
-            <Card className="p-8 h-full bg-gray-50 border-gray-200">
+            <Card className="p-6 md:p-8 h-full bg-gray-50 border-gray-200">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Live Monitoring</h3>
               <p className="text-gray-600">We monitor the game for you and shoot you a text when it hits.
               </p>
@@ -150,7 +151,7 @@ export default function LandingPage() {
             <div className="absolute -top-3 -left-3 bg-green-500 text-white rounded-full w-7 h-7 flex items-center justify-center font-bold text-sm">
               3
             </div>
-            <Card className="p-8 h-full bg-gray-50 border-gray-200">
+            <Card className="p-6 md:p-8 h-full bg-gray-50 border-gray-200">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Secure the Win</h3>
               <p className="text-gray-600">
                 Lock it in and cross your fingers.
@@ -165,19 +166,20 @@ export default function LandingPage() {
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center space-y-8">
             <div className="space-y-4">
-              <h2 className="text-4xl md:text-5xl font-bold">
+              <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold">
                 Or Login with Telegram
               </h2>
-              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              <p className="text-base md:text-xl text-muted-foreground max-w-2xl mx-auto">
                 One click to get started — no phone number, no SMS, no hassle
               </p>
             </div>
 
             {/* Telegram Login Button */}
             <div className="flex justify-center items-center py-8">
-              <TelegramLoginButton 
+              <TelegramLoginButton
                 authUrl="https://www.hammer-app.com/dashboard"
                 usePic={false}
+                widgetId="cta"
               />
             </div>
 
@@ -225,11 +227,11 @@ export default function LandingPage() {
 
       {/* Final CTA Section */}
       <section className="container mx-auto px-4 py-20 mb-20">
-        <div className="bg-gradient-to-br from-gray-100 to-gray-50 rounded-3xl p-16 text-center max-w-5xl mx-auto">
-          <h2 className="text-5xl md:text-6xl font-bold text-gray-900 mb-8">Just set it and forget it.
+        <div className="bg-gradient-to-br from-gray-100 to-gray-50 rounded-3xl p-8 md:p-16 text-center max-w-5xl mx-auto">
+          <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 md:mb-8">Just set it and forget it.
           </h2>
           <Link href="/dashboard">
-            <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-10 py-7 text-xl font-semibold shadow-lg hover:shadow-xl transition-all">
+            <Button className="bg-green-500 hover:bg-green-600 text-white rounded-full px-6 py-4 text-base md:px-10 md:py-7 md:text-xl font-semibold shadow-lg hover:shadow-xl transition-all">
               Create Your First Trigger
             </Button>
           </Link>

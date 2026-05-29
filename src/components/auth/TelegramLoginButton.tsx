@@ -8,6 +8,8 @@ interface TelegramLoginButtonProps {
   usePic?: boolean;
   authUrl?: string;
   onAuth?: (user: TelegramUser) => void;
+  /** Unique id when multiple widgets appear on the same page (prevents mobile Safari dedup) */
+  widgetId?: string;
 }
 
 export interface TelegramUser {
@@ -36,6 +38,7 @@ export function TelegramLoginButton({
   usePic = false,
   authUrl,
   onAuth,
+  widgetId,
 }: TelegramLoginButtonProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -43,8 +46,8 @@ export function TelegramLoginButton({
     const container = containerRef.current;
     if (!container) return;
 
-    // Clear any previous widget content (script + Telegram-injected iframe)
-    // Without this, the stale iframe causes the widget to skip re-rendering on remount
+    // Clear any previous widget content (script + Telegram-injected iframe).
+    // Without this, the stale iframe causes the widget to skip re-rendering on remount.
     container.innerHTML = "";
 
     if (onAuth && !authUrl) {
@@ -54,7 +57,10 @@ export function TelegramLoginButton({
     }
 
     const script = document.createElement("script");
-    script.src = "https://telegram.org/js/telegram-widget.js?23";
+    // Add a per-instance nonce to the src so mobile Safari doesn't skip
+    // re-execution of a "seen" script URL when multiple widgets are on the page.
+    const nonce = widgetId ?? Math.random().toString(36).slice(2, 7);
+    script.src = `https://telegram.org/js/telegram-widget.js?23&_w=${nonce}`;
     script.setAttribute("data-telegram-login", botName);
     script.setAttribute("data-size", buttonSize);
     script.setAttribute("data-radius", cornerRadius.toString());
@@ -76,7 +82,9 @@ export function TelegramLoginButton({
         delete window.TelegramLoginWidget;
       }
     };
-  }, [botName, buttonSize, cornerRadius, requestAccess, usePic, authUrl, onAuth]);
+  }, [botName, buttonSize, cornerRadius, requestAccess, usePic, authUrl, onAuth, widgetId]);
 
-  return <div ref={containerRef} />;
+  // min-h ensures the container has space before the iframe renders,
+  // preventing mobile browsers from collapsing it to 0 height.
+  return <div ref={containerRef} className="min-h-[52px]" />;
 }
