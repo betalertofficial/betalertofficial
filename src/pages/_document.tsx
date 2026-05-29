@@ -18,7 +18,7 @@ export default function Document() {
       </Head>
       <body
         className={cn(
-          "min-h-screen w-full scroll-smooth bg-background text-foreground antialiased"
+          "min-h-screen w-full scroll-smooth bg-background text-foreground antialiased overflow-x-hidden"
         )}
       >
         <Main />
