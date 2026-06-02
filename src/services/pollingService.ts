@@ -256,12 +256,15 @@ export const pollingService = {
       console.log(`[PollingService] Received ${oddsData.length} events with odds data`);
       console.log(`[PollingService] DEBUG - First odds event:`, JSON.stringify(oddsData[0], null, 2));
 
-      // 5. Store odds snapshots
+      // 5. Capture opening odds for any new pre-game events (immutable; insert-once)
+      await pollingService.captureOpeningOdds(supabaseClient, oddsData);
+
+      // 6. Store odds snapshots
       const snapshots = await pollingService.storeOddsSnapshots(supabaseClient, oddsData);
       console.log(`[PollingService] Stored ${snapshots.length} odds snapshots`);
       console.log(`[PollingService] DEBUG - First snapshot:`, JSON.stringify(snapshots[0], null, 2));
 
-      // 6. Evaluate each trigger
+      // 7. Evaluate each trigger
       let matchesFound = 0;
       let alertsSent = 0;
       const debugTriggerDetails: any[] = [];
@@ -416,6 +419,79 @@ export const pollingService = {
     }
 
     return snapshots;
+  },
+
+  /**
+   * For every pre-game event in oddsData, insert a row into game_opening_odds
+   * if one doesn't already exist. Uses ignoreDuplicates so the opening line is
+   * written exactly once and never overwritten by later polls.
+   */
+  async captureOpeningOdds(
+    supabaseClient: SupabaseClient,
+    oddsData: any[]
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    const records: {
+      event_id: string;
+      sport: string;
+      home_team: string;
+      away_team: string;
+      commence_time: string;
+      home_ml: number | null;
+      away_ml: number | null;
+      bookmaker: string | null;
+    }[] = [];
+
+    for (const event of oddsData) {
+      // Only capture pre-game events — once a game is live we don't want to
+      // overwrite the true opening line with an in-game line.
+      if (!event.commence_time || event.commence_time <= now) continue;
+
+      // Pull h2h (moneyline) from FanDuel or the first available bookmaker.
+      let homeMl: number | null = null;
+      let awayMl: number | null = null;
+      let bookmakerName: string | null = null;
+
+      const preferredBooks = ["fanduel", "draftkings"];
+      for (const bk of event.bookmakers ?? []) {
+        if (!preferredBooks.includes(bk.key)) continue;
+        const h2h = (bk.markets ?? []).find((m: any) => m.key === "h2h");
+        if (!h2h) continue;
+        for (const outcome of h2h.outcomes ?? []) {
+          if (outcome.name === event.home_team) homeMl = outcome.price;
+          if (outcome.name === event.away_team) awayMl = outcome.price;
+        }
+        if (homeMl !== null && awayMl !== null) {
+          bookmakerName = bk.title;
+          break;
+        }
+      }
+
+      if (homeMl === null && awayMl === null) continue;
+
+      records.push({
+        event_id: event.id,
+        sport: event.sport_key,
+        home_team: event.home_team,
+        away_team: event.away_team,
+        commence_time: event.commence_time,
+        home_ml: homeMl,
+        away_ml: awayMl,
+        bookmaker: bookmakerName,
+      });
+    }
+
+    if (records.length === 0) return;
+
+    const { error } = await supabaseClient
+      .from("game_opening_odds")
+      .upsert(records, { onConflict: "event_id", ignoreDuplicates: true });
+
+    if (error) {
+      console.error("[PollingService] Error capturing opening odds:", error.message);
+    } else {
+      console.log(`[PollingService] Captured opening odds for up to ${records.length} pre-game events`);
+    }
   },
 
   /**
