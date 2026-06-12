@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "@/integrations/supabase/client";
 import { verifyTelegramJWT } from "@/lib/jwt";
-import { parse } from "cookie";
+import { parse, serialize } from "cookie";
 
 interface SessionResponse {
   authenticated: boolean;
@@ -10,6 +10,8 @@ interface SessionResponse {
   authMethod?: 'telegram' | 'supabase';
   error?: string;
 }
+
+const isProd = process.env.NODE_ENV === "production";
 
 export default async function handler(
   req: NextApiRequest,
@@ -25,13 +27,15 @@ export default async function handler(
     const cookies = parse(req.headers.cookie || "");
     const telegramToken = cookies.telegram_session;
 
-    console.log("[Session API] Cookie header:", req.headers.cookie ? "present" : "missing");
-    console.log("[Session API] Parsed cookies:", Object.keys(cookies));
-    console.log("[Session API] telegram_session cookie:", telegramToken ? "found" : "missing");
+    if (!isProd) {
+      console.log("[Session API] Cookie header:", req.headers.cookie ? "present" : "missing");
+      console.log("[Session API] Parsed cookies:", Object.keys(cookies));
+      console.log("[Session API] telegram_session cookie:", telegramToken ? "found" : "missing");
+    }
 
     if (telegramToken) {
       const payload = verifyTelegramJWT(telegramToken);
-      
+
       if (payload) {
         // Valid Telegram session - fetch profile using service role to bypass RLS
         const { data: profile, error } = await supabase
@@ -56,22 +60,28 @@ export default async function handler(
           return;
         }
       }
-      
-      // Invalid token - clear cookie and continue to Supabase check
-      res.setHeader("Set-Cookie", "telegram_session=; Path=/; Max-Age=0; HttpOnly");
+
+      // Invalid token - clear cookie (mirror the flags used when it was set) and continue
+      res.setHeader("Set-Cookie", serialize("telegram_session", "", {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: "lax",
+        maxAge: 0,
+        path: "/",
+      }));
     }
 
     // 2. Check for Supabase session
     const authHeader = req.headers.authorization;
-    
+
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.substring(7);
-      
+
       // Verify Supabase token and get user
       const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      
+
       if (authError || !user) {
-        console.error("[Session API] Invalid Supabase token:", authError);
+        console.error("[Session API] Invalid Supabase token");
         res.status(401).json({ authenticated: false, error: "Invalid session" });
         return;
       }

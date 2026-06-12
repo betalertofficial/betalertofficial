@@ -44,7 +44,11 @@ export interface GameOddsStory {
   teamOptions: { home: string; away: string };
 }
 
-const ODDS_API_KEY = process.env.NEXT_PUBLIC_ODDS_API_KEY || "769cb07182ad562f17eff9c5359224dc";
+// SECURITY: no hardcoded API key. This value comes from the environment only.
+// NOTE: NEXT_PUBLIC_* is exposed to the browser; this historical feature should
+// ideally be moved behind a server-side API route (like /api/odds/*) so the key
+// never ships to the client at all.
+const ODDS_API_KEY = process.env.NEXT_PUBLIC_ODDS_API_KEY || "";
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
 
 /**
@@ -52,11 +56,14 @@ const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
  */
 export async function fetchGamesForDate(date: string): Promise<HistoricalEvent[]> {
   try {
+    if (!ODDS_API_KEY) {
+      throw new Error("Historical odds API key is not configured");
+    }
     // The Odds API historical endpoint wants ISO format without milliseconds
     // YYYY-MM-DDT00:00:00Z instead of YYYY-MM-DDT00:00:00.000Z
     const isoDate = new Date(date + "T00:00:00Z").toISOString().split('.')[0] + 'Z';
     const apiUrl = `${ODDS_API_BASE}/historical/sports/basketball_nba/events?apiKey=${ODDS_API_KEY}&date=${isoDate}`;
-    
+
     console.log("Fetching games for date:", { date, isoDate, apiUrl: apiUrl.replace(ODDS_API_KEY, "***") });
 
     const response = await fetch(apiUrl);
@@ -71,7 +78,7 @@ export async function fetchGamesForDate(date: string): Promise<HistoricalEvent[]
 
     const responseData = await response.json();
     console.log("Full API response:", responseData);
-    
+
     // The historical endpoint returns { data: [...], timestamp: ..., ... }
     const events: HistoricalEvent[] = responseData.data || [];
     console.log(`Found ${events.length} games for ${date}:`, events);
@@ -90,6 +97,9 @@ async function fetchOddsSnapshot(
   timestamp: string
 ): Promise<OddsData | null> {
   try {
+    if (!ODDS_API_KEY) {
+      throw new Error("Historical odds API key is not configured");
+    }
     const response = await fetch(
       `${ODDS_API_BASE}/historical/sports/basketball_nba/events/${eventId}/odds?` +
       `apiKey=${ODDS_API_KEY}&date=${timestamp}&regions=us&markets=h2h&oddsFormat=american`
@@ -118,14 +128,14 @@ function extractMoneyline(
   teamName: string
 ): { odds: number; bookmaker: string } | null {
   console.log("Extracting moneyline for team:", teamName, "from snapshot:", snapshot);
-  
+
   if (!snapshot || !snapshot.bookmakers || snapshot.bookmakers.length === 0) {
     console.log("No bookmakers found in snapshot");
     return null;
   }
-  
+
   const preferredBookmakers = ["draftkings", "fanduel"];
-  
+
   // Try preferred bookmakers first
   for (const preferredKey of preferredBookmakers) {
     const bookmaker = snapshot.bookmakers.find(b => b.key === preferredKey);
@@ -171,9 +181,9 @@ async function fetchOddsChain(
 
   for (let i = 0; i < maxSnapshots; i++) {
     const snapshot = await fetchOddsSnapshot(eventId, currentTimestamp);
-    
+
     if (!snapshot) break;
-    
+
     const oddsData = extractMoneyline(snapshot, teamName);
     if (oddsData) {
       snapshots.push({
@@ -189,7 +199,7 @@ async function fetchOddsChain(
     }
 
     currentTimestamp = snapshot.next_timestamp;
-    
+
     // Small delay to avoid rate limiting
     await new Promise(resolve => setTimeout(resolve, 200));
   }
@@ -214,9 +224,9 @@ export async function fetchRawOddsData(
 
   for (let i = 0; i < maxSnapshots; i++) {
     const snapshot = await fetchOddsSnapshot(eventId, currentTimestamp);
-    
+
     if (!snapshot) break;
-    
+
     rawSnapshots.push(snapshot);
 
     if (!snapshot.next_timestamp || new Date(snapshot.next_timestamp) > new Date(gameEndTime)) {
@@ -235,7 +245,7 @@ export async function fetchRawOddsData(
  * Find the peak odds moment (highest/most positive odds = best value)
  */
 function findPeakOdds(snapshots: OddsSnapshot[]): OddsSnapshot {
-  return snapshots.reduce((peak, current) => 
+  return snapshots.reduce((peak, current) =>
     current.odds > peak.odds ? current : peak
   );
 }
@@ -294,7 +304,7 @@ export function generateSocialCaption(story: GameOddsStory): {
   const peakTime = new Date(story.peakOdds.timestamp);
   const gameStart = new Date(story.gameInfo.commenceTime);
   const minutesElapsed = Math.floor((peakTime.getTime() - gameStart.getTime()) / 60000);
-  
+
   // Rough quarter estimation
   let quarter = "Q1";
   if (minutesElapsed > 72) quarter = "Q4";
@@ -306,9 +316,9 @@ export function generateSocialCaption(story: GameOddsStory): {
   const oddsDisplay = story.peakOdds.odds > 0 ? `+${story.peakOdds.odds}` : story.peakOdds.odds;
 
   const headline = `${teamShortName} were ${oddsDisplay} in ${quarter}. They won anyway.`;
-  
+
   const caption = `${headline} Best odds window of the game 👇 ${story.finalScore || ""}`.trim();
-  
+
   const altText = `Chart showing ${story.winningTeam}'s moneyline odds throughout the game, ` +
     `peaking at ${oddsDisplay} during ${quarter}. Final result: ${story.winningTeam} victory.`;
 
