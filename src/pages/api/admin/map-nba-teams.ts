@@ -1,164 +1,118 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/adminAuth";
 
-// Create admin client with service role to bypass RLS
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
+/**
+ * Admin: map canonical NBA teams to The Odds API team names.
+ * POST /api/admin/map-nba-teams  (admin only)
+ *
+ * Uses the server-side ODDS_API_KEY env var (no longer reads the key from the
+ * vendors table, and never returns it).
+ */
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const auth = await requireAdmin(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ error: auth.error });
+  }
+  const supabaseAdmin = auth.admin;
+
+  const oddsApiKey = process.env.ODDS_API_KEY;
+  if (!oddsApiKey) {
+    return res.status(500).json({ error: "Odds API key not configured" });
+  }
+
   try {
-    // 1. Get the_odds_api vendor ID
+    // Confirm the vendor exists (do NOT select its api_key).
     const { data: vendor, error: vendorError } = await supabaseAdmin
       .from("vendors")
-      .select("id, api_key")
+      .select("id")
       .eq("name", "the_odds_api")
       .single();
-
     if (vendorError || !vendor) {
       return res.status(404).json({ error: "the_odds_api vendor not found" });
     }
 
-    if (!vendor.api_key) {
-      return res.status(400).json({ error: "the_odds_api has no API key configured" });
-    }
-
-    // 2. Fetch all NBA teams from our canonical teams table
     const { data: canonicalTeams, error: teamsError } = await supabaseAdmin
       .from("teams")
       .select("id, name, abbrev, slug")
       .eq("league", "NBA");
-
     if (teamsError || !canonicalTeams) {
-      return res.status(500).json({ 
-        error: "Failed to fetch canonical teams",
-        details: teamsError 
-      });
+      return res.status(500).json({ error: "Failed to fetch canonical teams" });
     }
 
-    // 3. Fetch current NBA games from the Odds API to get their team names
-    const oddsApiUrl = `https://api.the-odds-api.com/v4/sports/basketball_nba/odds/?apiKey=${vendor.api_key}&regions=us&markets=h2h`;
-    const oddsResponse = await fetch(oddsApiUrl);
-    
+    const oddsApiUrl = `https://api.the-odds-api.com/v4/sports/basketball_nba/odds/?apiKey=${oddsApiKey}&regions=us&markets=h2h`;
+    const oddsResponse = await fetch(oddsApiUrl, { signal: AbortSignal.timeout(15000) });
     if (!oddsResponse.ok) {
-      return res.status(500).json({ 
-        error: "Failed to fetch from Odds API",
-        details: await oddsResponse.text()
-      });
+      return res.status(502).json({ error: "Failed to fetch from Odds API" });
+    }
+    const oddsData = await oddsResponse.json();
+    if (!Array.isArray(oddsData)) {
+      return res.status(502).json({ error: "Unexpected Odds API response" });
     }
 
-    const oddsData = await oddsResponse.json();
-
-    // 4. Extract unique team names from the API response
     const oddsTeamNames = new Set<string>();
     for (const game of oddsData) {
       if (game.home_team) oddsTeamNames.add(game.home_team);
       if (game.away_team) oddsTeamNames.add(game.away_team);
     }
 
-    // 5. Get existing mappings to avoid duplicates
     const { data: existingMappings } = await supabaseAdmin
       .from("vendor_team_map")
       .select("team_id, vendor_team_key")
       .eq("vendor_id", vendor.id);
-
     const existingKeys = new Set(
-      existingMappings?.map(m => `${m.team_id}:${m.vendor_team_key}`) || []
+      existingMappings?.map((m: any) => `${m.team_id}:${m.vendor_team_key}`) || []
     );
 
-    // 6. Match our canonical teams to Odds API team names
-    const mappingsToInsert = [];
-    const matched = [];
-    const unmatched = [];
+    const mappingsToInsert: any[] = [];
+    const matched: any[] = [];
+    const unmatched: string[] = [];
 
-    for (const team of canonicalTeams) {
+    for (const team of canonicalTeams as any[]) {
       let matchedOddsName: string | null = null;
       const canonicalName = team.name.toLowerCase();
       const canonicalAbbrev = team.abbrev?.toLowerCase();
 
-      // Iterate through available Odds API team names to find a match
       for (const oddsTeam of Array.from(oddsTeamNames)) {
         const oddsName = oddsTeam.toLowerCase();
-
-        // Direct match
-        if (oddsName === canonicalName) {
-          matchedOddsName = oddsTeam;
-          break;
-        }
-
-        // Partial match (e.g., "Lakers" in "Los Angeles Lakers")
+        if (oddsName === canonicalName) { matchedOddsName = oddsTeam; break; }
         const nameParts = canonicalName.split(" ");
-        if (nameParts.some(part => oddsName.includes(part) && part.length > 3)) {
-          matchedOddsName = oddsTeam;
-          break;
-        }
-
-        // Abbreviation match
-        if (canonicalAbbrev && oddsName.includes(canonicalAbbrev)) {
-          matchedOddsName = oddsTeam;
-          break;
-        }
+        if (nameParts.some((part: string) => oddsName.includes(part) && part.length > 3)) { matchedOddsName = oddsTeam; break; }
+        if (canonicalAbbrev && oddsName.includes(canonicalAbbrev)) { matchedOddsName = oddsTeam; break; }
       }
 
       if (matchedOddsName) {
-        // Check if this mapping already exists
         const mappingKey = `${team.id}:${matchedOddsName}`;
         if (!existingKeys.has(mappingKey)) {
-          mappingsToInsert.push({
-            vendor_id: vendor.id,
-            team_id: team.id,
-            vendor_team_key: matchedOddsName
-          });
+          mappingsToInsert.push({ vendor_id: vendor.id, team_id: team.id, vendor_team_key: matchedOddsName });
         }
-        matched.push({
-          canonicalName: team.name,
-          oddsApiName: matchedOddsName,
-          isNew: !existingKeys.has(mappingKey)
-        });
+        matched.push({ canonicalName: team.name, oddsApiName: matchedOddsName, isNew: !existingKeys.has(mappingKey) });
       } else {
         unmatched.push(team.name);
       }
     }
 
-    // 7. Insert new mappings in bulk
     if (mappingsToInsert.length > 0) {
-      const { error: insertError } = await supabaseAdmin
-        .from("vendor_team_map")
-        .insert(mappingsToInsert);
-
+      const { error: insertError } = await supabaseAdmin.from("vendor_team_map").insert(mappingsToInsert);
       if (insertError) {
-        return res.status(500).json({ 
-          error: "Failed to create mappings",
-          details: insertError
-        });
+        return res.status(500).json({ error: "Failed to create mappings" });
       }
     }
 
-    // 8. Return results
     return res.status(200).json({
       success: true,
       totalCanonicalTeams: canonicalTeams.length,
       totalOddsTeams: oddsTeamNames.size,
       newlyMapped: mappingsToInsert.length,
-      alreadyMapped: matched.filter(m => !m.isNew).length,
+      alreadyMapped: matched.filter((m) => !m.isNew).length,
       matchedTeams: matched,
       unmatchedTeams: unmatched,
-      oddsTeamNames: Array.from(oddsTeamNames)
     });
-
   } catch (error) {
     console.error("Error mapping NBA teams:", error);
-    return res.status(500).json({ 
-      error: "Failed to map NBA teams",
-      details: error instanceof Error ? error.message : String(error)
-    });
+    return res.status(500).json({ error: "Failed to map NBA teams" });
   }
 }

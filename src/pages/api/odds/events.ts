@@ -4,13 +4,22 @@ import type { NextApiRequest, NextApiResponse } from "next";
  * GET /api/odds/events?sport=basketball_nba
  * GET /api/odds/events?sport=basketball_nba&type=scores
  *
- * Server-side proxy to the-odds-api.com odds and scores endpoints.
- * Keeps the ODDS_API_KEY out of the browser bundle and avoids CORS.
+ * Server-side proxy to the-odds-api.com. Keeps ODDS_API_KEY off the browser.
  *
- * Query params:
- *   sport  — required, e.g. "basketball_nba"
- *   type   — optional: "odds" (default) | "scores"
+ * `sport` is validated against an allowlist so this proxy can't be abused to
+ * fan out arbitrary requests against the (paid, rate-limited) Odds API.
  */
+const ALLOWED_SPORTS = new Set<string>([
+  "basketball_nba",
+  "basketball_ncaab",
+  "americanfootball_nfl",
+  "americanfootball_ncaaf",
+  "baseball_mlb",
+  "icehockey_nhl",
+  "soccer_epl",
+  "soccer_usa_mls",
+]);
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -23,32 +32,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { sport, type = "odds" } = req.query;
 
-  if (!sport || typeof sport !== "string") {
-    return res.status(400).json({ error: "sport query param is required" });
+  if (!sport || typeof sport !== "string" || !ALLOWED_SPORTS.has(sport)) {
+    return res.status(400).json({ error: "Invalid or unsupported 'sport' parameter" });
+  }
+  if (type !== "odds" && type !== "scores") {
+    return res.status(400).json({ error: "Invalid 'type' parameter" });
   }
 
   try {
-    let url: string;
+    const url =
+      type === "scores"
+        ? `https://api.the-odds-api.com/v4/sports/${sport}/scores?apiKey=${apiKey}&daysFrom=2`
+        : `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=fanduel,draftkings&oddsFormat=american`;
 
-    if (type === "scores") {
-      url = `https://api.the-odds-api.com/v4/sports/${sport}/scores?apiKey=${apiKey}&daysFrom=2`;
-    } else {
-      url = `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=fanduel,draftkings&oddsFormat=american`;
-    }
-
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
 
     if (!response.ok) {
-      const body = await response.text();
-      console.error(`[/api/odds/events] Odds API error (${sport}, ${type}):`, response.status, body);
-      return res.status(response.status).json({
-        error: `Odds API error: ${response.status} ${response.statusText}`,
-        detail: body,
-      });
+      console.error(`[/api/odds/events] Odds API error (${sport}, ${type}):`, response.status);
+      return res.status(response.status).json({ error: `Odds API error: ${response.status}` });
     }
 
     const data = await response.json();
-    // Cache odds for 60s (they change frequently), scores for 30s
     const maxAge = type === "scores" ? 30 : 60;
     res.setHeader("Cache-Control", `public, s-maxage=${maxAge}`);
     return res.status(200).json(data);
