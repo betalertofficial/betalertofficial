@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/poll-triggers",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/sync-schedules",
+      "schedule": "0 8 * * *"
     }
   ],
   "redirects": [
