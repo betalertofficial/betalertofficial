@@ -167,14 +167,11 @@ function TeamRow({
       type="button"
       onClick={onClick}
       title={`Set an alert on ${name}`}
-      className="group relative flex items-center justify-between gap-2 w-full rounded-lg px-2 py-2 text-left transition-colors hover:bg-green-50 focus:outline-none focus-visible:bg-green-50"
+      className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-50"
     >
-      <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-green-500 opacity-0 transition-opacity group-hover:opacity-100" />
-      <span className="flex min-w-0 items-center gap-2 pl-1">
+      <span className="flex min-w-0 items-center gap-2">
         <TeamLogoImg url={logo} alt={name} className="h-5 w-5 shrink-0 object-contain" />
-        <span className="truncate text-sm font-semibold text-gray-900 transition-colors group-hover:text-green-700">
-          {name}
-        </span>
+        <span className="truncate text-sm font-semibold text-gray-900">{name}</span>
       </span>
       <div className="flex shrink-0 items-center gap-2">
         <span className="text-xs tabular-nums text-gray-400">{formatOdds(ml)}</span>
