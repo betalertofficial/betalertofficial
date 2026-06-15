@@ -72,7 +72,7 @@ function ScoreLine({
   const awayWin = a > h;
   const homeWin = h > a;
   const win = "font-semibold text-gray-900";
-  const lose = "text-gray-400";
+  const lose = "text-gray-500";
   return (
     <span className="text-sm">
       <span className={awayWin ? win : lose}>
@@ -82,7 +82,7 @@ function ScoreLine({
       <span className={homeWin ? win : lose}>
         {homeTeam} {homeScore}
       </span>
-      {detail ? <span className="text-gray-400"> · {detail}</span> : null}
+      {detail ? <span className="text-gray-500"> · {detail}</span> : null}
     </span>
   );
 }
@@ -206,20 +206,22 @@ export function CompletedTriggerRow({ profileTrigger, onDelete }: CompletedTrigg
         )}
 
         {hasFinal && (
-          <DetailRow
-            label="Outcome"
-            value={
-              <div className="flex items-center justify-between gap-3">
-                <ScoreLine
-                  awayTeam={finalScore.awayTeam}
-                  awayScore={finalScore.awayScore}
-                  homeTeam={finalScore.homeTeam}
-                  homeScore={finalScore.homeScore}
-                />
-                <HitMissBadge won={didTeamWin(trigger.team_or_player, finalScore)} />
-              </div>
-            }
-          />
+          <div className="border-t border-gray-200 pt-2">
+            <DetailRow
+              label="Outcome"
+              value={
+                <div className="flex items-center justify-between gap-3">
+                  <ScoreLine
+                    awayTeam={finalScore.awayTeam}
+                    awayScore={finalScore.awayScore}
+                    homeTeam={finalScore.homeTeam}
+                    homeScore={finalScore.homeScore}
+                  />
+                  <HitMissBadge won={didTeamWin(trigger.team_or_player, finalScore)} />
+                </div>
+              }
+            />
+          </div>
         )}
       </div>
     </div>
