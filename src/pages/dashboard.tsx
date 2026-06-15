@@ -1,14 +1,24 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "@/contexts/AuthContext";
-import { TriggerStats } from "@/components/dashboard/TriggerStats";
 import { MyTriggers } from "@/components/dashboard/MyTriggers";
 import { Settings } from "@/components/dashboard/Settings";
+import { PickATeam } from "@/components/dashboard/PickATeam";
+import { ActiveGames } from "@/components/dashboard/ActiveGames";
+import { ComebacksOn } from "@/components/dashboard/ComebacksOn";
+import { CreateTrigger } from "@/components/dashboard/CreateTrigger";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { User } from "lucide-react";
 import { SEO } from "@/components/SEO";
 import { useToast } from "@/hooks/use-toast";
+
+interface Prefill {
+  sportKey?: string;
+  team?: string;
+  teamId?: string;
+  event?: any;
+}
 
 export default function Dashboard() {
   const router = useRouter();
@@ -16,6 +26,8 @@ export default function Dashboard() {
   const { toast } = useToast();
   const [isTelegramAuthenticating, setIsTelegramAuthenticating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [triggerOpen, setTriggerOpen] = useState(false);
+  const [prefill, setPrefill] = useState<Prefill>({});
 
   // Handle Telegram auth callback from URL params
   useEffect(() => {
@@ -68,6 +80,11 @@ export default function Dashboard() {
     handleTelegramAuth();
   }, [router.query, isTelegramAuthenticating, router, toast]);
 
+  const openTrigger = (p: Prefill) => {
+    setPrefill(p);
+    setTriggerOpen(true);
+  };
+
   if (loading || isTelegramAuthenticating) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -83,48 +100,47 @@ export default function Dashboard() {
 
   return (
     <>
-      <SEO
-        title="Dashboard - Bet Alert"
-        description="Manage your betting triggers and track your alerts"
-      />
+      <SEO title="Dashboard - Hammer" description="Manage your betting triggers and track your alerts" />
 
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+      <div className="min-h-screen bg-gray-50">
+        {/* Top nav */}
+        <header className="border-b border-gray-200 bg-white sticky top-0 z-30">
+          <div className="container mx-auto px-4 h-14 flex items-center justify-between">
+            <span className="font-bold text-lg tracking-tight">Hammer</span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-full"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Open settings"
+            >
+              {profile?.telegram_first_name ? (
+                <span className="text-sm font-semibold">{profile.telegram_first_name.charAt(0).toUpperCase()}</span>
+              ) : (
+                <User className="h-5 w-5" />
+              )}
+            </Button>
+          </div>
+        </header>
+
         <div className="container mx-auto px-4 py-8">
-          <div className="space-y-8">
-
-            {/* Header */}
-            <div className="flex items-center justify-between">
+          <div className="grid lg:grid-cols-[1fr_360px] gap-8 items-start">
+            {/* Main column: live data sections */}
+            <div className="space-y-10 min-w-0">
               <div>
-                <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
-                <p className="text-muted-foreground mt-2">
-                  Manage your betting triggers and track your alerts
-                </p>
+                <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
+                <p className="text-muted-foreground mt-1">Manage your betting triggers and track your alerts</p>
               </div>
 
-              {/* Profile / Settings icon */}
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-10 w-10 rounded-full"
-                onClick={() => setSettingsOpen(true)}
-                aria-label="Open settings"
-              >
-                {profile?.telegram_first_name ? (
-                  <span className="text-sm font-semibold">
-                    {profile.telegram_first_name.charAt(0).toUpperCase()}
-                  </span>
-                ) : (
-                  <User className="h-5 w-5" />
-                )}
-              </Button>
+              <PickATeam onSelectTeam={openTrigger} />
+              <ActiveGames onSelectGame={openTrigger} />
+              <ComebacksOn onSelect={openTrigger} />
             </div>
 
-            {/* Stats */}
-            <TriggerStats active={0} completed={0} remaining={0} />
-
-            {/* Triggers (active + completed tabs are inside MyTriggers itself) */}
-            <MyTriggers />
-
+            {/* Right column: My Triggers drawer */}
+            <aside className="lg:sticky lg:top-20">
+              <MyTriggers />
+            </aside>
           </div>
         </div>
       </div>
@@ -134,14 +150,23 @@ export default function Dashboard() {
         <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader className="mb-6">
             <SheetTitle>
-              {profile?.telegram_first_name
-                ? `Hi, ${profile.telegram_first_name} 👋`
-                : "Settings"}
+              {profile?.telegram_first_name ? `Hi, ${profile.telegram_first_name} 👋` : "Settings"}
             </SheetTitle>
           </SheetHeader>
           <Settings />
         </SheetContent>
       </Sheet>
+
+      {/* Create Trigger modal — opened pre-filled when a team/game/comeback is clicked */}
+      <CreateTrigger
+        open={triggerOpen}
+        onOpenChange={setTriggerOpen}
+        initialSport={prefill.sportKey}
+        initialTeam={prefill.team}
+        initialTeamId={prefill.teamId}
+        initialEvent={prefill.event}
+        onSuccess={() => setTriggerOpen(false)}
+      />
     </>
   );
 }
