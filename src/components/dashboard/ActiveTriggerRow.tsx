@@ -31,6 +31,19 @@ function getBetTypeLabel(betType: string): string {
   return labels[betType.toLowerCase()] ?? betType;
 }
 
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+/** "inning" + 3 → "3rd Inning or later" (works across sports: quarter/period/half). */
+function formatPeriod(type: string | null | undefined, min: number | null | undefined): string {
+  if (!type || !min) return "Any time";
+  const label = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+  return `${ordinal(Number(min))} ${label} or later`;
+}
+
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -122,14 +135,7 @@ export function ActiveTriggerRow({
           value={`${getBetTypeLabel(trigger.bet_type)} ${getComparatorLabel(trigger.odds_comparator)} ${formatOdds(Number(trigger.odds_value))}`}
         />
         <DetailRow label="When" value={trigger.frequency === "once" ? "One time" : "Each game"} />
-        <DetailRow
-          label="Period"
-          value={
-            trigger.time_period_type && trigger.time_period_min
-              ? `${trigger.time_period_type} ${trigger.time_period_min}+`
-              : "Any time"
-          }
-        />
+        <DetailRow label="Period" value={formatPeriod(trigger.time_period_type, trigger.time_period_min)} />
       </div>
     </div>
   );
