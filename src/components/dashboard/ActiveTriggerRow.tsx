@@ -100,7 +100,7 @@ export function ActiveTriggerRow({
               <>
                 <span>·</span>
                 <Clock className="h-3 w-3" />
-                <span>{timeAgo(lastPollAt)}</span>
+                <span>Last checked {timeAgo(lastPollAt)}</span>
               </>
             )}
           </p>
@@ -134,7 +134,7 @@ export function ActiveTriggerRow({
           label="Condition"
           value={`${getBetTypeLabel(trigger.bet_type)} ${getComparatorLabel(trigger.odds_comparator)} ${formatOdds(Number(trigger.odds_value))}`}
         />
-        <DetailRow label="When" value={trigger.frequency === "once" ? "One time" : "Each game"} />
+        <DetailRow label="Frequency" value={trigger.frequency === "once" ? "One time" : "Each game"} />
         <DetailRow label="Period" value={formatPeriod(trigger.time_period_type, trigger.time_period_min)} />
       </div>
     </div>
