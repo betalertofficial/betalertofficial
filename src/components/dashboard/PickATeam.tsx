@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { teamsService, type Team } from "@/services/teamsService";
 import { LEAGUES, getTeamLogoUrl } from "@/lib/leagues";
+import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { LeaguePills } from "./LeaguePills";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -15,6 +16,7 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const rowRef = useRef<HTMLDivElement>(null);
+  const { logoFor } = useTeamLogos();
 
   useEffect(() => {
     let active = true;
@@ -53,7 +55,7 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
           <button
             type="button"
             onClick={() => slide(-1)}
-            className="h-7 w-7 rounded-full border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50 disabled:opacity-40"
+            className="h-7 w-7 rounded-full border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50"
             aria-label="Scroll teams left"
           >
             <ChevronLeft className="h-4 w-4 text-gray-500" />
@@ -61,7 +63,7 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
           <button
             type="button"
             onClick={() => slide(1)}
-            className="h-7 w-7 rounded-full border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50 disabled:opacity-40"
+            className="h-7 w-7 rounded-full border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50"
             aria-label="Scroll teams right"
           >
             <ChevronRight className="h-4 w-4 text-gray-500" />
@@ -89,7 +91,7 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
               onClick={() => onSelectTeam({ sportKey: sportKeyForTeam(t), team: t.name, teamId: t.id })}
               className="shrink-0 w-[84px] flex flex-col items-center gap-2 p-2 rounded-xl border border-gray-200 bg-white hover:shadow-sm hover:border-gray-300 transition"
             >
-              <TeamLogo team={t} />
+              <TeamLogo team={t} url={logoFor(t.name) || getTeamLogoUrl(t.league, t.abbrev)} />
               <span className="text-[11px] text-gray-600 text-center leading-tight line-clamp-2">{t.name}</span>
             </button>
           ))}
@@ -99,9 +101,8 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
   );
 }
 
-function TeamLogo({ team }: { team: Team }) {
+function TeamLogo({ team, url }: { team: Team; url: string | null }) {
   const [errored, setErrored] = useState(false);
-  const url = getTeamLogoUrl(team.league, team.abbrev);
 
   if (url && !errored) {
     // eslint-disable-next-line @next/next/no-img-element
