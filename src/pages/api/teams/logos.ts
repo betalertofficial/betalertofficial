@@ -3,19 +3,19 @@ import type { NextApiRequest, NextApiResponse } from "next";
 /**
  * GET /api/teams/logos
  *
- * Returns a flat lookup map of (lowercased team-name variants) -> logo URL,
- * sourced from ESPN's public team data across the leagues we support. Used to
- * show real team logos on the dashboard, including the game cards where teams
- * come from the odds feed as full names (no abbreviations).
+ * Returns, sourced from ESPN's public team data across the leagues we support:
+ *  - map:          lowercased team-name variant -> logo URL
+ *  - leagueByName: lowercased team-name variant -> our Odds API sport key
  *
- * Cached hard (logos basically never change).
+ * Used to show real logos AND to classify a team's league by NAME (robust when
+ * the teams table's `league` column is missing or oddly formatted). Cached hard.
  */
 const ESPN_LEAGUES = [
-  { path: "baseball/mlb" },
-  { path: "basketball/nba" },
-  { path: "football/nfl" },
-  { path: "hockey/nhl" },
-  { path: "soccer/eng.1" },
+  { path: "baseball/mlb", sportKey: "baseball_mlb" },
+  { path: "basketball/nba", sportKey: "basketball_nba" },
+  { path: "football/nfl", sportKey: "americanfootball_nfl" },
+  { path: "hockey/nhl", sportKey: "icehockey_nhl" },
+  { path: "soccer/eng.1", sportKey: "soccer_epl" },
 ];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -24,6 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const map: Record<string, string> = {};
+  const leagueByName: Record<string, string> = {};
 
   await Promise.all(
     ESPN_LEAGUES.map(async (lg) => {
@@ -38,8 +39,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         for (const entry of teams) {
           const team = entry?.team || entry;
           const logo = team?.logos?.[0]?.href;
-          if (!logo) continue;
-          const variants = [
+          // Variants that include the bare abbreviation (fine for logo lookup).
+          const logoVariants = [
             team.displayName,
             team.shortDisplayName,
             team.name,
@@ -47,8 +48,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             team.abbreviation,
             team.location && team.name ? `${team.location} ${team.name}` : null,
           ];
-          for (const v of variants) {
-            if (v) map[String(v).toLowerCase().trim()] = logo;
+          // For league classification, avoid the bare abbreviation (e.g. "ATL"
+          // is both Braves and Hawks) — use full/name variants only.
+          const nameVariants = [
+            team.displayName,
+            team.shortDisplayName,
+            team.name,
+            team.location && team.name ? `${team.location} ${team.name}` : null,
+          ];
+          for (const v of logoVariants) {
+            if (v && logo) map[String(v).toLowerCase().trim()] = logo;
+          }
+          for (const v of nameVariants) {
+            if (v) leagueByName[String(v).toLowerCase().trim()] = lg.sportKey;
           }
         }
       } catch {
@@ -58,5 +70,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   );
 
   res.setHeader("Cache-Control", "public, s-maxage=86400, stale-while-revalidate=604800");
-  return res.status(200).json({ map });
+  return res.status(200).json({ map, leagueByName });
 }

@@ -11,15 +11,29 @@ export interface TeamSelection {
   teamId: string;
 }
 
+/**
+ * Fallback league classifier from the teams table `league` column.
+ * Format-proof: matches "nba"/"NBA"/"basketball_nba"/"National Basketball Association".
+ * Primary classification is by team NAME via ESPN (see leagueFor); this is the
+ * fallback when a name isn't found.
+ */
+function leagueToSportKey(value: string | null | undefined): string | null {
+  const s = (value || "").toLowerCase();
+  if (s.includes("nba") || s.includes("basketball")) return "basketball_nba";
+  if (s.includes("mlb") || s.includes("baseball")) return "baseball_mlb";
+  if (s.includes("nfl") || s.includes("americanfootball") || s.includes("football")) return "americanfootball_nfl";
+  if (s.includes("nhl") || s.includes("hockey")) return "icehockey_nhl";
+  if (s.includes("epl") || s.includes("soccer") || s.includes("premier")) return "soccer_epl";
+  return null;
+}
+
 export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection) => void }) {
   const [league, setLeague] = useState<string>("all");
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const rowRef = useRef<HTMLDivElement>(null);
-  const { logoFor } = useTeamLogos();
+  const { logoFor, leagueFor } = useTeamLogos();
 
-  // Load all teams once; filter/breakdown happen client-side (case-insensitive),
-  // so it works regardless of how league is cased in the DB ("NBA" vs "nba").
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -38,34 +52,28 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
     };
   }, []);
 
-  // Reset scroll to the start when the league filter changes.
   useEffect(() => {
     rowRef.current?.scrollTo({ left: 0 });
   }, [league]);
 
-  const teamLeagueOf = (t: Team) => (t.league || "").toLowerCase();
+  // Classify each team by NAME (ESPN) first, then the DB league column.
+  const sportKeyOf = (t: Team) => leagueFor(t.name) || leagueToSportKey(t.league);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: teams.length };
     LEAGUES.forEach((l) => {
-      c[l.sportKey] = teams.filter((t) => teamLeagueOf(t) === l.teamLeague).length;
+      c[l.sportKey] = teams.filter((t) => sportKeyOf(t) === l.sportKey).length;
     });
     return c;
-  }, [teams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teams, leagueFor]);
 
   const pills = [
     { key: "all", label: "All", count: counts.all },
     ...LEAGUES.map((l) => ({ key: l.sportKey, label: l.label, count: counts[l.sportKey] || 0 })),
   ];
 
-  const selectedTeamLeague = LEAGUES.find((l) => l.sportKey === league)?.teamLeague;
-  const filtered =
-    league === "all" || !selectedTeamLeague
-      ? teams
-      : teams.filter((t) => teamLeagueOf(t) === selectedTeamLeague);
-
-  const sportKeyForTeam = (t: Team) =>
-    LEAGUES.find((l) => l.teamLeague === teamLeagueOf(t))?.sportKey ?? "";
+  const filtered = league === "all" ? teams : teams.filter((t) => sportKeyOf(t) === league);
 
   const slide = (dir: number) => rowRef.current?.scrollBy({ left: dir * 360, behavior: "smooth" });
 
@@ -110,7 +118,7 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
             <button
               key={t.id}
               type="button"
-              onClick={() => onSelectTeam({ sportKey: sportKeyForTeam(t), team: t.name, teamId: t.id })}
+              onClick={() => onSelectTeam({ sportKey: sportKeyOf(t) ?? "", team: t.name, teamId: t.id })}
               className="shrink-0 w-[84px] flex flex-col items-center gap-2 p-2 rounded-xl border border-gray-200 bg-white hover:shadow-sm hover:border-gray-300 transition"
             >
               <TeamLogo team={t} url={logoFor(t.name) || getTeamLogoUrl(t.league, t.abbrev)} />
