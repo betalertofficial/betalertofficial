@@ -478,6 +478,29 @@ export async function runCronPoll(
     console.log(`[CronPoll] ${validTriggers.length}/${triggers.length} triggers remain after time period filtering`);
     console.log(`[CronPoll] Valid trigger IDs:`, validTriggers.map(t => t.id));
 
+    // Step 8b: Attach each user's preferred sportsbook (profiles.preferred_sportsbook)
+    // so the matching engine can filter odds per-user. Batch-fetch via the
+    // profile_triggers join table. A trigger may have multiple profile_triggers
+    // rows; we use the first/any. Defaults to "best" (no book filter) when missing.
+    const validTriggerIds = validTriggers.map(t => t.id);
+    const { data: ptRows } = await supabase
+      .from("profile_triggers")
+      .select("trigger_id, profiles(preferred_sportsbook)")
+      .in("trigger_id", validTriggerIds);
+
+    const preferredBookByTrigger = new Map<string, string>();
+    for (const row of ptRows || []) {
+      if (!preferredBookByTrigger.has(row.trigger_id)) {
+        const pref = (row.profiles as any)?.preferred_sportsbook;
+        preferredBookByTrigger.set(row.trigger_id, pref || "best");
+      }
+    }
+
+    for (const trigger of validTriggers) {
+      (trigger as any).preferredSportsbook =
+        preferredBookByTrigger.get(trigger.id) || "best";
+    }
+
     if (validTriggers.length === 0) {
       console.log("[CronPoll] No valid triggers after time period filtering");
       const durationMs = Date.now() - startTime;

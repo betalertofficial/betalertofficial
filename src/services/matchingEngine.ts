@@ -11,6 +11,7 @@ interface Trigger {
   odds_comparator: string;
   odds_value: number;
   bookmaker?: string | null;
+  preferredSportsbook?: string | null;
   frequency?: string; // 'once' or 'recurring'
   time_period_type?: string | null; // No longer used in matching engine
   time_period_min?: number | null; // No longer used in matching engine
@@ -169,6 +170,16 @@ export function findMatches(
       if (trigger.bookmaker && trigger.bookmaker.toLowerCase() !== odds.bookmaker.toLowerCase()) {
         bookmakerMismatches++;
         continue;
+      }
+
+      // 4b. Apply the user's preferred sportsbook (profile-level). 'best' = no filter;
+      //     deduplicateMatches keeps the most favorable odds across books.
+      const preferredBook = (trigger.preferredSportsbook || "best").toLowerCase();
+      if (preferredBook === "draftkings" || preferredBook === "fanduel") {
+        if (odds.bookmaker.toLowerCase() !== preferredBook) {
+          bookmakerMismatches++;
+          continue;
+        }
       }
 
       // 5. Check odds value meets condition
