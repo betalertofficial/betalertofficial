@@ -107,7 +107,7 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
             <GameCard
               key={g.event.id}
               g={g}
-              onClick={() => onSelectGame({ sportKey: g.sportKey, team: g.event.home_team, event: g.event })}
+              onSelectTeam={(team) => onSelectGame({ sportKey: g.sportKey, team, event: g.event })}
             />
           ))}
         </div>
@@ -116,15 +116,11 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
   );
 }
 
-function GameCard({ g, onClick }: { g: GameVM; onClick: () => void }) {
+function GameCard({ g, onSelectTeam }: { g: GameVM; onSelectTeam: (team: string) => void }) {
   const ev = g.event;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="text-left rounded-xl border border-gray-200 bg-white p-4 hover:shadow-sm hover:border-gray-300 transition w-full"
-    >
-      <div className="flex items-center justify-between mb-3">
+    <div className="rounded-xl border border-gray-200 bg-white p-3">
+      <div className="flex items-center justify-between mb-1 px-1">
         {g.live ? (
           <span className="text-[11px] font-bold text-red-500">● LIVE</span>
         ) : (
@@ -132,23 +128,47 @@ function GameCard({ g, onClick }: { g: GameVM; onClick: () => void }) {
         )}
         <span className="text-[10px] uppercase tracking-wide text-gray-400">{leagueLabel(g.sportKey)}</span>
       </div>
-      <TeamRow name={ev.away_team} score={g.awayScore} ml={g.awayMl} live={g.live} />
-      <div className="h-px bg-gray-100 my-2" />
-      <TeamRow name={ev.home_team} score={g.homeScore} ml={g.homeMl} live={g.live} />
-    </button>
+      <TeamRow name={ev.away_team} score={g.awayScore} ml={g.awayMl} live={g.live} onClick={() => onSelectTeam(ev.away_team)} />
+      <div className="h-px bg-gray-100 mx-1" />
+      <TeamRow name={ev.home_team} score={g.homeScore} ml={g.homeMl} live={g.live} onClick={() => onSelectTeam(ev.home_team)} />
+    </div>
   );
 }
 
-function TeamRow({ name, score, ml, live }: { name: string; score: number | null; ml: number | null; live: boolean }) {
+function TeamRow({
+  name,
+  score,
+  ml,
+  live,
+  onClick,
+}: {
+  name: string;
+  score: number | null;
+  ml: number | null;
+  live: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-sm font-semibold text-gray-900 truncate">{name}</span>
-      <div className="flex items-center gap-3 shrink-0">
-        <span className="text-xs text-gray-400 tabular-nums">{formatOdds(ml)}</span>
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Set an alert on ${name}`}
+      className="group relative flex items-center justify-between gap-2 w-full rounded-lg px-2 py-2 text-left transition-colors hover:bg-green-50 focus:outline-none focus-visible:bg-green-50"
+    >
+      {/* Green accent bar that appears on hover */}
+      <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-green-500 opacity-0 transition-opacity group-hover:opacity-100" />
+      <span className="truncate pl-1 text-sm font-semibold text-gray-900 transition-colors group-hover:text-green-700">
+        {name}
+      </span>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-green-600 opacity-0 transition-opacity group-hover:opacity-100">
+          + Set alert
+        </span>
+        <span className="text-xs tabular-nums text-gray-400">{formatOdds(ml)}</span>
         {live && score !== null ? (
-          <span className="text-base font-bold text-gray-900 tabular-nums w-6 text-right">{score}</span>
+          <span className="w-6 text-right text-base font-bold tabular-nums text-gray-900">{score}</span>
         ) : null}
       </div>
-    </div>
+    </button>
   );
 }
