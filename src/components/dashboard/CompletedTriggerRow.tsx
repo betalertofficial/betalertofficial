@@ -53,6 +53,58 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+/** Score line with the winner emphasized (black) and the loser de-emphasized (grey). */
+function ScoreLine({
+  awayTeam,
+  awayScore,
+  homeTeam,
+  homeScore,
+  detail,
+}: {
+  awayTeam: string;
+  awayScore: number | string;
+  homeTeam: string;
+  homeScore: number | string;
+  detail?: string | null;
+}) {
+  const a = Number(awayScore);
+  const h = Number(homeScore);
+  const awayWin = a > h;
+  const homeWin = h > a;
+  const win = "font-semibold text-gray-900";
+  const lose = "text-gray-400";
+  return (
+    <span className="text-sm">
+      <span className={awayWin ? win : lose}>
+        {awayTeam} {awayScore}
+      </span>
+      <span className="text-gray-300"> – </span>
+      <span className={homeWin ? win : lose}>
+        {homeTeam} {homeScore}
+      </span>
+      {detail ? <span className="text-gray-400"> · {detail}</span> : null}
+    </span>
+  );
+}
+
+function HitMissBadge({ won }: { won: boolean | null }) {
+  if (won === true) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-bold text-green-700">
+        <Check className="h-3 w-3" /> Hit
+      </span>
+    );
+  }
+  if (won === false) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">
+        <X className="h-3 w-3" /> Miss
+      </span>
+    );
+  }
+  return <span className="shrink-0 text-xs text-gray-400">Pending</span>;
+}
+
 /** Did the user's team win, based on the final score? null = can't determine. */
 function didTeamWin(team: string, final: any): boolean | null {
   if (!final) return null;
@@ -67,27 +119,6 @@ function didTeamWin(team: string, final: any): boolean | null {
   if (isHome && !isAway) return hs > as;
   if (isAway && !isHome) return as > hs;
   return null;
-}
-
-function OutcomeValue({ team, final }: { team: string; final: any }) {
-  const won = didTeamWin(team, final);
-  const scoreStr = `${final.awayTeam} ${final.awayScore} – ${final.homeTeam} ${final.homeScore}`;
-  return (
-    <div className="space-y-1">
-      {won === true ? (
-        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-bold text-green-700">
-          <Check className="h-3 w-3" /> Hit
-        </span>
-      ) : won === false ? (
-        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">
-          <X className="h-3 w-3" /> Miss
-        </span>
-      ) : (
-        <span className="text-xs text-gray-400">Result pending</span>
-      )}
-      <div className="text-sm font-medium text-gray-900">{scoreStr}</div>
-    </div>
-  );
 }
 
 export function CompletedTriggerRow({ profileTrigger, onDelete }: CompletedTriggerRowProps) {
@@ -163,10 +194,13 @@ export function CompletedTriggerRow({ profileTrigger, onDelete }: CompletedTrigg
           <DetailRow
             label="Scenario"
             value={
-              <span>
-                {espn!.awayTeam} {espn!.awayScore} – {espn!.homeTeam} {espn!.homeScore}
-                {espn!.detail ? <span className="text-gray-400"> · {espn!.detail}</span> : null}
-              </span>
+              <ScoreLine
+                awayTeam={espn!.awayTeam}
+                awayScore={espn!.awayScore}
+                homeTeam={espn!.homeTeam}
+                homeScore={espn!.homeScore}
+                detail={espn!.detail}
+              />
             }
           />
         )}
@@ -174,7 +208,17 @@ export function CompletedTriggerRow({ profileTrigger, onDelete }: CompletedTrigg
         {hasFinal && (
           <DetailRow
             label="Outcome"
-            value={<OutcomeValue team={trigger.team_or_player} final={finalScore} />}
+            value={
+              <div className="flex items-center justify-between gap-3">
+                <ScoreLine
+                  awayTeam={finalScore.awayTeam}
+                  awayScore={finalScore.awayScore}
+                  homeTeam={finalScore.homeTeam}
+                  homeScore={finalScore.homeScore}
+                />
+                <HitMissBadge won={didTeamWin(trigger.team_or_player, finalScore)} />
+              </div>
+            }
           />
         )}
       </div>
