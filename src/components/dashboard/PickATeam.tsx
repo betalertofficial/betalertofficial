@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { teamsService, type Team } from "@/services/teamsService";
 import { LEAGUES, getTeamLogoUrl } from "@/lib/leagues";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
@@ -18,16 +18,14 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
   const rowRef = useRef<HTMLDivElement>(null);
   const { logoFor } = useTeamLogos();
 
+  // Load all teams once; filter/breakdown happen client-side (case-insensitive),
+  // so it works regardless of how league is cased in the DB ("NBA" vs "nba").
   useEffect(() => {
     let active = true;
     setLoading(true);
     (async () => {
       try {
-        const teamLeague = LEAGUES.find((l) => l.sportKey === league)?.teamLeague;
-        const data =
-          league === "all" || !teamLeague
-            ? await teamsService.getAllTeams()
-            : await teamsService.getTeamsByLeague(teamLeague);
+        const data = await teamsService.getAllTeams();
         if (active) setTeams(data);
       } catch {
         if (active) setTeams([]);
@@ -38,12 +36,36 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
     return () => {
       active = false;
     };
+  }, []);
+
+  // Reset scroll to the start when the league filter changes.
+  useEffect(() => {
+    rowRef.current?.scrollTo({ left: 0 });
   }, [league]);
 
-  const pills = [{ key: "all", label: "All" }, ...LEAGUES.map((l) => ({ key: l.sportKey, label: l.label }))];
+  const teamLeagueOf = (t: Team) => (t.league || "").toLowerCase();
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: teams.length };
+    LEAGUES.forEach((l) => {
+      c[l.sportKey] = teams.filter((t) => teamLeagueOf(t) === l.teamLeague).length;
+    });
+    return c;
+  }, [teams]);
+
+  const pills = [
+    { key: "all", label: "All", count: counts.all },
+    ...LEAGUES.map((l) => ({ key: l.sportKey, label: l.label, count: counts[l.sportKey] || 0 })),
+  ];
+
+  const selectedTeamLeague = LEAGUES.find((l) => l.sportKey === league)?.teamLeague;
+  const filtered =
+    league === "all" || !selectedTeamLeague
+      ? teams
+      : teams.filter((t) => teamLeagueOf(t) === selectedTeamLeague);
 
   const sportKeyForTeam = (t: Team) =>
-    LEAGUES.find((l) => l.teamLeague === (t.league || "").toLowerCase())?.sportKey ?? "";
+    LEAGUES.find((l) => l.teamLeague === teamLeagueOf(t))?.sportKey ?? "";
 
   const slide = (dir: number) => rowRef.current?.scrollBy({ left: dir * 360, behavior: "smooth" });
 
@@ -77,14 +99,14 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
 
       {loading ? (
         <div className="text-sm text-gray-400 py-6">Loading teams…</div>
-      ) : teams.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="text-sm text-gray-400 py-6">No teams for this league yet.</div>
       ) : (
         <div
           ref={rowRef}
           className="flex flex-nowrap gap-3 overflow-x-auto pb-2 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {teams.map((t) => (
+          {filtered.map((t) => (
             <button
               key={t.id}
               type="button"
