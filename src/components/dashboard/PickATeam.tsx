@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { teamsService, type Team } from "@/services/teamsService";
 import { LEAGUES, getTeamLogoUrl } from "@/lib/leagues";
 import { LeaguePills } from "./LeaguePills";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export interface TeamSelection {
   sportKey: string;
@@ -13,6 +14,7 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
   const [league, setLeague] = useState<string>("all");
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -41,24 +43,51 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
   const sportKeyForTeam = (t: Team) =>
     LEAGUES.find((l) => l.teamLeague === (t.league || "").toLowerCase())?.sportKey ?? "";
 
+  const slide = (dir: number) => rowRef.current?.scrollBy({ left: dir * 360, behavior: "smooth" });
+
   return (
     <section>
-      <h2 className="text-xl font-bold text-gray-900 mb-3">Pick a Team</h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xl font-bold text-gray-900">Pick a Team</h2>
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={() => slide(-1)}
+            className="h-7 w-7 rounded-full border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50 disabled:opacity-40"
+            aria-label="Scroll teams left"
+          >
+            <ChevronLeft className="h-4 w-4 text-gray-500" />
+          </button>
+          <button
+            type="button"
+            onClick={() => slide(1)}
+            className="h-7 w-7 rounded-full border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50 disabled:opacity-40"
+            aria-label="Scroll teams right"
+          >
+            <ChevronRight className="h-4 w-4 text-gray-500" />
+          </button>
+        </div>
+      </div>
+
       <div className="mb-4">
         <LeaguePills pills={pills} value={league} onChange={setLeague} />
       </div>
+
       {loading ? (
         <div className="text-sm text-gray-400 py-6">Loading teams…</div>
       ) : teams.length === 0 ? (
         <div className="text-sm text-gray-400 py-6">No teams for this league yet.</div>
       ) : (
-        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
+        <div
+          ref={rowRef}
+          className="flex flex-nowrap gap-3 overflow-x-auto pb-2 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           {teams.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => onSelectTeam({ sportKey: sportKeyForTeam(t), team: t.name, teamId: t.id })}
-              className="flex flex-col items-center gap-2 p-2 rounded-xl border border-gray-200 bg-white hover:shadow-sm hover:border-gray-300 transition"
+              className="shrink-0 w-[84px] flex flex-col items-center gap-2 p-2 rounded-xl border border-gray-200 bg-white hover:shadow-sm hover:border-gray-300 transition"
             >
               <TeamLogo team={t} />
               <span className="text-[11px] text-gray-600 text-center leading-tight line-clamp-2">{t.name}</span>
