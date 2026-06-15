@@ -19,12 +19,6 @@ function getComparatorLabel(comp: string): string {
   return labels[comp] || comp;
 }
 
-function getDirectionLabel(comp: string): string {
-  if (comp === ">=" || comp === ">") return "or higher";
-  if (comp === "<=" || comp === "<") return "or lower";
-  return "";
-}
-
 function getBetTypeLabel(betType: string): string {
   const labels: Record<string, string> = {
     moneyline: "Moneyline", h2h: "Moneyline",
@@ -32,6 +26,19 @@ function getBetTypeLabel(betType: string): string {
     total: "Total", totals: "Total",
   };
   return labels[betType.toLowerCase()] ?? betType;
+}
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+/** "inning" + 3 → "3rd Inning or later" (matches the active tab). */
+function formatPeriod(type: string | null | undefined, min: number | null | undefined): string {
+  if (!type || !min) return "Any time";
+  const label = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+  return `${ordinal(Number(min))} ${label} or later`;
 }
 
 function timeAgo(dateStr: string): string {
@@ -171,12 +178,14 @@ export function CompletedTriggerRow({ profileTrigger, onDelete }: CompletedTrigg
         </Button>
       </div>
 
-      {/* Details (stacked) */}
+      {/* Details (stacked) — full condition mirrors the Active tab, then the result */}
       <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
         <DetailRow
           label="Condition"
-          value={`${getBetTypeLabel(trigger.bet_type)} ${getComparatorLabel(trigger.odds_comparator)} ${formatOdds(Number(trigger.odds_value))} ${getDirectionLabel(trigger.odds_comparator)}`}
+          value={`${getBetTypeLabel(trigger.bet_type)} ${getComparatorLabel(trigger.odds_comparator)} ${formatOdds(Number(trigger.odds_value))}`}
         />
+        <DetailRow label="Frequency" value={trigger.frequency === "once" ? "One time" : "Each game"} />
+        <DetailRow label="Period" value={formatPeriod(trigger.time_period_type, trigger.time_period_min)} />
 
         {latestMatch && (
           <DetailRow
