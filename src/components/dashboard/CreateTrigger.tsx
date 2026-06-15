@@ -18,6 +18,10 @@ export interface CreateTriggerProps {
   onOpenChange?: (open: boolean) => void;
   onBack?: () => void;
   onSuccess?: () => void;
+  initialSport?: string;
+  initialTeam?: string;
+  initialTeamId?: string;
+  initialEvent?: any;
 }
 
 interface TeamOdds {
@@ -90,7 +94,7 @@ const SPORT_DISPLAY_NAMES: Record<string, string> = {
   "baseball_mlb": "MLB"
 };
 
-export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateTriggerProps) {
+export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSport, initialTeam, initialTeamId, initialEvent }: CreateTriggerProps) {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -130,6 +134,19 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess }: CreateT
   const [frequency, setFrequency] = useState<TriggerFrequency>("once");
 
   const gameTimeOptions = GAME_TIME_CONTEXTS[selectedSport as keyof typeof GAME_TIME_CONTEXTS] || GAME_TIME_CONTEXTS.default;
+
+  // Seed selection state when opened pre-filled (dashboard quick-create)
+  useEffect(() => {
+    if (!open) return;
+    if (initialSport !== undefined) {
+      setSelectedSport(initialSport);
+      if (typeof SPORT_DISPLAY_NAMES !== "undefined") setSelectedSportTitle(SPORT_DISPLAY_NAMES[initialSport] || initialSport);
+    }
+    if (initialTeam !== undefined) setSelectedTeam(initialTeam);
+    if (initialTeamId !== undefined) setSelectedTeamId(initialTeamId);
+    if (initialEvent !== undefined) setSelectedEvent(initialEvent ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   useEffect(() => {
     loadSports();
