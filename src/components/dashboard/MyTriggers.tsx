@@ -20,19 +20,15 @@ export function MyTriggers() {
 
   const loadTriggers = async () => {
     if (!user) return;
-
     try {
       setLoading(true);
-
       const [activeData, completedRes, pollRes] = await Promise.all([
         triggerService.getUserTriggers(user.id),
         fetch("/api/user/completed-triggers", { credentials: "include" }),
         fetch("/api/user/poll-status"),
       ]);
-
       const completedJson = await completedRes.json();
       const pollJson = await pollRes.json();
-
       setTriggers(activeData.filter((t) => t.trigger?.status !== "completed"));
       setCompletedTriggers(completedJson.data ?? []);
       setLastPollAt(pollJson.last_poll_at ?? null);
@@ -50,6 +46,7 @@ export function MyTriggers() {
       setTriggers([]);
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, authLoading]);
 
   const handlePause = async (triggerId: string) => {
@@ -96,34 +93,27 @@ export function MyTriggers() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">My Triggers</h2>
-        <Button
-          onClick={() => setCreateModalOpen(true)}
-          disabled={remaining <= 0}
-          className="btn-primary"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Create Trigger
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-bold">My Triggers</h2>
+        <Button size="sm" onClick={() => setCreateModalOpen(true)} disabled={remaining <= 0}>
+          <Plus className="h-4 w-4 mr-1" />
+          New
         </Button>
       </div>
 
       {remaining <= 0 && (
-        <div className="bg-accent/10 border border-accent/20 text-accent px-4 py-3 rounded-lg">
-          You have reached your trigger limit. Pause or delete existing triggers to create new ones.
+        <div className="rounded-lg border border-accent/20 bg-accent/10 px-3 py-2 text-xs text-accent">
+          You've hit your trigger limit. Pause or delete one to add more.
         </div>
       )}
 
-      <Tabs
-        value={activeTab}
-        onValueChange={(v) => setActiveTab(v as "active" | "completed")}
-        className="w-full"
-      >
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "active" | "completed")} className="w-full">
         <div className="flex items-center gap-2">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid flex-1 grid-cols-2">
             <TabsTrigger value="active">Active ({activeTriggers.length})</TabsTrigger>
-            <TabsTrigger value="completed">Completed ({completedTriggers.length})</TabsTrigger>
+            <TabsTrigger value="completed">Done ({completedTriggers.length})</TabsTrigger>
           </TabsList>
           <Button
             size="icon"
@@ -133,23 +123,17 @@ export function MyTriggers() {
             disabled={loading}
             onClick={loadTriggers}
           >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </Button>
         </div>
 
-        <TabsContent value="active" className="mt-6">
+        <TabsContent value="active" className="mt-4">
           {activeTriggers.length === 0 ? (
-            <div className="text-center py-12 glass-panel rounded-lg">
-              <p className="text-muted-foreground mb-4">
-                No active triggers yet. Create your first trigger to get started!
-              </p>
-              <Button onClick={() => setCreateModalOpen(true)} className="btn-primary">
-                <Plus className="h-4 w-4 mr-2" />
-                Create Your First Trigger
+            <div className="rounded-xl border border-dashed border-gray-200 py-8 px-4 text-center">
+              <p className="mb-3 text-sm text-muted-foreground">No active triggers yet.</p>
+              <Button size="sm" onClick={() => setCreateModalOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                Create your first
               </Button>
             </div>
           ) : (
@@ -168,30 +152,22 @@ export function MyTriggers() {
           )}
         </TabsContent>
 
-        <TabsContent value="completed" className="mt-6">
+        <TabsContent value="completed" className="mt-4">
           {completedTriggers.length === 0 ? (
-            <div className="text-center py-12 glass-panel rounded-lg">
-              <p className="text-muted-foreground">No completed triggers yet.</p>
+            <div className="rounded-xl border border-dashed border-gray-200 py-8 px-4 text-center">
+              <p className="text-sm text-muted-foreground">No completed triggers yet.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
               {completedTriggers.map((pt) => (
-                <CompletedTriggerRow
-                  key={pt.id}
-                  profileTrigger={pt}
-                  onDelete={handleDelete}
-                />
+                <CompletedTriggerRow key={pt.id} profileTrigger={pt} onDelete={handleDelete} />
               ))}
             </div>
           )}
         </TabsContent>
       </Tabs>
 
-      <CreateTrigger
-        open={createModalOpen}
-        onOpenChange={setCreateModalOpen}
-        onSuccess={loadTriggers}
-      />
+      <CreateTrigger open={createModalOpen} onOpenChange={setCreateModalOpen} onSuccess={loadTriggers} />
     </div>
   );
 }
