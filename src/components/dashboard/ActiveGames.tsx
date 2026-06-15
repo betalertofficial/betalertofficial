@@ -161,9 +161,6 @@ function TeamRow({
         {name}
       </span>
       <div className="flex shrink-0 items-center gap-2">
-        <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-green-600 opacity-0 transition-opacity group-hover:opacity-100">
-          + Set alert
-        </span>
         <span className="text-xs tabular-nums text-gray-400">{formatOdds(ml)}</span>
         {live && score !== null ? (
           <span className="w-6 text-right text-base font-bold tabular-nums text-gray-900">{score}</span>
