@@ -46,7 +46,7 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
             scores.forEach((s) => { scoreById[s.id] = s; });
             for (const ev of events) {
               const live = isGameLive(ev.commence_time);
-              if (!live && !isWithinNextDay(ev.commence_time)) continue; // today / live only
+              if (!live && !isWithinNextDay(ev.commence_time)) continue; // live + upcoming today only
               const sc = scoreLookup(scoreById[ev.id]);
               all.push({
                 event: ev,
@@ -63,6 +63,7 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
           }
         })
       );
+      // Favor live games first, then soonest upcoming.
       all.sort(
         (a, b) =>
           Number(b.live) - Number(a.live) ||
@@ -92,14 +93,14 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
 
   return (
     <section>
-      <h2 className="text-xl font-bold text-gray-900 mb-3">Active Games</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-3">Active &amp; Upcoming Games</h2>
       <div className="mb-4">
         <LeaguePills pills={pills} value={league} onChange={setLeague} />
       </div>
       {loading ? (
         <div className="text-sm text-gray-400 py-6">Loading games…</div>
       ) : filtered.length === 0 ? (
-        <div className="text-sm text-gray-400 py-6">No games to show right now.</div>
+        <div className="text-sm text-gray-400 py-6">No active or upcoming games right now.</div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map((g) => (

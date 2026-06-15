@@ -134,6 +134,8 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
   const [frequency, setFrequency] = useState<TriggerFrequency>("once");
 
   const gameTimeOptions = GAME_TIME_CONTEXTS[selectedSport as keyof typeof GAME_TIME_CONTEXTS] || GAME_TIME_CONTEXTS.default;
+  // When opened pre-filled (dashboard quick-create), skip league/team pickers.
+  const isPrefilled = Boolean(initialTeam);
 
   // Seed selection state when opened pre-filled (dashboard quick-create)
   useEffect(() => {
@@ -618,6 +620,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
               </div>
             </div>
 
+            {!isPrefilled && (
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">League</Label>
               <Select value={selectedSport} onValueChange={(v) => {
@@ -640,6 +643,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
                 </SelectContent>
               </Select>
             </div>
+            )}
 
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">Sportsbook</Label>
@@ -664,7 +668,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
             </div>
 
             {/* Game Selection Grid */}
-            {selectedSport && events.length > 0 && !selectedTeam && (
+            {selectedSport && events.length > 0 && !selectedTeam && !isPrefilled && (
               <div className="space-y-3">
                 {/* Header: label + refresh */}
                 <div className="flex items-center justify-between">
@@ -927,7 +931,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
               </div>
             )}
 
-            {!selectedTeam && (
+            {!selectedTeam && !isPrefilled && (
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-foreground">Team</Label>
                 <div className="relative">
