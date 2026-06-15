@@ -1,6 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Trash2, Pause, Play, Clock } from "lucide-react";
+import { leagueLabel } from "@/lib/leagues";
+import type { ReactNode } from "react";
 import type { ProfileTrigger } from "@/types/database";
 
 interface ActiveTriggerRowProps {
@@ -16,17 +18,15 @@ function formatOdds(value: number): string {
 }
 
 function getComparatorLabel(comp: string): string {
-  const labels: Record<string, string> = {
-    ">=": "≥", "<=": "≤", ">": ">", "<": "<", "==": "=",
-  };
+  const labels: Record<string, string> = { ">=": "≥", "<=": "≤", ">": ">", "<": "<", "==": "=" };
   return labels[comp] || comp;
 }
 
 function getBetTypeLabel(betType: string): string {
   const labels: Record<string, string> = {
     moneyline: "Moneyline", h2h: "Moneyline",
-    spread: "Spread",      spreads: "Spread",
-    total: "Total",        totals: "Total",
+    spread: "Spread", spreads: "Spread",
+    total: "Total", totals: "Total",
   };
   return labels[betType.toLowerCase()] ?? betType;
 }
@@ -39,6 +39,15 @@ function timeAgo(dateStr: string): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
+      <div className="text-sm font-medium text-gray-900">{value}</div>
+    </div>
+  );
 }
 
 export function ActiveTriggerRow({
@@ -55,60 +64,49 @@ export function ActiveTriggerRow({
   const isPaused = trigger.status === "paused";
 
   return (
-    <div className="trigger-card animate-slide-in">
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            {/* Status dot */}
-            <div
-              className={`h-2 w-2 rounded-full shrink-0 ${
-                isActive ? "bg-green-500" : "bg-yellow-500"
-              }`}
-            />
-            <h3 className="font-bold text-lg leading-tight">{trigger.team_or_player}</h3>
+    <div className="rounded-xl border border-gray-200 bg-white p-3">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className={`h-2 w-2 rounded-full shrink-0 ${isActive ? "bg-green-500" : "bg-yellow-500"}`} />
+            <h3 className="font-bold text-sm leading-tight truncate">{trigger.team_or_player}</h3>
             <Badge
-              className={
+              className={`shrink-0 px-1.5 py-0 text-[10px] ${
                 isActive
-                  ? "bg-primary/10 text-primary border-primary/20 shrink-0"
-                  : "bg-yellow-500/10 text-yellow-600 border-yellow-500/20 shrink-0"
-              }
+                  ? "bg-green-500/10 text-green-700 border-green-500/20"
+                  : "bg-yellow-500/10 text-yellow-700 border-yellow-500/20"
+              }`}
             >
               {trigger.status}
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5 ml-4">{trigger.sport}</p>
+          <p className="mt-0.5 ml-3.5 flex items-center gap-1 text-xs text-muted-foreground">
+            <span>{leagueLabel(trigger.sport)}</span>
+            {lastPollAt && (
+              <>
+                <span>·</span>
+                <Clock className="h-3 w-3" />
+                <span>{timeAgo(lastPollAt)}</span>
+              </>
+            )}
+          </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 ml-4">
-          {/* Last checked */}
-          {lastPollAt && (
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              Checked {timeAgo(lastPollAt)}
-            </span>
-          )}
-
-          {/* Pause / Resume */}
+        <div className="flex shrink-0 items-center gap-1">
           <Button
             size="icon"
             variant="outline"
-            className="h-8 w-8"
+            className="h-7 w-7"
             title={isPaused ? "Resume" : "Pause"}
             onClick={() => (isPaused ? onResume(trigger.id) : onPause(trigger.id))}
           >
-            {isPaused ? (
-              <Play className="h-3.5 w-3.5" />
-            ) : (
-              <Pause className="h-3.5 w-3.5" />
-            )}
+            {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
           </Button>
-
-          {/* Delete */}
           <Button
             size="icon"
             variant="outline"
-            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+            className="h-7 w-7 text-destructive hover:bg-destructive/10"
             title="Delete"
             onClick={() => onDelete(trigger.id)}
           >
@@ -117,41 +115,21 @@ export function ActiveTriggerRow({
         </div>
       </div>
 
-      {/* ── Three-column detail strip ── */}
-      <div className="grid grid-cols-3 gap-6 pt-3 border-t border-border/40">
-        {/* 1 · Condition */}
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Your Condition
-          </p>
-          <p className="font-semibold">
-            {getBetTypeLabel(trigger.bet_type)}&nbsp;
-            {getComparatorLabel(trigger.odds_comparator)}&nbsp;
-            {formatOdds(Number(trigger.odds_value))}
-          </p>
-        </div>
-
-        {/* 2 · Frequency */}
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Frequency
-          </p>
-          <p className="font-semibold">
-            {trigger.frequency === "once" ? "One Time" : "Once Per Game"}
-          </p>
-        </div>
-
-        {/* 3 · Period */}
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Period
-          </p>
-          <p className="font-semibold text-sm">
-            {trigger.time_period_type && trigger.time_period_min
+      {/* Details (stacked, fits narrow column) */}
+      <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+        <DetailRow
+          label="Condition"
+          value={`${getBetTypeLabel(trigger.bet_type)} ${getComparatorLabel(trigger.odds_comparator)} ${formatOdds(Number(trigger.odds_value))}`}
+        />
+        <DetailRow label="When" value={trigger.frequency === "once" ? "One time" : "Each game"} />
+        <DetailRow
+          label="Period"
+          value={
+            trigger.time_period_type && trigger.time_period_min
               ? `${trigger.time_period_type} ${trigger.time_period_min}+`
-              : "Any Time"}
-          </p>
-        </div>
+              : "Any time"
+          }
+        />
       </div>
     </div>
   );
