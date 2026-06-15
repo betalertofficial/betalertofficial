@@ -434,7 +434,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
         frequency,
         status: "active",
         vendor_id: oddsApiVendor.id,
-        bookmaker: sportsbook,
+        bookmaker: null,
         time_period_type: timePeriodType,
         time_period_min: timePeriodMin
       });
@@ -449,7 +449,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
         frequency,
         status: "active",
         vendor_id: oddsApiVendor.id,
-        bookmaker: sportsbook,
+        bookmaker: null,
         time_period_type: timePeriodType,
         time_period_min: timePeriodMin
       });
@@ -597,29 +597,6 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
           </DialogHeader>
 
           <div className="space-y-6 py-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">Subject Type</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  type="button"
-                  variant={subjectType === "team" ? "default" : "outline"}
-                  className={subjectType === "team" ? "btn-primary" : "bg-card hover:bg-muted"}
-                  onClick={() => setSubjectType("team")}
-                >
-                  Team
-                </Button>
-                <Button
-                  type="button"
-                  variant={subjectType === "player" ? "default" : "outline"}
-                  className={subjectType === "player" ? "btn-primary" : "bg-card hover:bg-muted"}
-                  onClick={() => setSubjectType("player")}
-                  disabled
-                >
-                  Player
-                </Button>
-              </div>
-            </div>
-
             {!isPrefilled && (
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">League</Label>
@@ -644,28 +621,6 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
               </Select>
             </div>
             )}
-
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">Sportsbook</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  type="button"
-                  variant={sportsbook === "fanduel" ? "default" : "outline"}
-                  className={sportsbook === "fanduel" ? "btn-primary" : "bg-card hover:bg-muted"}
-                  onClick={() => setSportsbook("fanduel")}
-                >
-                  FanDuel
-                </Button>
-                <Button
-                  type="button"
-                  variant={sportsbook === "draftkings" ? "default" : "outline"}
-                  className={sportsbook === "draftkings" ? "btn-primary" : "bg-card hover:bg-muted"}
-                  onClick={() => setSportsbook("draftkings")}
-                >
-                  DraftKings
-                </Button>
-              </div>
-            </div>
 
             {/* Game Selection Grid */}
             {selectedSport && events.length > 0 && !selectedTeam && !isPrefilled && (
@@ -1084,10 +1039,8 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
                   onClick={() => handleBetTypeSelect("moneyline")}
                 >
                   <p className="text-sm font-semibold text-foreground">Moneyline</p>
-                  {teamOdds?.moneyline !== undefined ? (
+                  {teamOdds?.moneyline !== undefined && (
                     <p className="text-xl font-bold text-primary mt-0.5">{formatOdds(teamOdds.moneyline)}</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground mt-1">select a game first</p>
                   )}
                 </button>
                 <button
@@ -1098,13 +1051,11 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
                   onClick={() => handleBetTypeSelect("spread")}
                 >
                   <p className="text-sm font-semibold text-foreground">Spread</p>
-                  {teamOdds?.spread ? (
+                  {teamOdds?.spread && (
                     <div className="mt-0.5">
                       <span className="text-xl font-bold text-primary">{formatOdds(teamOdds.spread.odds)}</span>
                       <span className="text-sm text-muted-foreground ml-1.5">({formatOdds(teamOdds.spread.point)})</span>
                     </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground mt-1">select a game first</p>
                   )}
                 </button>
               </div>
