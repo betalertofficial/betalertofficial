@@ -31,8 +31,9 @@ export function leagueLabel(sportKey: string): string {
 
 /**
  * Real team logo via the ESPN CDN, derived from league + team abbreviation.
- * Returns null when we can't build a reliable URL (e.g. soccer or missing abbrev),
- * in which case the UI falls back to a colored initials chip.
+ * Returns null when we can't build a reliable URL (e.g. soccer or missing abbrev).
+ * Prefer the name-based lookup from useTeamLogos(); this is a fallback for the
+ * teams table (which has an abbrev but no logo URL).
  */
 export function getTeamLogoUrl(teamLeague: string, abbrev: string | null): string | null {
   if (!abbrev) return null;

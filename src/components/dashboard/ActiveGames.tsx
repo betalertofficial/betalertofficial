@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { oddsApiService, type OddsApiEvent, type OddsApiScore } from "@/services/oddsApiService";
 import { LEAGUES, leagueLabel } from "@/lib/leagues";
 import { isGameLive, formatGameTime, formatOdds, getTeamMoneyline, scoreLookup } from "@/lib/gameUtils";
+import { useTeamLogos } from "@/hooks/useTeamLogos";
+import { TeamLogoImg } from "./TeamLogoImg";
 import { LeaguePills } from "./LeaguePills";
 
 interface GameVM {
@@ -29,6 +31,7 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
   const [league, setLeague] = useState("all");
   const [games, setGames] = useState<GameVM[]>([]);
   const [loading, setLoading] = useState(true);
+  const { logoFor } = useTeamLogos();
 
   useEffect(() => {
     let active = true;
@@ -107,6 +110,7 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
             <GameCard
               key={g.event.id}
               g={g}
+              logoFor={logoFor}
               onSelectTeam={(team) => onSelectGame({ sportKey: g.sportKey, team, event: g.event })}
             />
           ))}
@@ -116,7 +120,15 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
   );
 }
 
-function GameCard({ g, onSelectTeam }: { g: GameVM; onSelectTeam: (team: string) => void }) {
+function GameCard({
+  g,
+  logoFor,
+  onSelectTeam,
+}: {
+  g: GameVM;
+  logoFor: (name?: string | null) => string | null;
+  onSelectTeam: (team: string) => void;
+}) {
   const ev = g.event;
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3">
@@ -128,21 +140,23 @@ function GameCard({ g, onSelectTeam }: { g: GameVM; onSelectTeam: (team: string)
         )}
         <span className="text-[10px] uppercase tracking-wide text-gray-400">{leagueLabel(g.sportKey)}</span>
       </div>
-      <TeamRow name={ev.away_team} score={g.awayScore} ml={g.awayMl} live={g.live} onClick={() => onSelectTeam(ev.away_team)} />
+      <TeamRow name={ev.away_team} logo={logoFor(ev.away_team)} score={g.awayScore} ml={g.awayMl} live={g.live} onClick={() => onSelectTeam(ev.away_team)} />
       <div className="h-px bg-gray-100 mx-1" />
-      <TeamRow name={ev.home_team} score={g.homeScore} ml={g.homeMl} live={g.live} onClick={() => onSelectTeam(ev.home_team)} />
+      <TeamRow name={ev.home_team} logo={logoFor(ev.home_team)} score={g.homeScore} ml={g.homeMl} live={g.live} onClick={() => onSelectTeam(ev.home_team)} />
     </div>
   );
 }
 
 function TeamRow({
   name,
+  logo,
   score,
   ml,
   live,
   onClick,
 }: {
   name: string;
+  logo: string | null;
   score: number | null;
   ml: number | null;
   live: boolean;
@@ -155,10 +169,12 @@ function TeamRow({
       title={`Set an alert on ${name}`}
       className="group relative flex items-center justify-between gap-2 w-full rounded-lg px-2 py-2 text-left transition-colors hover:bg-green-50 focus:outline-none focus-visible:bg-green-50"
     >
-      {/* Green accent bar that appears on hover */}
       <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-green-500 opacity-0 transition-opacity group-hover:opacity-100" />
-      <span className="truncate pl-1 text-sm font-semibold text-gray-900 transition-colors group-hover:text-green-700">
-        {name}
+      <span className="flex min-w-0 items-center gap-2 pl-1">
+        <TeamLogoImg url={logo} alt={name} className="h-5 w-5 shrink-0 object-contain" />
+        <span className="truncate text-sm font-semibold text-gray-900 transition-colors group-hover:text-green-700">
+          {name}
+        </span>
       </span>
       <div className="flex shrink-0 items-center gap-2">
         <span className="text-xs tabular-nums text-gray-400">{formatOdds(ml)}</span>

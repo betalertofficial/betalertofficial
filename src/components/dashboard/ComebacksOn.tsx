@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { LEAGUES, leagueLabel } from "@/lib/leagues";
 import { formatOdds } from "@/lib/gameUtils";
+import { useTeamLogos } from "@/hooks/useTeamLogos";
+import { TeamLogoImg } from "./TeamLogoImg";
 import { LeaguePills } from "./LeaguePills";
 
 interface Comeback {
@@ -30,6 +32,7 @@ export function ComebacksOn({ onSelect }: { onSelect: (sel: ComebackSelection) =
   const [league, setLeague] = useState("all");
   const [items, setItems] = useState<Comeback[]>([]);
   const [loading, setLoading] = useState(true);
+  const { logoFor } = useTeamLogos();
 
   useEffect(() => {
     let active = true;
@@ -86,15 +89,18 @@ export function ComebacksOn({ onSelect }: { onSelect: (sel: ComebackSelection) =
               className="text-left rounded-xl border border-gray-200 bg-white p-4 hover:shadow-sm hover:border-gray-300 transition w-full"
             >
               <div className="flex items-start justify-between mb-3 gap-2">
-                <span className="font-bold text-gray-900 truncate">{c.favorite_team}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <TeamLogoImg url={logoFor(c.favorite_team)} alt={c.favorite_team} className="h-6 w-6 shrink-0 object-contain" />
+                  <span className="font-bold text-gray-900 truncate">{c.favorite_team}</span>
+                </span>
                 <div className="text-right shrink-0">
                   <div className="text-[10px] text-gray-400 uppercase tracking-wide">Start {formatOdds(c.opening_ml)}</div>
                   <div className="text-sm font-bold text-green-600">Live {formatOdds(c.current_ml)}</div>
                 </div>
               </div>
               <div className="space-y-1 text-sm">
-                <ScoreRow name={c.away_team} score={c.away_score} />
-                <ScoreRow name={c.home_team} score={c.home_score} />
+                <ScoreRow name={c.away_team} logo={logoFor(c.away_team)} score={c.away_score} />
+                <ScoreRow name={c.home_team} logo={logoFor(c.home_team)} score={c.home_score} />
               </div>
               <div className="flex items-center justify-between mt-3">
                 <span className="text-[11px] font-bold text-red-500">
@@ -110,10 +116,13 @@ export function ComebacksOn({ onSelect }: { onSelect: (sel: ComebackSelection) =
   );
 }
 
-function ScoreRow({ name, score }: { name: string; score: number }) {
+function ScoreRow({ name, logo, score }: { name: string; logo: string | null; score: number }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-gray-700 truncate">{name}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        <TeamLogoImg url={logo} alt={name} className="h-4 w-4 shrink-0 object-contain" />
+        <span className="text-gray-700 truncate">{name}</span>
+      </span>
       <span className="font-bold text-gray-900 tabular-nums">{score}</span>
     </div>
   );
