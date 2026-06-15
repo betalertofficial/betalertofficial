@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, CheckCircle2, Clock } from "lucide-react";
+import { Trash2, CheckCircle2, Clock, Check, X } from "lucide-react";
 import { leagueLabel } from "@/lib/leagues";
 import type { ReactNode } from "react";
 import type { ProfileTrigger } from "@/types/database";
@@ -53,17 +53,59 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+/** Did the user's team win, based on the final score? null = can't determine. */
+function didTeamWin(team: string, final: any): boolean | null {
+  if (!final) return null;
+  const hs = Number(final.homeScore);
+  const as = Number(final.awayScore);
+  if (Number.isNaN(hs) || Number.isNaN(as)) return null;
+  const t = team.toLowerCase();
+  const home = (final.homeTeam || "").toLowerCase();
+  const away = (final.awayTeam || "").toLowerCase();
+  const isHome = !!home && (home.includes(t) || t.includes(home));
+  const isAway = !!away && (away.includes(t) || t.includes(away));
+  if (isHome && !isAway) return hs > as;
+  if (isAway && !isHome) return as > hs;
+  return null;
+}
+
+function OutcomeValue({ team, final }: { team: string; final: any }) {
+  const won = didTeamWin(team, final);
+  const scoreStr = `${final.awayTeam} ${final.awayScore} – ${final.homeTeam} ${final.homeScore}`;
+  return (
+    <div className="space-y-1">
+      {won === true ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-bold text-green-700">
+          <Check className="h-3 w-3" /> Hit
+        </span>
+      ) : won === false ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">
+          <X className="h-3 w-3" /> Miss
+        </span>
+      ) : (
+        <span className="text-xs text-gray-400">Result pending</span>
+      )}
+      <div className="text-sm font-medium text-gray-900">{scoreStr}</div>
+    </div>
+  );
+}
+
 export function CompletedTriggerRow({ profileTrigger, onDelete }: CompletedTriggerRowProps) {
   const trigger = profileTrigger.trigger;
   if (!trigger) return null;
 
-  const latestMatch = trigger.trigger_matches
+  const latestMatch: any = trigger.trigger_matches
     ?.slice()
     .sort((a, b) => new Date(b.matched_at).getTime() - new Date(a.matched_at).getTime())[0];
 
   const snapshot = latestMatch?.odds_snapshot;
-  const espn = snapshot?.scores_data;
-  const hasScore = espn?.found && espn.homeScore !== undefined && espn.awayScore !== undefined;
+  const espn = snapshot?.scores_data; // game state when the alert fired (SCENARIO)
+  const finalScore = latestMatch?.final; // latest snapshot for the game (OUTCOME)
+
+  const hasScenario =
+    espn?.found && espn.homeScore !== undefined && espn.awayScore !== undefined;
+  const hasFinal =
+    finalScore && finalScore.homeScore !== undefined && finalScore.awayScore !== undefined;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3">
@@ -117,15 +159,22 @@ export function CompletedTriggerRow({ profileTrigger, onDelete }: CompletedTrigg
           />
         )}
 
-        {hasScore && (
+        {hasScenario && (
           <DetailRow
-            label="Final"
+            label="Scenario"
             value={
               <span>
                 {espn!.awayTeam} {espn!.awayScore} – {espn!.homeTeam} {espn!.homeScore}
                 {espn!.detail ? <span className="text-gray-400"> · {espn!.detail}</span> : null}
               </span>
             }
+          />
+        )}
+
+        {hasFinal && (
+          <DetailRow
+            label="Outcome"
+            value={<OutcomeValue team={trigger.team_or_player} final={finalScore} />}
           />
         )}
       </div>

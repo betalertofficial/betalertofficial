@@ -7,7 +7,9 @@ import { verifyTelegramJWT } from "@/lib/jwt";
  * GET /api/user/completed-triggers
  *
  * Returns completed triggers for the authenticated user with their
- * trigger_matches and odds_snapshot data (including ESPN scores_data).
+ * trigger_matches + the odds_snapshot at match time (scores_data = the SCENARIO
+ * when the alert fired), AND a `final` score per match (latest snapshot for that
+ * game) so the UI can show the OUTCOME + a hit/miss.
  *
  * Uses the service role client to bypass RLS on trigger_matches and
  * odds_snapshots, which are not readable by the anon client.
@@ -17,7 +19,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // Verify Telegram JWT from cookie
   const cookies = parse(req.headers.cookie || "");
   const payload = verifyTelegramJWT(cookies.telegram_session || "");
   if (!payload) {
@@ -33,7 +34,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    // Step 1: Get the trigger IDs owned by this user
     const { data: profileTriggers, error: ptError } = await supabase
       .from("profile_triggers")
       .select("id, trigger_id, created_at")
@@ -48,7 +48,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ data: [] });
     }
 
-    // Step 2: Fetch completed triggers with matches + snapshot (service role bypasses RLS)
     const { data: triggers, error: tError } = await supabase
       .from("triggers")
       .select(`
@@ -71,6 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           matched_value,
           matched_at,
           odds_snapshot:odds_snapshots (
+            event_id,
             bookmaker,
             bet_type,
             odds_value,
@@ -87,18 +87,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ error: tError.message });
     }
 
-    // Re-shape into ProfileTrigger format so the client code stays the same
+    // Gather the event ids for all matches, then fetch the LATEST snapshot per
+    // event (the final score) to compute the outcome.
+    const eventIds = new Set<string>();
+    for (const t of triggers ?? []) {
+      for (const m of (t as any).trigger_matches ?? []) {
+        const eid = m.odds_snapshot?.event_id;
+        if (eid) eventIds.add(eid);
+      }
+    }
+
+    const finalByEvent: Record<string, any> = {};
+    if (eventIds.size > 0) {
+      const { data: snaps } = await supabase
+        .from("odds_snapshots")
+        .select("event_id, scores_data, snapshot_at")
+        .in("event_id", Array.from(eventIds))
+        .not("scores_data", "is", null)
+        .order("snapshot_at", { ascending: false });
+      for (const s of snaps ?? []) {
+        if (!finalByEvent[s.event_id]) finalByEvent[s.event_id] = s.scores_data;
+      }
+    }
+
     const ptById = Object.fromEntries(
       (profileTriggers ?? []).map((pt) => [pt.trigger_id, pt])
     );
 
-    const data = (triggers ?? []).map((trigger) => ({
-      id: ptById[trigger.id]?.id ?? trigger.id,
-      profile_id: payload.userId,
-      trigger_id: trigger.id,
-      created_at: ptById[trigger.id]?.created_at ?? trigger.created_at,
-      trigger,
-    }));
+    const data = (triggers ?? []).map((trigger: any) => {
+      const matches = (trigger.trigger_matches ?? []).map((m: any) => ({
+        ...m,
+        final: m.odds_snapshot?.event_id ? finalByEvent[m.odds_snapshot.event_id] ?? null : null,
+      }));
+      return {
+        id: ptById[trigger.id]?.id ?? trigger.id,
+        profile_id: payload.userId,
+        trigger_id: trigger.id,
+        created_at: ptById[trigger.id]?.created_at ?? trigger.created_at,
+        trigger: { ...trigger, trigger_matches: matches },
+      };
+    });
 
     return res.status(200).json({ data });
   } catch (err) {
