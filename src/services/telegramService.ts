@@ -54,6 +54,36 @@ function oddsDirection(comparator: string): string {
   return "";
 }
 
+// Build the live score line shown beneath the alert, mirroring the dashboard:
+// "📊 {awayTeam} {awayScore} – {homeTeam} {homeScore} · {detail}".
+// Returns null when there's no usable live score so the caller can omit it.
+function formatEspnLiveLine(espnData?: {
+  homeTeam?: string;
+  awayTeam?: string;
+  homeScore?: number;
+  awayScore?: number;
+  period?: number;
+  detail?: string;
+  state?: string;
+}): string | null {
+  if (!espnData) return null;
+
+  const { homeTeam, awayTeam, homeScore, awayScore, detail } = espnData;
+
+  // Require both scores to render the score line; otherwise there's nothing
+  // dashboard-like to show.
+  if (homeScore === undefined || awayScore === undefined) return null;
+
+  const away = awayTeam ? `${awayTeam} ${awayScore}` : `${awayScore}`;
+  const home = homeTeam ? `${homeTeam} ${homeScore}` : `${homeScore}`;
+
+  let line = `📊 ${away} – ${home}`;
+  if (detail) {
+    line += ` · ${detail}`;
+  }
+  return line;
+}
+
 // Format an alert message for Telegram
 export function formatTelegramAlert(alert: {
   game: string;
@@ -62,12 +92,16 @@ export function formatTelegramAlert(alert: {
   currentOdds: number;
   targetOdds: number;
   comparator?: string;
+  // Live ESPN score, mirroring the dashboard. Fields match the ESPNScore shape
+  // returned by espnService.findGameScore (camelCase).
   espnData?: {
-    home_score?: number;
-    away_score?: number;
+    homeTeam?: string;
+    awayTeam?: string;
+    homeScore?: number;
+    awayScore?: number;
     period?: number;
     detail?: string;
-    status?: string;
+    state?: string;
   };
 }): string {
   const direction = alert.comparator ? oddsDirection(alert.comparator) : "";
@@ -80,30 +114,15 @@ export function formatTelegramAlert(alert: {
 *Target Odds:* ${alert.targetOdds}${direction}
 *Current Odds:* ${alert.currentOdds}`;
 
-  // Add ESPN live game data if available
-  if (alert.espnData) {
-    const { home_score, away_score, period, detail, status } = alert.espnData;
-    
-    message += '\n\n*Live Game Info:*';
-    
-    if (home_score !== undefined && away_score !== undefined) {
-      message += `\n📊 Score: ${away_score} - ${home_score}`;
-    }
-    
-    if (period !== undefined && period > 0) {
-      message += `\n⏱️ Period: ${period}`;
-    }
-    
-    if (detail) {
-      message += `\n🎮 Status: ${detail}`;
-    }
-    
-    if (status) {
-      message += `\n⚡ Game: ${status}`;
-    }
+  // Add a single live line mirroring the dashboard, e.g.
+  // "📊 Yankees 3 – Red Sox 2 · Top 7th". Only rendered when we actually have
+  // a live score; missing pieces are omitted so we never print "undefined".
+  const liveLine = formatEspnLiveLine(alert.espnData);
+  if (liveLine) {
+    message += `\n\n${liveLine}`;
   }
 
   message += '\n\nTime to place your bet! 🎯';
-  
+
   return message;
 }
