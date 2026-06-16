@@ -10,6 +10,11 @@ const ESPN_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports";
 const SPORT_ENDPOINTS: Record<string, string> = {
   "basketball_nba": `${ESPN_BASE_URL}/basketball/nba/scoreboard`,
   "baseball_mlb": `${ESPN_BASE_URL}/baseball/mlb/scoreboard`,
+  // Soccer: ESPN exposes the live match minute via status.displayClock ("63'")
+  // and status.type.detail/shortDetail, which findGameScore returns as clock/detail.
+  "soccer_epl": `${ESPN_BASE_URL}/soccer/eng.1/scoreboard`,
+  "soccer_usa_mls": `${ESPN_BASE_URL}/soccer/usa.1/scoreboard`,
+  "soccer_uefa_champs_league": `${ESPN_BASE_URL}/soccer/uefa.champions/scoreboard`,
 };
 
 export interface ESPNScore {
