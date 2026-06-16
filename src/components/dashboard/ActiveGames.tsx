@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { oddsApiService, type OddsApiEvent, type OddsApiScore } from "@/services/oddsApiService";
 import { LEAGUES, leagueLabel } from "@/lib/leagues";
-import { isGameLive, formatGameTime, formatOdds, getTeamMoneyline, scoreLookup } from "@/lib/gameUtils";
+import { isGameLive, isGameToday, formatGameTime, formatOdds, getTeamMoneyline, scoreLookup } from "@/lib/gameUtils";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
+import { useEspnLive, type EspnSituation } from "@/hooks/useEspnLive";
 import { TeamLogoImg } from "./TeamLogoImg";
 import { LeaguePills } from "./LeaguePills";
+import { ChevronDown, ChevronUp } from "lucide-react";
+
+type Bucket = "live" | "today" | "tomorrow";
 
 interface GameVM {
   event: OddsApiEvent;
   sportKey: string;
-  live: boolean;
+  bucket: Bucket;
   homeScore: number | null;
   awayScore: number | null;
   homeMl: number | null;
@@ -22,15 +26,26 @@ export interface GameSelection {
   event: OddsApiEvent;
 }
 
-function isWithinNextDay(commence: string) {
-  const diff = new Date(commence).getTime() - Date.now();
-  return diff > 0 && diff < 24 * 60 * 60 * 1000;
+function isTomorrow(commence: string) {
+  const d = new Date(commence);
+  const t = new Date();
+  t.setDate(t.getDate() + 1);
+  return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
+}
+
+function bucketFor(commence: string): Bucket | null {
+  if (isGameLive(commence)) return "live";
+  const future = new Date(commence).getTime() > Date.now();
+  if (future && isGameToday(commence)) return "today";
+  if (isTomorrow(commence)) return "tomorrow";
+  return null;
 }
 
 export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelection) => void }) {
   const [league, setLeague] = useState("all");
   const [games, setGames] = useState<GameVM[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showTomorrow, setShowTomorrow] = useState(false);
   const { logoFor } = useTeamLogos();
 
   useEffect(() => {
@@ -48,13 +63,13 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
             const scoreById: Record<string, OddsApiScore> = {};
             scores.forEach((s) => { scoreById[s.id] = s; });
             for (const ev of events) {
-              const live = isGameLive(ev.commence_time);
-              if (!live && !isWithinNextDay(ev.commence_time)) continue; // live + upcoming today only
+              const bucket = bucketFor(ev.commence_time);
+              if (!bucket) continue;
               const sc = scoreLookup(scoreById[ev.id]);
               all.push({
                 event: ev,
                 sportKey: lg.sportKey,
-                live,
+                bucket,
                 homeScore: sc[ev.home_team] ?? null,
                 awayScore: sc[ev.away_team] ?? null,
                 homeMl: getTeamMoneyline(ev, ev.home_team),
@@ -66,12 +81,6 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
           }
         })
       );
-      // Favor live games first, then soonest upcoming.
-      all.sort(
-        (a, b) =>
-          Number(b.live) - Number(a.live) ||
-          new Date(a.event.commence_time).getTime() - new Date(b.event.commence_time).getTime()
-      );
       if (active) {
         setGames(all);
         setLoading(false);
@@ -81,6 +90,18 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
       active = false;
     };
   }, []);
+
+  // Live ESPN detail (inning/period + MLB situation) only for leagues with live games.
+  const liveSportKeys = useMemo(
+    () => Array.from(new Set(games.filter((g) => g.bucket === "live").map((g) => g.sportKey))),
+    [games]
+  );
+  const { getLive } = useEspnLive(liveSportKeys);
+
+  const byCommence = (a: GameVM, b: GameVM) =>
+    new Date(a.event.commence_time).getTime() - new Date(b.event.commence_time).getTime();
+
+  const inLeague = (g: GameVM) => league === "all" || g.sportKey === league;
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: games.length };
@@ -92,7 +113,11 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
     { key: "all", label: "All", count: counts.all },
     ...LEAGUES.map((l) => ({ key: l.sportKey, label: l.label, count: counts[l.sportKey] || 0 })),
   ];
-  const filtered = league === "all" ? games : games.filter((g) => g.sportKey === league);
+
+  const liveAndToday = games
+    .filter((g) => inLeague(g) && (g.bucket === "live" || g.bucket === "today"))
+    .sort((a, b) => (a.bucket === "live" ? 0 : 1) - (b.bucket === "live" ? 0 : 1) || byCommence(a, b));
+  const tomorrow = games.filter((g) => inLeague(g) && g.bucket === "tomorrow").sort(byCommence);
 
   return (
     <section>
@@ -100,21 +125,54 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
       <div className="mb-4">
         <LeaguePills pills={pills} value={league} onChange={setLeague} />
       </div>
+
       {loading ? (
         <div className="text-sm text-gray-400 py-6">Loading games…</div>
-      ) : filtered.length === 0 ? (
+      ) : liveAndToday.length === 0 && tomorrow.length === 0 ? (
         <div className="text-sm text-gray-400 py-6">No active or upcoming games right now.</div>
       ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filtered.map((g) => (
-            <GameCard
-              key={g.event.id}
-              g={g}
-              logoFor={logoFor}
-              onSelectTeam={(team) => onSelectGame({ sportKey: g.sportKey, team, event: g.event })}
-            />
-          ))}
-        </div>
+        <>
+          {liveAndToday.length > 0 && (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {liveAndToday.map((g) => (
+                <GameCard
+                  key={g.event.id}
+                  g={g}
+                  logoFor={logoFor}
+                  getLive={getLive}
+                  onSelectTeam={(team) => onSelectGame({ sportKey: g.sportKey, team, event: g.event })}
+                />
+              ))}
+            </div>
+          )}
+
+          {tomorrow.length > 0 && (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => setShowTomorrow((v) => !v)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                {showTomorrow ? "Hide" : "Show"} games for tomorrow ({tomorrow.length})
+                {showTomorrow ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+
+              {showTomorrow && (
+                <div className="mt-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {tomorrow.map((g) => (
+                    <GameCard
+                      key={g.event.id}
+                      g={g}
+                      logoFor={logoFor}
+                      getLive={getLive}
+                      onSelectTeam={(team) => onSelectGame({ sportKey: g.sportKey, team, event: g.event })}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
     </section>
   );
@@ -123,26 +181,40 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
 function GameCard({
   g,
   logoFor,
+  getLive,
   onSelectTeam,
 }: {
   g: GameVM;
   logoFor: (name?: string | null) => string | null;
+  getLive: (away: string, home: string) => { detail: string; situation: EspnSituation | null } | null;
   onSelectTeam: (team: string) => void;
 }) {
   const ev = g.event;
+  const live = g.bucket === "live";
+  const espn = live ? getLive(ev.away_team, ev.home_team) : null;
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3">
       <div className="flex items-center justify-between mb-1 px-1">
-        {g.live ? (
-          <span className="text-[11px] font-bold text-red-500">● LIVE</span>
+        {live ? (
+          <span className="flex items-center gap-1.5 text-[11px] font-bold">
+            <span className="text-red-500">● LIVE</span>
+            {espn?.detail ? <span className="font-semibold text-orange-500">· {espn.detail}</span> : null}
+          </span>
         ) : (
-          <span className="text-[11px] font-medium text-gray-400">{formatGameTime(ev.commence_time)}</span>
+          <span className="text-[11px] font-medium text-gray-400">
+            {g.bucket === "tomorrow" ? "Tomorrow · " : ""}
+            {formatGameTime(ev.commence_time)}
+          </span>
         )}
         <span className="text-[10px] uppercase tracking-wide text-gray-400">{leagueLabel(g.sportKey)}</span>
       </div>
-      <TeamRow name={ev.away_team} logo={logoFor(ev.away_team)} score={g.awayScore} ml={g.awayMl} live={g.live} onClick={() => onSelectTeam(ev.away_team)} />
+
+      <TeamRow name={ev.away_team} logo={logoFor(ev.away_team)} score={g.awayScore} ml={g.awayMl} live={live} onClick={() => onSelectTeam(ev.away_team)} />
       <div className="h-px bg-gray-100 mx-1" />
-      <TeamRow name={ev.home_team} logo={logoFor(ev.home_team)} score={g.homeScore} ml={g.homeMl} live={g.live} onClick={() => onSelectTeam(ev.home_team)} />
+      <TeamRow name={ev.home_team} logo={logoFor(ev.home_team)} score={g.homeScore} ml={g.homeMl} live={live} onClick={() => onSelectTeam(ev.home_team)} />
+
+      {live && espn?.situation ? <SituationStrip situation={espn.situation} /> : null}
     </div>
   );
 }
@@ -180,5 +252,45 @@ function TeamRow({
         ) : null}
       </div>
     </button>
+  );
+}
+
+function Bases({ situation }: { situation: EspnSituation }) {
+  const base = (on?: boolean) =>
+    `absolute h-2.5 w-2.5 rounded-sm ${on ? "bg-yellow-400" : "border border-gray-300"}`;
+  return (
+    <div className="relative shrink-0" style={{ width: 30, height: 24 }}>
+      {/* 2nd base (top) */}
+      <div className={base(situation.onSecond)} style={{ top: 0, left: "50%", transform: "translateX(-50%) rotate(45deg)" }} />
+      {/* 3rd base (left) */}
+      <div className={base(situation.onThird)} style={{ top: "50%", left: 0, transform: "translateY(-50%) rotate(45deg)" }} />
+      {/* 1st base (right) */}
+      <div className={base(situation.onFirst)} style={{ top: "50%", right: 0, transform: "translateY(-50%) rotate(45deg)" }} />
+    </div>
+  );
+}
+
+function SituationStrip({ situation }: { situation: EspnSituation }) {
+  const rows = [
+    { label: "B", max: 4, count: situation.balls ?? 0, color: "bg-green-500" },
+    { label: "S", max: 3, count: situation.strikes ?? 0, color: "bg-yellow-500" },
+    { label: "O", max: 3, count: situation.outs ?? 0, color: "bg-red-500" },
+  ];
+  return (
+    <div className="mt-2 flex items-center justify-center gap-4 border-t border-gray-100 pt-2">
+      <Bases situation={situation} />
+      <div className="flex items-center gap-2.5">
+        {rows.map(({ label, max, count, color }) => (
+          <div key={label} className="flex items-center gap-1">
+            <span className="text-[10px] font-medium text-gray-400">{label}</span>
+            <div className="flex gap-0.5">
+              {Array.from({ length: max }).map((_, i) => (
+                <div key={i} className={`h-1.5 w-1.5 rounded-full ${i < count ? color : "bg-gray-200"}`} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
