@@ -16,7 +16,7 @@ export const LEAGUES: LeagueConfig[] = [
   { label: "NBA", sportKey: "basketball_nba", teamLeague: "nba", espnLeague: "nba" },
   { label: "NFL", sportKey: "americanfootball_nfl", teamLeague: "nfl", espnLeague: "nfl" },
   { label: "NHL", sportKey: "icehockey_nhl", teamLeague: "nhl", espnLeague: "nhl" },
-  { label: "Soccer", sportKey: "soccer_epl", teamLeague: "epl", espnLeague: null },
+  { label: "World Cup", sportKey: "soccer_fifa_world_cup", teamLeague: "fifa_world_cup", espnLeague: null },
 ];
 
 export const SPORT_KEYS = LEAGUES.map((l) => l.sportKey);

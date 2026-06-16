@@ -10,7 +10,7 @@ export interface EspnSituation {
 }
 
 export interface EspnLiveEntry {
-  detail: string; // e.g. "Top 7th", "Q3 5:21"
+  detail: string; // e.g. "Top 7th", "Q3 5:21", "45'+2'"
   situation: EspnSituation | null; // MLB only
   homeTeam: string;
   awayTeam: string;
@@ -23,6 +23,7 @@ const SCOREBOARD_PATH: Record<string, string> = {
   americanfootball_nfl: "football/nfl",
   icehockey_nhl: "hockey/nhl",
   soccer_epl: "soccer/eng.1",
+  soccer_fifa_world_cup: "soccer/fifa.world",
 };
 
 function norm(s?: string) {

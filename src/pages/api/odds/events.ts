@@ -18,6 +18,7 @@ const ALLOWED_SPORTS = new Set<string>([
   "icehockey_nhl",
   "soccer_epl",
   "soccer_usa_mls",
+  "soccer_fifa_world_cup",
 ]);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
