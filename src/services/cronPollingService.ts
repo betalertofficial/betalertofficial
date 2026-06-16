@@ -366,19 +366,34 @@ export async function runCronPoll(
 
           // Use the period field directly from ESPN
           if (espnData.period !== undefined && espnData.period !== null) {
-            currentPeriod = espnData.period;
-            
             // Infer period type from sport/league (don't parse detail string)
             const sport = event.league_key.toLowerCase();
             
             if (sport.includes('baseball') || sport.includes('mlb')) {
+              currentPeriod = espnData.period;
               currentPeriodType = 'inning';
             } else if (sport.includes('basketball') || sport.includes('nba')) {
+              currentPeriod = espnData.period;
               currentPeriodType = 'quarter';
             } else if (sport.includes('hockey') || sport.includes('nhl')) {
+              currentPeriod = espnData.period;
               currentPeriodType = 'period';
-            } else if (sport.includes('soccer') || sport.includes('football')) {
-              currentPeriodType = 'half';
+            } else if (sport.includes('soccer')) {
+              // Soccer triggers store time_period_type='minute' + the minute
+              // (10/20/30/45/60/75), so gate on the live MATCH MINUTE, not the
+              // half. ESPN exposes the running minute in status.type.detail /
+              // displayClock (returned as espnData.detail / espnData.clock),
+              // e.g. "63'" or "45'+2'". Parse the leading integer; stoppage
+              // time like 45'+2' floors to the regulation minute (45), which is
+              // the correct semantics for a ">= time_period_min" threshold.
+              const minuteSource = `${espnData.detail ?? ''} ${espnData.clock ?? ''}`;
+              const minuteMatch = minuteSource.match(/(\d+)\s*'/) || minuteSource.match(/(\d+)/);
+              if (minuteMatch) {
+                currentPeriod = parseInt(minuteMatch[1], 10);
+                currentPeriodType = 'minute';
+              } else {
+                console.log(`[CronPoll] ⚠️ Soccer minute unparseable from detail="${espnData.detail}" clock="${espnData.clock}" for event ${event.event_id}`);
+              }
             }
           }
 
