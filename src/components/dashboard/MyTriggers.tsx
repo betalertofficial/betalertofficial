@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Loader2, RefreshCw } from "lucide-react";
 import type { ProfileTrigger } from "@/types/database";
 
-export function MyTriggers() {
+export function MyTriggers({ refreshSignal }: { refreshSignal?: number } = {}) {
   const { user, profile, loading: authLoading } = useAuth();
   const [triggers, setTriggers] = useState<ProfileTrigger[]>([]);
   const [completedTriggers, setCompletedTriggers] = useState<ProfileTrigger[]>([]);
@@ -46,8 +46,9 @@ export function MyTriggers() {
       setTriggers([]);
       setLoading(false);
     }
+    // Reload when a trigger is created elsewhere (e.g. the dashboard quick-create).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, authLoading]);
+  }, [user?.id, authLoading, refreshSignal]);
 
   const handlePause = async (triggerId: string) => {
     try {

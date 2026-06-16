@@ -37,9 +37,11 @@ function ordinal(n: number): string {
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 }
 
-/** "inning" + 3 → "3rd Inning or later" (works across sports: quarter/period/half). */
+/** "inning"+3 → "3rd Inning or later"; "minute"+10 → "10 min or later" (soccer). */
 function formatPeriod(type: string | null | undefined, min: number | null | undefined): string {
   if (!type || !min) return "Any time";
+  const t = type.toLowerCase();
+  if (t.startsWith("min")) return `${min} min or later`;
   const label = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
   return `${ordinal(Number(min))} ${label} or later`;
 }

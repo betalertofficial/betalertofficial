@@ -28,6 +28,7 @@ export default function Dashboard() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [triggerOpen, setTriggerOpen] = useState(false);
   const [prefill, setPrefill] = useState<Prefill>({});
+  const [triggerRefresh, setTriggerRefresh] = useState(0);
 
   // Handle Telegram auth callback from URL params
   useEffect(() => {
@@ -139,7 +140,7 @@ export default function Dashboard() {
 
             {/* Right column: My Triggers drawer */}
             <aside className="lg:sticky lg:top-20">
-              <MyTriggers />
+              <MyTriggers refreshSignal={triggerRefresh} />
             </aside>
           </div>
         </div>
@@ -165,7 +166,10 @@ export default function Dashboard() {
         initialTeam={prefill.team}
         initialTeamId={prefill.teamId}
         initialEvent={prefill.event}
-        onSuccess={() => setTriggerOpen(false)}
+        onSuccess={() => {
+          setTriggerOpen(false);
+          setTriggerRefresh((n) => n + 1);
+        }}
       />
     </>
   );
