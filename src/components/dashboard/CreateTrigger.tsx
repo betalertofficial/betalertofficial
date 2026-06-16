@@ -87,6 +87,19 @@ const GAME_TIME_CONTEXTS = {
   ]
 };
 
+// Soccer leagues (key prefix "soccer_*") share the same in-game minute thresholds.
+const SOCCER_GAME_TIME_CONTEXT = [
+  { value: "anytime", label: "Anytime" },
+  { value: "pregame", label: "Pre-game" },
+  { value: "live", label: "Live only" },
+  { value: "m10_or_later", label: "10 min or later" },
+  { value: "m20_or_later", label: "20 min or later" },
+  { value: "m30_or_later", label: "30 min or later" },
+  { value: "m45_or_later", label: "45 min or later" },
+  { value: "m60_or_later", label: "60 min or later" },
+  { value: "m75_or_later", label: "75 min or later" }
+];
+
 const SPORT_DISPLAY_NAMES: Record<string, string> = {
   "basketball_nba": "NBA",
   "americanfootball_nfl": "NFL",
@@ -133,7 +146,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
   const [gameTimeContext, setGameTimeContext] = useState("anytime");
   const [frequency, setFrequency] = useState<TriggerFrequency>("once");
 
-  const gameTimeOptions = GAME_TIME_CONTEXTS[selectedSport as keyof typeof GAME_TIME_CONTEXTS] || GAME_TIME_CONTEXTS.default;
+  const gameTimeOptions = selectedSport.startsWith("soccer")
+    ? SOCCER_GAME_TIME_CONTEXT
+    : (GAME_TIME_CONTEXTS[selectedSport as keyof typeof GAME_TIME_CONTEXTS] || GAME_TIME_CONTEXTS.default);
   // When opened pre-filled (dashboard quick-create), skip league/team pickers.
   const isPrefilled = Boolean(initialTeam);
 
@@ -417,7 +432,10 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
             baseball_mlb: { i: "inning" }
           };
 
-          const sportMap = periodTypeMap[selectedSport];
+          // Soccer leagues (key prefix "soccer_*") use in-game minute thresholds.
+          const sportMap = selectedSport.startsWith("soccer")
+            ? { m: "minute" }
+            : periodTypeMap[selectedSport];
           if (sportMap && sportMap[periodPrefix]) {
             timePeriodType = sportMap[periodPrefix];
           }
