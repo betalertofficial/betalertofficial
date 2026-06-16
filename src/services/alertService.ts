@@ -131,7 +131,7 @@ export const alertService = {
       }
 
       const message = `Trigger Hit! ${trigger.team_or_player} ${trigger.bet_type} ${trigger.odds_comparator} ${trigger.odds_value}. Found: ${snapshot.odds_value} at ${snapshot.bookmaker}`;
-      
+
       // Create alert record first
       const { data: alert, error: alertError } = await supabaseClient
         .from("alerts")
@@ -154,19 +154,24 @@ export const alertService = {
       // Route to Telegram if telegram_chat_id exists
       if (profile.telegram_chat_id) {
         console.log(`Routing alert to Telegram for user ${profileId}`);
-        
-        // Extract ESPN game data from scores_data if available
+
+        // Extract ESPN game data from scores_data if available.
+        // scores_data holds the full ESPNScore object captured per-event in the
+        // cron (espnService.findGameScore) and persisted on the snapshot, so its
+        // fields are camelCase (homeScore/awayScore/state), not snake_case.
         let espnData = undefined;
         if (snapshot.scores_data) {
           espnData = {
-            home_score: snapshot.scores_data.home_score,
-            away_score: snapshot.scores_data.away_score,
+            homeTeam: snapshot.scores_data.homeTeam,
+            awayTeam: snapshot.scores_data.awayTeam,
+            homeScore: snapshot.scores_data.homeScore,
+            awayScore: snapshot.scores_data.awayScore,
             period: snapshot.scores_data.period,
             detail: snapshot.scores_data.detail,
-            status: snapshot.scores_data.status,
+            state: snapshot.scores_data.state,
           };
         }
-        
+
         const telegramMessage = formatTelegramAlert({
           game: trigger.team_or_player,
           market: trigger.bet_type,
@@ -196,7 +201,7 @@ export const alertService = {
       } else {
         // Fallback to Zapier webhook
         console.log(`No Telegram chat_id, routing to Zapier for user ${profileId}`);
-        
+
         const payload = {
           trigger_id: trigger.id,
           trigger_match_id: triggerMatchId || "",
@@ -213,7 +218,7 @@ export const alertService = {
         };
 
         const response = await this.sendWebhookAlert(payload);
-        
+
         // Update alert status
         await supabaseClient
           .from("alerts")
