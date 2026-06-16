@@ -16,6 +16,7 @@ const ESPN_LEAGUES = [
   { path: "football/nfl", sportKey: "americanfootball_nfl" },
   { path: "hockey/nhl", sportKey: "icehockey_nhl" },
   { path: "soccer/eng.1", sportKey: "soccer_epl" },
+  { path: "soccer/fifa.world", sportKey: "soccer_fifa_world_cup" },
 ];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
