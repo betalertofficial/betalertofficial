@@ -65,8 +65,13 @@ async function fetchLiveOddsForSports(
     try {
       console.log(`[CronPoll] Fetching odds for ${sport}...`);
       
+      // includeLinks=true makes DraftKings/FanDuel responses carry deep links:
+      //   bookmaker.link → the game/event page on the book
+      //   outcome.link   → a DIRECT bet-slip deep link for that exact selection
+      // (universal links that open the sportsbook app on mobile). Captured
+      // per-row below so each alert can deep-link to its matched book.
       const response = await fetch(
-        `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${oddsApiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=fanduel,draftkings&oddsFormat=american`
+        `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${oddsApiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=fanduel,draftkings&oddsFormat=american&includeLinks=true`
       );
 
       if (!response.ok) {
@@ -85,7 +90,10 @@ async function fetchLiveOddsForSports(
           continue;
         }
 
-        const eventData = {
+        // Shared per-event fields. Per-row link fields (bet_link/event_link)
+        // are attached inside the outcome loop below so each snapshot row
+        // carries its own correct bet-slip link (it is per outcome/team).
+        const baseEventData = {
           id: event.id,
           sport_key: event.sport_key,
           sport_title: event.sport_title,
@@ -97,7 +105,9 @@ async function fetchLiveOddsForSports(
 
         for (const bookmaker of event.bookmakers || []) {
           const normalizedBookmaker = normalizeBookmaker(bookmaker.key);
-          
+          // bookmaker-level deep link to the event page on this book (fallback).
+          const eventLink = bookmaker.link;
+
           for (const market of bookmaker.markets || []) {
             for (const outcome of market.outcomes || []) {
               allOdds.push({
@@ -107,7 +117,14 @@ async function fetchLiveOddsForSports(
                 bookmaker: normalizedBookmaker,
                 bet_type: market.key,
                 odds_value: outcome.price,
-                event_data: eventData,
+                // Per-row event_data: shared event fields + THIS outcome's
+                // bet-slip link + THIS bookmaker's event link, so the alert
+                // builder can deep-link straight to the matched selection.
+                event_data: {
+                  ...baseEventData,
+                  bet_link: outcome.link,
+                  event_link: eventLink,
+                },
               });
             }
           }
