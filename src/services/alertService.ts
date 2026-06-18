@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Alert } from "@/types/database";
-import { sendTelegramMessage, formatTelegramAlert } from "./telegramService";
+import { sendTelegramMessage, formatTelegramAlert, buildBetButton } from "./telegramService";
 
 const ZAPIER_WEBHOOK_URL = process.env.ZAPIER_WEBHOOK_URL || "https://hooks.zapier.com/hooks/catch/7723146/u140xkd/";
 
@@ -178,7 +178,7 @@ export const alertService = {
         //   1. event_data.bet_link  → DIRECT bet-slip deep link for this selection
         //   2. event_data.event_link → the book's event/game page
         //   3. book home URL derived from the bookmaker name (always app-opening)
-        // Unknown books with no link → omit (never print "undefined").
+        // Unknown books with no link → omit (no button shown).
         const BOOK_HOME_URLS: Record<string, string> = {
           draftkings: "https://sportsbook.draftkings.com/",
           fanduel: "https://sportsbook.fanduel.com/",
@@ -198,13 +198,14 @@ export const alertService = {
           currentOdds: snapshot.odds_value,
           targetOdds: trigger.odds_value,
           comparator: trigger.odds_comparator,
-          betLink,
           espnData,
         });
 
         const result = await sendTelegramMessage({
           chatId: profile.telegram_chat_id,
           text: telegramMessage,
+          // Sportsbook link delivered as a tappable inline button (not in text).
+          replyMarkup: betLink ? buildBetButton(betLink, snapshot.bookmaker) : undefined,
         });
 
         // Update alert status

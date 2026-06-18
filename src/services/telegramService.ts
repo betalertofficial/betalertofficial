@@ -2,10 +2,26 @@
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_BASE = "https://api.telegram.org";
 
+export interface TelegramInlineKeyboard {
+  inline_keyboard: { text: string; url: string }[][];
+}
+
 export interface TelegramMessage {
   chatId: string;
   text: string;
   parseMode?: "Markdown" | "HTML";
+  // Optional inline keyboard (e.g. a "Bet on FanDuel" button linking to the book).
+  replyMarkup?: TelegramInlineKeyboard;
+}
+
+/**
+ * Build an inline keyboard with a single tappable button linking to the
+ * sportsbook (deep bet-slip link / event page / home URL). On mobile these
+ * universal links open the sportsbook app.
+ */
+export function buildBetButton(url: string, bookmaker: string): TelegramInlineKeyboard {
+  const label = bookmaker ? `🎯 Bet on ${bookmaker}` : "🎯 Place bet";
+  return { inline_keyboard: [[{ text: label, url }]] };
 }
 
 // Send a message via Telegram Bot API
@@ -27,6 +43,7 @@ export async function sendTelegramMessage(
           chat_id: message.chatId,
           text: message.text,
           parse_mode: message.parseMode || "Markdown",
+          ...(message.replyMarkup ? { reply_markup: message.replyMarkup } : {}),
         }),
       }
     );
@@ -84,7 +101,9 @@ function formatEspnLiveLine(espnData?: {
   return line;
 }
 
-// Format an alert message for Telegram
+// Format an alert message for Telegram.
+// NOTE: the sportsbook link is delivered as an inline keyboard BUTTON (see
+// buildBetButton + sendTelegramMessage.replyMarkup), not inline text.
 export function formatTelegramAlert(alert: {
   game: string;
   market: string;
@@ -92,11 +111,6 @@ export function formatTelegramAlert(alert: {
   currentOdds: number;
   targetOdds: number;
   comparator?: string;
-  // Resolved sportsbook URL for the matched book (preferred: direct bet-slip
-  // deep link; falls back to the event page, then the book's home URL). When
-  // present, a tappable "Bet on {detail}" link is added to the message. The
-  // caller (alertService) resolves this; we just render it if truthy.
-  betLink?: string;
   // Live ESPN score, mirroring the dashboard. Fields match the ESPNScore shape
   // returned by espnService.findGameScore (camelCase).
   espnData?: {
@@ -125,13 +139,6 @@ export function formatTelegramAlert(alert: {
   const liveLine = formatEspnLiveLine(alert.espnData);
   if (liveLine) {
     message += `\n\n${liveLine}`;
-  }
-
-  // Tappable sportsbook link for the matched book. parse_mode is Markdown, so
-  // render an inline Markdown link. Only added when a URL was resolved, so we
-  // never print "undefined".
-  if (alert.betLink) {
-    message += `\n\n👉 [Bet on ${alert.detail}](${alert.betLink})`;
   }
 
   message += '\n\nTime to place your bet! 🎯';
