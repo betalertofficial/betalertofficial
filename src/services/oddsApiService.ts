@@ -18,12 +18,17 @@ export interface OddsApiBookmaker {
   key: string;
   title: string;
   last_update: string;
+  // Present when odds are requested with &includeLinks=true (DraftKings/FanDuel):
+  // deep link to the game/event page on the book.
+  link?: string;
   markets: OddsApiMarket[];
 }
 
 export interface OddsApiMarket {
   key: string;
   last_update: string;
+  // Present with &includeLinks=true: deep link to this market on the book.
+  link?: string;
   outcomes: OddsApiOutcome[];
 }
 
@@ -32,6 +37,10 @@ export interface OddsApiOutcome {
   price: number;
   point?: number;
   description?: string;
+  // Present with &includeLinks=true: a DIRECT bet-slip deep link for this exact
+  // selection (e.g. https://sportsbook.fanduel.com/addToBetslip?...). Universal
+  // link that opens the sportsbook app on mobile.
+  link?: string;
 }
 
 export interface OddsApiScore {

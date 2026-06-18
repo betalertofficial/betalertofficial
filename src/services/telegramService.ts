@@ -92,6 +92,11 @@ export function formatTelegramAlert(alert: {
   currentOdds: number;
   targetOdds: number;
   comparator?: string;
+  // Resolved sportsbook URL for the matched book (preferred: direct bet-slip
+  // deep link; falls back to the event page, then the book's home URL). When
+  // present, a tappable "Bet on {detail}" link is added to the message. The
+  // caller (alertService) resolves this; we just render it if truthy.
+  betLink?: string;
   // Live ESPN score, mirroring the dashboard. Fields match the ESPNScore shape
   // returned by espnService.findGameScore (camelCase).
   espnData?: {
@@ -120,6 +125,13 @@ export function formatTelegramAlert(alert: {
   const liveLine = formatEspnLiveLine(alert.espnData);
   if (liveLine) {
     message += `\n\n${liveLine}`;
+  }
+
+  // Tappable sportsbook link for the matched book. parse_mode is Markdown, so
+  // render an inline Markdown link. Only added when a URL was resolved, so we
+  // never print "undefined".
+  if (alert.betLink) {
+    message += `\n\n👉 [Bet on ${alert.detail}](${alert.betLink})`;
   }
 
   message += '\n\nTime to place your bet! 🎯';
