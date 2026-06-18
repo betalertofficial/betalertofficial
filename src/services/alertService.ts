@@ -172,6 +172,25 @@ export const alertService = {
           };
         }
 
+        // Resolve a tappable sportsbook URL for the matched book. snapshot comes
+        // from select("*") on odds_snapshots, so event_data (the per-row JSON
+        // built in the cron) is available here. Preference order:
+        //   1. event_data.bet_link  → DIRECT bet-slip deep link for this selection
+        //   2. event_data.event_link → the book's event/game page
+        //   3. book home URL derived from the bookmaker name (always app-opening)
+        // Unknown books with no link → omit (never print "undefined").
+        const BOOK_HOME_URLS: Record<string, string> = {
+          draftkings: "https://sportsbook.draftkings.com/",
+          fanduel: "https://sportsbook.fanduel.com/",
+        };
+        const eventData = snapshot.event_data || {};
+        const bookKey = (snapshot.bookmaker || "").toLowerCase();
+        const betLink =
+          eventData.bet_link ||
+          eventData.event_link ||
+          BOOK_HOME_URLS[bookKey] ||
+          undefined;
+
         const telegramMessage = formatTelegramAlert({
           game: trigger.team_or_player,
           market: trigger.bet_type,
@@ -179,6 +198,7 @@ export const alertService = {
           currentOdds: snapshot.odds_value,
           targetOdds: trigger.odds_value,
           comparator: trigger.odds_comparator,
+          betLink,
           espnData,
         });
 
