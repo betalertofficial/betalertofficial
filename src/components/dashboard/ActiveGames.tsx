@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import type { OddsApiEvent } from "@/services/oddsApiService";
+import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { LEAGUES, leagueLabel } from "@/lib/leagues";
-import { isGameToday, formatGameTime } from "@/lib/gameUtils";
+import { isGameToday, formatGameTime, formatOdds, getTeamMoneyline } from "@/lib/gameUtils";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import type { EspnSituation } from "@/hooks/useEspnLive";
 import { TeamLogoImg } from "./TeamLogoImg";
@@ -16,6 +16,10 @@ interface GameVM {
   bucket: Bucket;
   homeScore: number | null;
   awayScore: number | null;
+  // Per-team moneyline (h2h), enriched from the Odds API after the ESPN grid
+  // loads. null until loaded / when no line is available.
+  homeMl: number | null;
+  awayMl: number | null;
   // Live status detail straight from ESPN, e.g. "Top 7th", "Q3 5:21", "63'".
   liveDetail: string | null;
   // MLB only: balls/strikes/outs + bases, from ESPN competition.situation.
@@ -29,9 +33,10 @@ export interface GameSelection {
 }
 
 // Odds API sport key (used everywhere else in the app + by the cron) -> ESPN
-// scoreboard path. The dashboard sources the game grid from ESPN (free) instead
-// of the paid Odds API; the Odds API sportKey is still what we hand to
-// CreateTrigger so trigger creation + cron matching are unaffected.
+// scoreboard path. The dashboard sources the game grid from ESPN (free) for
+// matchups/scores/state and enriches with a lean h2h-only Odds API call for the
+// moneyline; the Odds API sportKey is still what we hand to CreateTrigger so
+// trigger creation + cron matching are unaffected.
 const SCOREBOARD_PATH: Record<string, string> = {
   baseball_mlb: "baseball/mlb",
   basketball_nba: "basketball/nba",
@@ -54,6 +59,32 @@ function ymd(d: Date): string {
 function toInt(v: unknown): number | null {
   const n = parseInt(String(v ?? ""), 10);
   return Number.isNaN(n) ? null : n;
+}
+
+// Loose, bidirectional team-name match (ESPN displayName vs Odds API name).
+// Both sources use identical canonical names for US leagues + country names for
+// the World Cup, so substring matching is safe and tolerant of minor variants.
+function nameMatch(a: string, b: string): boolean {
+  const x = (a || "").toLowerCase();
+  const y = (b || "").toLowerCase();
+  return !!x && !!y && (x.includes(y) || y.includes(x));
+}
+
+// Find a team's moneyline across a league's Odds API events. Reads the line
+// using the Odds API's own team names (exact-match inside getTeamMoneyline) once
+// we've located the event by substring, so name variants never break the lookup.
+function findMoneyline(events: OddsApiEvent[], teamName: string): number | null {
+  for (const e of events) {
+    if (nameMatch(e.home_team, teamName)) {
+      const m = getTeamMoneyline(e, e.home_team);
+      if (m !== null) return m;
+    }
+    if (nameMatch(e.away_team, teamName)) {
+      const m = getTeamMoneyline(e, e.away_team);
+      if (m !== null) return m;
+    }
+  }
+  return null;
 }
 
 /**
@@ -123,6 +154,8 @@ async function fetchLeagueGames(sportKey: string): Promise<GameVM[]> {
         bucket,
         homeScore: live ? toInt(home.score) : null,
         awayScore: live ? toInt(away.score) : null,
+        homeMl: null,
+        awayMl: null,
         liveDetail: live
           ? comp.status?.type?.shortDetail || comp.status?.type?.detail || "Live"
           : null,
@@ -154,11 +187,41 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
     let active = true;
     (async () => {
       setLoading(true);
-      const results = await Promise.all(LEAGUES.map((lg) => fetchLeagueGames(lg.sportKey).catch(() => [])));
-      if (active) {
-        setGames(results.flat());
-        setLoading(false);
-      }
+
+      // Phase 1: build the grid from ESPN (free) and render immediately.
+      const espnGames = (await Promise.all(LEAGUES.map((lg) => fetchLeagueGames(lg.sportKey).catch(() => [])))).flat();
+      if (!active) return;
+      setGames(espnGames);
+      setLoading(false);
+
+      // Phase 2: enrich with the per-team moneyline via a lean h2h-only Odds API
+      // call — and ONLY for leagues that actually have games right now (so
+      // out-of-season leagues cost 0 credits). Cards update in place as it lands.
+      const activeSportKeys = Array.from(new Set(espnGames.map((g) => g.sportKey)));
+      if (activeSportKeys.length === 0) return;
+
+      const oddsPairs = await Promise.all(
+        activeSportKeys.map((sk) =>
+          oddsApiService
+            .getOddsForSport(sk, "h2h")
+            .then((evs) => [sk, evs] as const)
+            .catch(() => [sk, [] as OddsApiEvent[]] as const)
+        )
+      );
+      if (!active) return;
+
+      const oddsBySport = new Map<string, OddsApiEvent[]>(oddsPairs);
+      setGames((prev) =>
+        prev.map((g) => {
+          const evs = oddsBySport.get(g.sportKey);
+          if (!evs || evs.length === 0) return g;
+          return {
+            ...g,
+            homeMl: findMoneyline(evs, g.event.home_team),
+            awayMl: findMoneyline(evs, g.event.away_team),
+          };
+        })
+      );
     })();
     return () => {
       active = false;
@@ -272,9 +335,9 @@ function GameCard({
         <span className="text-[10px] uppercase tracking-wide text-gray-400">{leagueLabel(g.sportKey)}</span>
       </div>
 
-      <TeamRow name={ev.away_team} logo={logoFor(ev.away_team)} score={g.awayScore} live={live} onClick={() => onSelectTeam(ev.away_team)} />
+      <TeamRow name={ev.away_team} logo={logoFor(ev.away_team)} score={g.awayScore} ml={g.awayMl} live={live} onClick={() => onSelectTeam(ev.away_team)} />
       <div className="h-px bg-gray-100 mx-1" />
-      <TeamRow name={ev.home_team} logo={logoFor(ev.home_team)} score={g.homeScore} live={live} onClick={() => onSelectTeam(ev.home_team)} />
+      <TeamRow name={ev.home_team} logo={logoFor(ev.home_team)} score={g.homeScore} ml={g.homeMl} live={live} onClick={() => onSelectTeam(ev.home_team)} />
 
       {live && g.situation ? <SituationStrip situation={g.situation} /> : null}
     </div>
@@ -285,12 +348,14 @@ function TeamRow({
   name,
   logo,
   score,
+  ml,
   live,
   onClick,
 }: {
   name: string;
   logo: string | null;
   score: number | null;
+  ml: number | null;
   live: boolean;
   onClick: () => void;
 }) {
@@ -305,9 +370,12 @@ function TeamRow({
         <TeamLogoImg url={logo} alt={name} className="h-5 w-5 shrink-0 object-contain" />
         <span className="truncate text-sm font-semibold text-gray-900">{name}</span>
       </span>
-      {live && score !== null ? (
-        <span className="w-6 shrink-0 text-right text-base font-bold tabular-nums text-gray-900">{score}</span>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-2">
+        {ml !== null ? <span className="text-xs tabular-nums text-gray-500">{formatOdds(ml)}</span> : null}
+        {live && score !== null ? (
+          <span className="w-6 text-right text-base font-bold tabular-nums text-gray-900">{score}</span>
+        ) : null}
+      </div>
     </button>
   );
 }
