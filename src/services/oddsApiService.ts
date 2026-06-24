@@ -73,9 +73,18 @@ export const oddsApiService = {
     return response.json();
   },
 
-  /** Fetch live odds for a sport via the server-side proxy. */
-  async getOddsForSport(sportKey: string): Promise<OddsApiEvent[]> {
-    const response = await fetch(`/api/odds/events?sport=${encodeURIComponent(sportKey)}&type=odds`);
+  /**
+   * Fetch live odds for a sport via the server-side proxy.
+   *
+   * `markets` is an optional comma-separated subset of h2h,spreads,totals.
+   * Omit it to get the full set (create-trigger modal). The dashboard passes
+   * "h2h" to fetch only the moneyline — 1 Odds API credit/league instead of 3.
+   */
+  async getOddsForSport(sportKey: string, markets?: string): Promise<OddsApiEvent[]> {
+    const marketsParam = markets ? `&markets=${encodeURIComponent(markets)}` : "";
+    const response = await fetch(
+      `/api/odds/events?sport=${encodeURIComponent(sportKey)}&type=odds${marketsParam}`
+    );
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error || `Odds API error: ${response.status}`);
