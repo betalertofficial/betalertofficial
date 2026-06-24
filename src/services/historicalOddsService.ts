@@ -1,10 +1,23 @@
-import { supabase } from "@/integrations/supabase/client";
+/**
+ * Historical Odds Service — DISABLED.
+ *
+ * This module previously called The Odds API /historical endpoint, which costs
+ * 10x the credits of a normal /odds call and was the largest single source of
+ * quota burn. It has been neutered to:
+ *   1. preserve the monthly Odds API budget, and
+ *   2. remove the browser-exposed NEXT_PUBLIC_ODDS_API_KEY reference entirely
+ *      (the key no longer ships to the client from this module).
+ *
+ * The intraday odds time-series needed for charts is already captured for free
+ * by the live cron in the `odds_snapshots` table, so this feature can be rebuilt
+ * from our own database later without any paid historical calls.
+ *
+ * The original export names are kept as inert no-ops so existing imports keep
+ * type-checking; every call now throws instead of hitting the paid API.
+ */
 
-interface OddsSnapshot {
-  timestamp: string;
-  odds: number;
-  bookmaker: string;
-}
+const DISABLED_MESSAGE =
+  "The historical odds feature is disabled to preserve the Odds API budget.";
 
 interface HistoricalEvent {
   id: string;
@@ -14,20 +27,10 @@ interface HistoricalEvent {
   away_team: string;
 }
 
-interface OddsData {
+interface OddsSnapshot {
   timestamp: string;
-  next_timestamp?: string;
-  bookmakers: Array<{
-    key: string;
-    title: string;
-    markets: Array<{
-      key: string;
-      outcomes: Array<{
-        name: string;
-        price: number;
-      }>;
-    }>;
-  }>;
+  odds: number;
+  bookmaker: string;
 }
 
 export interface GameOddsStory {
@@ -44,283 +47,32 @@ export interface GameOddsStory {
   teamOptions: { home: string; away: string };
 }
 
-// SECURITY: no hardcoded API key. This value comes from the environment only.
-// NOTE: NEXT_PUBLIC_* is exposed to the browser; this historical feature should
-// ideally be moved behind a server-side API route (like /api/odds/*) so the key
-// never ships to the client at all.
-const ODDS_API_KEY = process.env.NEXT_PUBLIC_ODDS_API_KEY || "";
-const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
-
-/**
- * Fetch all NBA games for a specific date
- */
-export async function fetchGamesForDate(date: string): Promise<HistoricalEvent[]> {
-  try {
-    if (!ODDS_API_KEY) {
-      throw new Error("Historical odds API key is not configured");
-    }
-    // The Odds API historical endpoint wants ISO format without milliseconds
-    // YYYY-MM-DDT00:00:00Z instead of YYYY-MM-DDT00:00:00.000Z
-    const isoDate = new Date(date + "T00:00:00Z").toISOString().split('.')[0] + 'Z';
-    const apiUrl = `${ODDS_API_BASE}/historical/sports/basketball_nba/events?apiKey=${ODDS_API_KEY}&date=${isoDate}`;
-
-    console.log("Fetching games for date:", { date, isoDate, apiUrl: apiUrl.replace(ODDS_API_KEY, "***") });
-
-    const response = await fetch(apiUrl);
-
-    console.log("API Response status:", response.status, response.statusText);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("API Error Response:", errorText);
-      throw new Error(`Failed to fetch games (${response.status}): ${errorText || response.statusText}`);
-    }
-
-    const responseData = await response.json();
-    console.log("Full API response:", responseData);
-
-    // The historical endpoint returns { data: [...], timestamp: ..., ... }
-    const events: HistoricalEvent[] = responseData.data || [];
-    console.log(`Found ${events.length} games for ${date}:`, events);
-    return events;
-  } catch (error) {
-    console.error("Error fetching games for date:", error);
-    throw error;
-  }
+/** Disabled — historical feature removed. */
+export async function fetchGamesForDate(_date: string): Promise<HistoricalEvent[]> {
+  throw new Error(DISABLED_MESSAGE);
 }
 
-/**
- * Fetch a single odds snapshot from The Odds API
- */
-async function fetchOddsSnapshot(
-  eventId: string,
-  timestamp: string
-): Promise<OddsData | null> {
-  try {
-    if (!ODDS_API_KEY) {
-      throw new Error("Historical odds API key is not configured");
-    }
-    const response = await fetch(
-      `${ODDS_API_BASE}/historical/sports/basketball_nba/events/${eventId}/odds?` +
-      `apiKey=${ODDS_API_KEY}&date=${timestamp}&regions=us&markets=h2h&oddsFormat=american`
-    );
-
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      throw new Error(`Failed to fetch odds: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log("Odds snapshot response:", data);
-    return data;
-  } catch (error) {
-    console.error(`Error fetching snapshot at ${timestamp}:`, error);
-    return null;
-  }
-}
-
-/**
- * Extract moneyline odds for a specific team from a snapshot
- * Prioritize DraftKings, then FanDuel, then any available
- */
-function extractMoneyline(
-  snapshot: OddsData,
-  teamName: string
-): { odds: number; bookmaker: string } | null {
-  console.log("Extracting moneyline for team:", teamName, "from snapshot:", snapshot);
-
-  if (!snapshot || !snapshot.bookmakers || snapshot.bookmakers.length === 0) {
-    console.log("No bookmakers found in snapshot");
-    return null;
-  }
-
-  const preferredBookmakers = ["draftkings", "fanduel"];
-
-  // Try preferred bookmakers first
-  for (const preferredKey of preferredBookmakers) {
-    const bookmaker = snapshot.bookmakers.find(b => b.key === preferredKey);
-    if (bookmaker) {
-      const h2hMarket = bookmaker.markets.find(m => m.key === "h2h");
-      if (h2hMarket) {
-        const outcome = h2hMarket.outcomes.find(o => o.name === teamName);
-        if (outcome) {
-          return { odds: outcome.price, bookmaker: bookmaker.title };
-        }
-      }
-    }
-  }
-
-  // Fallback to any available bookmaker
-  for (const bookmaker of snapshot.bookmakers) {
-    const h2hMarket = bookmaker.markets.find(m => m.key === "h2h");
-    if (h2hMarket) {
-      const outcome = h2hMarket.outcomes.find(o => o.name === teamName);
-      if (outcome) {
-        return { odds: outcome.price, bookmaker: bookmaker.title };
-      }
-    }
-  }
-
-  return null;
-}
-
-/**
- * Fetch the complete odds snapshot chain for a game
- */
-async function fetchOddsChain(
-  eventId: string,
-  commenceTime: string,
-  teamName: string
-): Promise<OddsSnapshot[]> {
-  const snapshots: OddsSnapshot[] = [];
-  let currentTimestamp = commenceTime;
-  const maxSnapshots = 100; // Safety limit
-  const gameEndTime = new Date(new Date(commenceTime).getTime() + 2.5 * 60 * 60 * 1000).toISOString();
-
-  console.log(`Fetching odds chain for ${teamName} from ${commenceTime}...`);
-
-  for (let i = 0; i < maxSnapshots; i++) {
-    const snapshot = await fetchOddsSnapshot(eventId, currentTimestamp);
-
-    if (!snapshot) break;
-
-    const oddsData = extractMoneyline(snapshot, teamName);
-    if (oddsData) {
-      snapshots.push({
-        timestamp: currentTimestamp,
-        odds: oddsData.odds,
-        bookmaker: oddsData.bookmaker
-      });
-    }
-
-    // Check if we should continue
-    if (!snapshot.next_timestamp || new Date(snapshot.next_timestamp) > new Date(gameEndTime)) {
-      break;
-    }
-
-    currentTimestamp = snapshot.next_timestamp;
-
-    // Small delay to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 200));
-  }
-
-  console.log(`Collected ${snapshots.length} snapshots`);
-  return snapshots;
-}
-
-/**
- * Fetch all raw API responses for debugging
- */
+/** Disabled — historical feature removed. */
 export async function fetchRawOddsData(
-  eventId: string,
-  commenceTime: string
+  _eventId: string,
+  _commenceTime: string
 ): Promise<any[]> {
-  const rawSnapshots: any[] = [];
-  let currentTimestamp = commenceTime;
-  const maxSnapshots = 100;
-  const gameEndTime = new Date(new Date(commenceTime).getTime() + 2.5 * 60 * 60 * 1000).toISOString();
-
-  console.log(`Fetching raw odds data from ${commenceTime}...`);
-
-  for (let i = 0; i < maxSnapshots; i++) {
-    const snapshot = await fetchOddsSnapshot(eventId, currentTimestamp);
-
-    if (!snapshot) break;
-
-    rawSnapshots.push(snapshot);
-
-    if (!snapshot.next_timestamp || new Date(snapshot.next_timestamp) > new Date(gameEndTime)) {
-      break;
-    }
-
-    currentTimestamp = snapshot.next_timestamp;
-    await new Promise(resolve => setTimeout(resolve, 200));
-  }
-
-  console.log(`Collected ${rawSnapshots.length} raw snapshots`);
-  return rawSnapshots;
+  throw new Error(DISABLED_MESSAGE);
 }
 
-/**
- * Find the peak odds moment (highest/most positive odds = best value)
- */
-function findPeakOdds(snapshots: OddsSnapshot[]): OddsSnapshot {
-  return snapshots.reduce((peak, current) =>
-    current.odds > peak.odds ? current : peak
-  );
-}
-
-/**
- * Main function to generate the game odds story data
- */
+/** Disabled — historical feature removed. */
 export async function generateGameOddsStory(
-  event: HistoricalEvent,
-  winningTeamSelection: "home" | "away"
+  _event: HistoricalEvent,
+  _winningTeamSelection: "home" | "away"
 ): Promise<GameOddsStory> {
-  console.log("Generating story for event:", event);
-
-  // Determine which team name to use for odds lookup
-  const winningTeamName = winningTeamSelection === "home" ? event.home_team : event.away_team;
-
-  // Fetch the complete odds chain for the winning team
-  const snapshots = await fetchOddsChain(event.id, event.commence_time, winningTeamName);
-
-  console.log("Total snapshots collected:", snapshots.length);
-  console.log("Snapshots:", snapshots);
-
-  if (snapshots.length === 0) {
-    throw new Error("No odds data found for this game");
-  }
-
-  // Find peak odds
-  const peakOdds = findPeakOdds(snapshots);
-
-  return {
-    snapshots,
-    peakOdds,
-    winningTeam: winningTeamName,
-    finalScore: undefined,
-    gameInfo: {
-      homeTeam: event.home_team,
-      awayTeam: event.away_team,
-      commenceTime: event.commence_time,
-      winner: winningTeamName
-    },
-    teamOptions: {
-      home: event.home_team,
-      away: event.away_team
-    }
-  };
+  throw new Error(DISABLED_MESSAGE);
 }
 
-/**
- * Generate auto-caption for social media
- */
-export function generateSocialCaption(story: GameOddsStory): {
+/** Disabled — historical feature removed. */
+export function generateSocialCaption(_story: GameOddsStory): {
   headline: string;
   caption: string;
   altText: string;
 } {
-  const peakTime = new Date(story.peakOdds.timestamp);
-  const gameStart = new Date(story.gameInfo.commenceTime);
-  const minutesElapsed = Math.floor((peakTime.getTime() - gameStart.getTime()) / 60000);
-
-  // Rough quarter estimation
-  let quarter = "Q1";
-  if (minutesElapsed > 72) quarter = "Q4";
-  else if (minutesElapsed > 48) quarter = "Q3";
-  else if (minutesElapsed > 24) quarter = "Q2";
-  else if (minutesElapsed > 12) quarter = "Q1";
-
-  const teamShortName = story.winningTeam.split(" ").pop() || story.winningTeam;
-  const oddsDisplay = story.peakOdds.odds > 0 ? `+${story.peakOdds.odds}` : story.peakOdds.odds;
-
-  const headline = `${teamShortName} were ${oddsDisplay} in ${quarter}. They won anyway.`;
-
-  const caption = `${headline} Best odds window of the game 👇 ${story.finalScore || ""}`.trim();
-
-  const altText = `Chart showing ${story.winningTeam}'s moneyline odds throughout the game, ` +
-    `peaking at ${oddsDisplay} during ${quarter}. Final result: ${story.winningTeam} victory.`;
-
-  return { headline, caption, altText };
+  throw new Error(DISABLED_MESSAGE);
 }
