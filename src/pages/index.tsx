@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Bell, Settings } from "lucide-react";
+import { Bell, Settings, Send } from "lucide-react";
 import Link from "next/link";
 import { SEO } from "@/components/SEO";
 import { TelegramLoginButton } from "@/components/auth/TelegramLoginButton";
@@ -8,7 +8,7 @@ import { TelegramLoginButton } from "@/components/auth/TelegramLoginButton";
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white overflow-x-hidden">
-      <SEO 
+      <SEO
         title="Hammer - Sports Betting Alerts"
         description="Set highly specific triggers and get an SMS the moment it hits."
       />
@@ -96,7 +96,10 @@ export default function LandingPage() {
             <p className="text-base md:text-lg text-gray-600 mb-6 md:mb-8 leading-relaxed">
               Set highly specific triggers and get an SMS the moment it hits.
             </p>
-            <div className="space-y-3">
+            {/* Single source-of-truth Telegram widget. The bottom CTA scrolls here
+                rather than mounting a second widget (two same-bot widgets don't
+                reliably coexist on one page). scroll-mt keeps it clear of the top. */}
+            <div id="telegram-login" className="space-y-3 scroll-mt-24">
               <TelegramLoginButton
                 authUrl="https://www.hammer-app.com/dashboard"
                 usePic={false}
@@ -174,13 +177,19 @@ export default function LandingPage() {
               </p>
             </div>
 
-            {/* Telegram Login Button */}
+            {/* Scrolls up to the single hero Telegram widget (no second widget). */}
             <div className="flex justify-center items-center py-8">
-              <TelegramLoginButton
-                authUrl="https://www.hammer-app.com/dashboard"
-                usePic={false}
-                widgetId="cta"
-              />
+              <button
+                type="button"
+                onClick={() =>
+                  document.getElementById("telegram-login")?.scrollIntoView({ behavior: "smooth", block: "center" })
+                }
+                className="inline-flex items-center gap-2 rounded-[20px] bg-[#54a9eb] hover:bg-[#4a9fe1] text-white font-semibold px-6 py-3 text-base shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#54a9eb] focus-visible:ring-offset-2"
+                aria-label="Log in with Telegram"
+              >
+                <Send className="h-5 w-5" />
+                Log in with Telegram
+              </button>
             </div>
 
             {/* How it works */}
