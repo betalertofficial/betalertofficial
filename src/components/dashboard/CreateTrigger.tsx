@@ -12,6 +12,7 @@ import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { triggerService } from "@/services/triggerService";
 import { teamsService, type Team } from "@/services/teamsService";
 import type { BetType, TriggerFrequency } from "@/types/database";
+import { GameCard, type GameCardData } from "./GameCard";
 
 export interface CreateTriggerProps {
   open?: boolean;
@@ -22,6 +23,7 @@ export interface CreateTriggerProps {
   initialTeam?: string;
   initialTeamId?: string;
   initialEvent?: any;
+  initialCard?: GameCardData;
 }
 
 interface TeamOdds {
@@ -106,7 +108,7 @@ const SPORT_DISPLAY_NAMES: Record<string, string> = {
   "baseball_mlb": "MLB"
 };
 
-export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSport, initialTeam, initialTeamId, initialEvent }: CreateTriggerProps) {
+export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSport, initialTeam, initialTeamId, initialEvent, initialCard }: CreateTriggerProps) {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -123,6 +125,8 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
   const [sportsbook, setSportsbook] = useState<"fanduel" | "draftkings">("fanduel");
   const [events, setEvents] = useState<OddsApiEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<OddsApiEvent | null>(null);
+  // The dashboard game card the user tapped (renders as the modal header).
+  const [selectedCard, setSelectedCard] = useState<GameCardData | null>(null);
   const [teamOdds, setTeamOdds] = useState<TeamOdds | null>(null);
   const [gameScores, setGameScores] = useState<Map<string, GameScore>>(new Map());
   // Maps odds event.id → ESPN live period string, e.g. "Q3 10:15" or "Top 4th"
@@ -161,6 +165,8 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
     if (initialTeam !== undefined) setSelectedTeam(initialTeam);
     if (initialTeamId !== undefined) setSelectedTeamId(initialTeamId);
     if (initialEvent !== undefined) setSelectedEvent(initialEvent ?? null);
+    // Reset each open: present only when launched from an Active Games card.
+    setSelectedCard(initialCard ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -938,8 +944,28 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
               </div>
             )}
 
-            {/* ── Persistent game card (shown after team selection) ── */}
-            {selectedTeam && selectedEvent && (
+            {/* Game card matching the dashboard — shown when opened from a game card. */}
+            {selectedCard && (
+              <div className="space-y-2">
+                <GameCard data={selectedCard} selectedTeam={selectedTeam} onSelectTeam={(t) => setSelectedTeam(t)} />
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setSelectedTeam("");
+                    setSelectedTeamId("");
+                    setSelectedEvent(null);
+                    setSelectedCard(null);
+                    setTeamOdds(null);
+                  }}
+                >
+                  Change game
+                </button>
+              </div>
+            )}
+
+            {/* ── Persistent game card (manual flow: team picked via search/odds) ── */}
+            {!selectedCard && selectedTeam && selectedEvent && (
               <div className="bg-card border-2 border-primary/30 rounded-lg overflow-hidden">
                 {/* Header */}
                 <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-border/40">
@@ -1032,7 +1058,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
             )}
 
             {/* Fallback pill when team was selected via search (no event context) */}
-            {selectedTeam && !selectedEvent && (
+            {!selectedCard && selectedTeam && !selectedEvent && (
               <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-lg px-4 py-3">
                 <div>
                   <p className="text-xs text-muted-foreground mb-0.5">Selected team</p>

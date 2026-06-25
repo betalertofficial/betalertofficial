@@ -7,6 +7,7 @@ import { PickATeam } from "@/components/dashboard/PickATeam";
 import { ActiveGames } from "@/components/dashboard/ActiveGames";
 import { ComebacksOn } from "@/components/dashboard/ComebacksOn";
 import { CreateTrigger } from "@/components/dashboard/CreateTrigger";
+import type { GameCardData } from "@/components/dashboard/GameCard";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { User } from "lucide-react";
@@ -18,6 +19,9 @@ interface Prefill {
   team?: string;
   teamId?: string;
   event?: any;
+  // Present when opened from an Active Games card — lets the modal render the
+  // exact same card as its header.
+  card?: GameCardData;
 }
 
 export default function Dashboard() {
@@ -166,6 +170,7 @@ export default function Dashboard() {
         initialTeam={prefill.team}
         initialTeamId={prefill.teamId}
         initialEvent={prefill.event}
+        initialCard={prefill.card}
         onSuccess={() => {
           setTriggerOpen(false);
           setTriggerRefresh((n) => n + 1);

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { LEAGUES, leagueLabel } from "@/lib/leagues";
-import { isGameToday, formatGameTime, formatOdds, getTeamMoneyline } from "@/lib/gameUtils";
+import { isGameToday, formatGameTime, getTeamMoneyline } from "@/lib/gameUtils";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import type { EspnSituation } from "@/hooks/useEspnLive";
-import { TeamLogoImg } from "./TeamLogoImg";
+import { GameCard, type GameCardData } from "./GameCard";
 import { LeaguePills } from "./LeaguePills";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
@@ -30,6 +30,8 @@ export interface GameSelection {
   sportKey: string;
   team: string;
   event: OddsApiEvent;
+  // The exact card the user tapped, so the modal can render it identically.
+  card: GameCardData;
 }
 
 // Odds API sport key (used everywhere else in the app + by the cron) -> ESPN
@@ -228,6 +230,27 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
     };
   }, []);
 
+  // Build the fully-resolved card view-model (logos + formatted time) so the same
+  // object renders the dashboard card AND seeds the Create Trigger modal header.
+  const cardData = (g: GameVM): GameCardData => ({
+    sportKey: g.sportKey,
+    awayTeam: g.event.away_team,
+    homeTeam: g.event.home_team,
+    awayLogo: logoFor(g.event.away_team),
+    homeLogo: logoFor(g.event.home_team),
+    awayScore: g.awayScore,
+    homeScore: g.homeScore,
+    awayMl: g.awayMl,
+    homeMl: g.homeMl,
+    live: g.bucket === "live",
+    liveDetail: g.liveDetail,
+    timeLabel:
+      g.bucket === "tomorrow"
+        ? `Tomorrow · ${formatGameTime(g.event.commence_time)}`
+        : formatGameTime(g.event.commence_time),
+    situation: g.situation,
+  });
+
   const byCommence = (a: GameVM, b: GameVM) =>
     new Date(a.event.commence_time).getTime() - new Date(b.event.commence_time).getTime();
 
@@ -249,6 +272,17 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
     .sort((a, b) => (a.bucket === "live" ? 0 : 1) - (b.bucket === "live" ? 0 : 1) || byCommence(a, b));
   const tomorrow = games.filter((g) => inLeague(g) && g.bucket === "tomorrow").sort(byCommence);
 
+  const renderCard = (g: GameVM) => {
+    const data = cardData(g);
+    return (
+      <GameCard
+        key={g.event.id}
+        data={data}
+        onSelectTeam={(team) => onSelectGame({ sportKey: g.sportKey, team, event: g.event, card: data })}
+      />
+    );
+  };
+
   return (
     <section>
       <h2 className="text-xl font-bold text-gray-900 mb-3">Active &amp; Upcoming Games</h2>
@@ -264,14 +298,7 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
         <>
           {liveAndToday.length > 0 && (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {liveAndToday.map((g) => (
-                <GameCard
-                  key={g.event.id}
-                  g={g}
-                  logoFor={logoFor}
-                  onSelectTeam={(team) => onSelectGame({ sportKey: g.sportKey, team, event: g.event })}
-                />
-              ))}
+              {liveAndToday.map(renderCard)}
             </div>
           )}
 
@@ -288,14 +315,7 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
 
               {showTomorrow && (
                 <div className="mt-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {tomorrow.map((g) => (
-                    <GameCard
-                      key={g.event.id}
-                      g={g}
-                      logoFor={logoFor}
-                      onSelectTeam={(team) => onSelectGame({ sportKey: g.sportKey, team, event: g.event })}
-                    />
-                  ))}
+                  {tomorrow.map(renderCard)}
                 </div>
               )}
             </div>
@@ -303,119 +323,5 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
         </>
       )}
     </section>
-  );
-}
-
-function GameCard({
-  g,
-  logoFor,
-  onSelectTeam,
-}: {
-  g: GameVM;
-  logoFor: (name?: string | null) => string | null;
-  onSelectTeam: (team: string) => void;
-}) {
-  const ev = g.event;
-  const live = g.bucket === "live";
-
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-3">
-      <div className="flex items-center justify-between mb-1 px-1">
-        {live ? (
-          <span className="flex items-center gap-1.5 text-[11px] font-bold">
-            <span className="text-red-500">● LIVE</span>
-            {g.liveDetail ? <span className="font-semibold text-orange-500">· {g.liveDetail}</span> : null}
-          </span>
-        ) : (
-          <span className="text-[11px] font-medium text-gray-400">
-            {g.bucket === "tomorrow" ? "Tomorrow · " : ""}
-            {formatGameTime(ev.commence_time)}
-          </span>
-        )}
-        <span className="text-[10px] uppercase tracking-wide text-gray-400">{leagueLabel(g.sportKey)}</span>
-      </div>
-
-      <TeamRow name={ev.away_team} logo={logoFor(ev.away_team)} score={g.awayScore} ml={g.awayMl} live={live} onClick={() => onSelectTeam(ev.away_team)} />
-      <div className="h-px bg-gray-100 mx-1" />
-      <TeamRow name={ev.home_team} logo={logoFor(ev.home_team)} score={g.homeScore} ml={g.homeMl} live={live} onClick={() => onSelectTeam(ev.home_team)} />
-
-      {live && g.situation ? <SituationStrip situation={g.situation} /> : null}
-    </div>
-  );
-}
-
-function TeamRow({
-  name,
-  logo,
-  score,
-  ml,
-  live,
-  onClick,
-}: {
-  name: string;
-  logo: string | null;
-  score: number | null;
-  ml: number | null;
-  live: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={`Set an alert on ${name}`}
-      className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-50"
-    >
-      <span className="flex min-w-0 items-center gap-2">
-        <TeamLogoImg url={logo} alt={name} className="h-5 w-5 shrink-0 object-contain" />
-        <span className="truncate text-sm font-semibold text-gray-900">{name}</span>
-      </span>
-      <div className="flex shrink-0 items-center gap-2">
-        {ml !== null ? <span className="text-xs tabular-nums text-gray-500">{formatOdds(ml)}</span> : null}
-        {live && score !== null ? (
-          <span className="w-6 text-right text-base font-bold tabular-nums text-gray-900">{score}</span>
-        ) : null}
-      </div>
-    </button>
-  );
-}
-
-function Bases({ situation }: { situation: EspnSituation }) {
-  const base = (on?: boolean) =>
-    `absolute h-2.5 w-2.5 rounded-sm ${on ? "bg-yellow-400" : "border border-gray-300"}`;
-  return (
-    <div className="relative shrink-0" style={{ width: 30, height: 24 }}>
-      {/* 2nd base (top) */}
-      <div className={base(situation.onSecond)} style={{ top: 0, left: "50%", transform: "translateX(-50%) rotate(45deg)" }} />
-      {/* 3rd base (left) */}
-      <div className={base(situation.onThird)} style={{ top: "50%", left: 0, transform: "translateY(-50%) rotate(45deg)" }} />
-      {/* 1st base (right) */}
-      <div className={base(situation.onFirst)} style={{ top: "50%", right: 0, transform: "translateY(-50%) rotate(45deg)" }} />
-    </div>
-  );
-}
-
-function SituationStrip({ situation }: { situation: EspnSituation }) {
-  const rows = [
-    { label: "B", max: 4, count: situation.balls ?? 0, color: "bg-green-500" },
-    { label: "S", max: 3, count: situation.strikes ?? 0, color: "bg-yellow-500" },
-    { label: "O", max: 3, count: situation.outs ?? 0, color: "bg-red-500" },
-  ];
-  return (
-    <div className="mt-2 flex items-center justify-center gap-4 border-t border-gray-100 pt-2">
-      <Bases situation={situation} />
-      <div className="flex items-center gap-2.5">
-        {rows.map(({ label, max, count, color }) => (
-          <div key={label} className="flex items-center gap-1">
-            <span className="text-[10px] font-medium text-gray-400">{label}</span>
-            <div className="flex gap-0.5">
-              {Array.from({ length: max }).map((_, i) => (
-                <div key={i} className={`h-1.5 w-1.5 rounded-full ${i < count ? color : "bg-gray-200"}`} />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
