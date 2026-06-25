@@ -57,6 +57,15 @@ export function TelegramLoginButton({
     }
 
     const script = document.createElement("script");
+    // CRITICAL: scripts created via createElement default to async=true, which
+    // makes `document.currentScript` null while telegram-widget.js runs. The
+    // widget uses currentScript to decide WHERE to inject its login iframe; when
+    // it's null the widget falls back to the *last* <script> in the document,
+    // which races Next.js's chunk scripts — so the button intermittently lands
+    // outside this container (appears "missing" until a refresh changes the
+    // timing). Forcing async=false makes currentScript resolve to THIS script,
+    // so the iframe is injected into this container deterministically.
+    script.async = false;
     // Add a per-instance nonce to the src so mobile Safari doesn't skip
     // re-execution of a "seen" script URL when multiple widgets are on the page.
     const nonce = widgetId ?? Math.random().toString(36).slice(2, 7);
