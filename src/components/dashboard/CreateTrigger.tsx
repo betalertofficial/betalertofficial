@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -596,16 +596,22 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
   // Select bet type and pre-fill odds threshold from current live odds
   const handleBetTypeSelect = (type: BetType) => {
     setBetType(type);
-    if (type === "moneyline" && teamOdds?.moneyline !== undefined) {
-      const ml = teamOdds.moneyline;
-      setOddsSign(ml >= 0 ? "+" : "-");
-      setOddsValue(Math.abs(ml).toString());
-    } else if (type === "spread" && teamOdds?.spread) {
-      const odds = teamOdds.spread.odds;
-      setOddsSign(odds >= 0 ? "+" : "-");
-      setOddsValue(Math.abs(odds).toString());
-    }
+    // Threshold pre-fill from current live odds is handled by the effect below
+    // (keyed on [teamOdds, betType]) so it also fires on initial team selection.
   };
+
+  // The current live odds for the selected team + bet type (null if unavailable).
+  const currentLiveOdds =
+    betType === "spread" ? teamOdds?.spread?.odds ?? null : teamOdds?.moneyline ?? null;
+
+  // Pre-fill the Odds Threshold with the team's CURRENT live odds, rounded to the
+  // nearest 10 (the picker steps by 10), whenever live odds load or bet type changes.
+  useEffect(() => {
+    if (currentLiveOdds === null || currentLiveOdds === undefined) return;
+    setOddsSign(currentLiveOdds >= 0 ? "+" : "-");
+    setOddsValue(String(Math.max(100, Math.round(Math.abs(currentLiveOdds) / 10) * 10)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLiveOdds]);
 
   const getTeamOddsForGame = (event: OddsApiEvent, teamName: string): number | null => {
     const bookmakerKey = sportsbook === "fanduel" ? "fanduel" : "draftkings";
@@ -1132,33 +1138,53 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">Odds Threshold</Label>
-              <div className="grid grid-cols-7 gap-3">
-                <Select value={oddsSign} onValueChange={(v) => setOddsSign(v as "+" | "-")}>
-                  <SelectTrigger className="col-span-1 bg-card border-border">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="+">+</SelectItem>
-                    <SelectItem value="-">-</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  placeholder="200"
-                  value={oddsValue}
-                  onChange={(e) => setOddsValue(e.target.value)}
-                  className="col-span-3 bg-card border-border"
-                />
-                <Select value={oddsDirection} onValueChange={(v) => setOddsDirection(v as "higher" | "lower")}>
-                  <SelectTrigger className="col-span-3 bg-card border-border">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="higher">or higher</SelectItem>
-                    <SelectItem value="lower">or lower</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium text-foreground">Odds Threshold</Label>
+                {currentLiveOdds !== null && currentLiveOdds !== undefined && (
+                  <span className="text-xs text-muted-foreground">
+                    now <span className="font-semibold text-foreground">{formatOdds(currentLiveOdds)}</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Row: [ +/- picker ] [ scrolling magnitude wheel (by 10) ] [ higher/lower picker ] */}
+              <div className="flex items-stretch gap-2">
+                {/* +/- segmented picker (left) */}
+                <div className="flex shrink-0 rounded-lg border border-border bg-card p-0.5">
+                  {(["+", "-"] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setOddsSign(s)}
+                      className={`h-9 w-8 rounded-md text-base font-bold transition-colors ${
+                        oddsSign === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+
+                {/* scrolling magnitude picker — steps of 10 (middle) */}
+                <div className="min-w-0 flex-1 rounded-lg border border-border bg-card">
+                  <OddsWheel value={oddsValue} onChange={setOddsValue} />
+                </div>
+
+                {/* higher/lower segmented picker (right) */}
+                <div className="flex shrink-0 rounded-lg border border-border bg-card p-0.5">
+                  {([["higher", "Higher"], ["lower", "Lower"]] as const).map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setOddsDirection(val)}
+                      className={`h-9 px-3 rounded-md text-sm font-medium transition-colors ${
+                        oddsDirection === val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -1234,5 +1260,94 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+// ── Scrolling odds-magnitude picker (steps of 10) ───────────────────────────
+const ODDS_MIN = 100;
+const ODDS_MAX = 2500;
+const ODDS_STEP = 10;
+const ODDS_ITEM_W = 64; // px per snap item
+
+/**
+ * Horizontal scroll-snap "wheel" for the odds magnitude. Each snap point is 10
+ * apart; the value centered under the indicator is the selected one. Sign and
+ * direction live in separate segmented pickers, so this only handles magnitude.
+ */
+function OddsWheel({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const programmatic = useRef(false);
+
+  const values = useMemo(() => {
+    const arr: number[] = [];
+    for (let v = ODDS_MIN; v <= ODDS_MAX; v += ODDS_STEP) arr.push(v);
+    return arr;
+  }, []);
+
+  const parsed = parseInt(value || "", 10);
+  const current = Number.isNaN(parsed)
+    ? 200
+    : Math.min(ODDS_MAX, Math.max(ODDS_MIN, Math.round(parsed / ODDS_STEP) * ODDS_STEP));
+
+  // If empty, seed a sensible default so the wheel + submit agree.
+  useEffect(() => {
+    if (!value) onChange(String(current));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Center the strip on the current value (mount + external prefill changes).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const target = ((current - ODDS_MIN) / ODDS_STEP) * ODDS_ITEM_W;
+    if (Math.abs(el.scrollLeft - target) > 2) {
+      programmatic.current = true;
+      el.scrollLeft = target;
+      window.setTimeout(() => {
+        programmatic.current = false;
+      }, 60);
+    }
+  }, [current]);
+
+  const handleScroll = () => {
+    const el = ref.current;
+    if (!el || programmatic.current) return;
+    const idx = Math.round(el.scrollLeft / ODDS_ITEM_W);
+    const v = Math.min(ODDS_MAX, Math.max(ODDS_MIN, ODDS_MIN + idx * ODDS_STEP));
+    if (String(v) !== value) onChange(String(v));
+  };
+
+  const spacer = `calc(50% - ${ODDS_ITEM_W / 2}px)`;
+
+  return (
+    <div className="relative h-11 select-none">
+      {/* center selection indicator */}
+      <div
+        className="pointer-events-none absolute inset-y-1 left-1/2 -translate-x-1/2 rounded-md border-2 border-primary/50 bg-primary/5"
+        style={{ width: ODDS_ITEM_W }}
+      />
+      <div
+        ref={ref}
+        onScroll={handleScroll}
+        className="flex h-full items-center overflow-x-auto overflow-y-hidden snap-x snap-mandatory [&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: "none" }}
+      >
+        <div className="shrink-0" style={{ width: spacer }} />
+        {values.map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => onChange(String(v))}
+            className={`shrink-0 snap-center tabular-nums transition-colors ${
+              v === current ? "text-lg font-bold text-foreground" : "text-sm text-muted-foreground"
+            }`}
+            style={{ width: ODDS_ITEM_W }}
+          >
+            {v}
+          </button>
+        ))}
+        <div className="shrink-0" style={{ width: spacer }} />
+      </div>
+    </div>
   );
 }
