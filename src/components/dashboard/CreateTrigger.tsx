@@ -167,6 +167,10 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
     if (initialEvent !== undefined) setSelectedEvent(initialEvent ?? null);
     // Reset each open: present only when launched from an Active Games card.
     setSelectedCard(initialCard ?? null);
+    // Fresh threshold defaults each open (live odds prefill overrides below).
+    setOddsSign("+");
+    setOddsValue("200");
+    setOddsDirection("higher");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -609,7 +613,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
   useEffect(() => {
     if (currentLiveOdds === null || currentLiveOdds === undefined) return;
     setOddsSign(currentLiveOdds >= 0 ? "+" : "-");
-    setOddsValue(String(Math.max(100, Math.round(Math.abs(currentLiveOdds) / 10) * 10)));
+    setOddsValue(String(Math.min(2500, Math.max(100, Math.round(Math.abs(currentLiveOdds) / 10) * 10))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentLiveOdds]);
 
@@ -1147,45 +1151,16 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
                 )}
               </div>
 
-              {/* Row: [ +/- picker ] [ scrolling magnitude wheel (by 10) ] [ higher/lower picker ] */}
-              <div className="flex items-stretch gap-2">
-                {/* +/- segmented picker (left) */}
-                <div className="flex shrink-0 rounded-lg border border-border bg-card p-0.5">
-                  {(["+", "-"] as const).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setOddsSign(s)}
-                      className={`h-9 w-8 rounded-md text-base font-bold transition-colors ${
-                        oddsSign === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-
-                {/* scrolling magnitude picker — steps of 10 (middle) */}
-                <div className="min-w-0 flex-1 rounded-lg border border-border bg-card">
-                  <OddsWheel value={oddsValue} onChange={setOddsValue} />
-                </div>
-
-                {/* higher/lower segmented picker (right) */}
-                <div className="flex shrink-0 rounded-lg border border-border bg-card p-0.5">
-                  {([["higher", "Higher"], ["lower", "Lower"]] as const).map(([val, label]) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => setOddsDirection(val)}
-                      className={`h-9 px-3 rounded-md text-sm font-medium transition-colors ${
-                        oddsDirection === val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {/* iOS-style vertical wheel picker in one container:
+                  [ +/- ] [ number (steps of 10) ] [ Higher / Lower ] */}
+              <OddsPicker
+                sign={oddsSign}
+                onSign={setOddsSign}
+                magnitude={oddsValue || "200"}
+                onMagnitude={setOddsValue}
+                direction={oddsDirection}
+                onDirection={setOddsDirection}
+              />
             </div>
 
             <div className="space-y-2">
@@ -1263,90 +1238,131 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
   );
 }
 
-// ── Scrolling odds-magnitude picker (steps of 10) ───────────────────────────
+// ── iOS-style vertical wheel odds picker ────────────────────────────────────
 const ODDS_MIN = 100;
 const ODDS_MAX = 2500;
 const ODDS_STEP = 10;
-const ODDS_ITEM_W = 64; // px per snap item
+const ROW_H = 36; // px per row
+const VISIBLE = 5; // rows shown (odd → the middle row is the selection)
+const WHEEL_PAD = ((VISIBLE - 1) / 2) * ROW_H; // top/bottom spacer
+
+interface WheelOption {
+  value: string;
+  label: string;
+}
 
 /**
- * Horizontal scroll-snap "wheel" for the odds magnitude. Each snap point is 10
- * apart; the value centered under the indicator is the selected one. Sign and
- * direction live in separate segmented pickers, so this only handles magnitude.
+ * One vertical scroll-snap wheel column (iOS picker style). The row centered in
+ * the selection band is the selected value; neighbours fade with distance.
  */
-function OddsWheel({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function Wheel({ options, value, onChange }: { options: WheelOption[]; value: string; onChange: (v: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const programmatic = useRef(false);
 
-  const values = useMemo(() => {
-    const arr: number[] = [];
-    for (let v = ODDS_MIN; v <= ODDS_MAX; v += ODDS_STEP) arr.push(v);
-    return arr;
-  }, []);
+  let idx = options.findIndex((o) => o.value === value);
+  if (idx < 0) idx = 0;
 
-  const parsed = parseInt(value || "", 10);
-  const current = Number.isNaN(parsed)
-    ? 200
-    : Math.min(ODDS_MAX, Math.max(ODDS_MIN, Math.round(parsed / ODDS_STEP) * ODDS_STEP));
-
-  // If empty, seed a sensible default so the wheel + submit agree.
-  useEffect(() => {
-    if (!value) onChange(String(current));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Center the strip on the current value (mount + external prefill changes).
+  // Center the column on the current value (mount + external changes).
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const target = ((current - ODDS_MIN) / ODDS_STEP) * ODDS_ITEM_W;
-    if (Math.abs(el.scrollLeft - target) > 2) {
+    const target = idx * ROW_H;
+    if (Math.abs(el.scrollTop - target) > 2) {
       programmatic.current = true;
-      el.scrollLeft = target;
+      el.scrollTop = target;
       window.setTimeout(() => {
         programmatic.current = false;
       }, 60);
     }
-  }, [current]);
+  }, [idx]);
 
   const handleScroll = () => {
     const el = ref.current;
     if (!el || programmatic.current) return;
-    const idx = Math.round(el.scrollLeft / ODDS_ITEM_W);
-    const v = Math.min(ODDS_MAX, Math.max(ODDS_MIN, ODDS_MIN + idx * ODDS_STEP));
-    if (String(v) !== value) onChange(String(v));
+    const i = Math.min(options.length - 1, Math.max(0, Math.round(el.scrollTop / ROW_H)));
+    const v = options[i]?.value;
+    if (v !== undefined && v !== value) onChange(v);
   };
 
-  const spacer = `calc(50% - ${ODDS_ITEM_W / 2}px)`;
+  return (
+    <div
+      ref={ref}
+      onScroll={handleScroll}
+      className="h-full overflow-y-auto snap-y snap-mandatory [&::-webkit-scrollbar]:hidden"
+      style={{ scrollbarWidth: "none" }}
+    >
+      <div style={{ height: WHEEL_PAD }} />
+      {options.map((o, i) => {
+        const dist = Math.abs(i - idx);
+        const opacity = dist === 0 ? 1 : dist === 1 ? 0.4 : dist === 2 ? 0.18 : 0.08;
+        return (
+          <div
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            className={`flex cursor-pointer snap-center items-center justify-center tabular-nums text-foreground ${dist === 0 ? "text-lg font-bold" : "text-base"}`}
+            style={{ height: ROW_H, opacity }}
+          >
+            {o.label}
+          </div>
+        );
+      })}
+      <div style={{ height: WHEEL_PAD }} />
+    </div>
+  );
+}
+
+const SIGN_OPTIONS: WheelOption[] = [
+  { value: "+", label: "+" },
+  { value: "-", label: "−" },
+];
+const DIRECTION_OPTIONS: WheelOption[] = [
+  { value: "higher", label: "Higher" },
+  { value: "lower", label: "Lower" },
+];
+
+/**
+ * Odds Threshold picker: one container with three vertical wheels —
+ * sign (+/−) · magnitude (steps of 10) · direction (Higher/Lower) — with a
+ * center selection band, mirroring an iOS date/time picker.
+ */
+function OddsPicker({
+  sign,
+  onSign,
+  magnitude,
+  onMagnitude,
+  direction,
+  onDirection,
+}: {
+  sign: "+" | "-";
+  onSign: (v: "+" | "-") => void;
+  magnitude: string;
+  onMagnitude: (v: string) => void;
+  direction: "higher" | "lower";
+  onDirection: (v: "higher" | "lower") => void;
+}) {
+  const magnitudeOptions = useMemo<WheelOption[]>(() => {
+    const arr: WheelOption[] = [];
+    for (let v = ODDS_MIN; v <= ODDS_MAX; v += ODDS_STEP) arr.push({ value: String(v), label: String(v) });
+    return arr;
+  }, []);
 
   return (
-    <div className="relative h-11 select-none">
-      {/* center selection indicator */}
+    <div className="relative overflow-hidden rounded-xl border border-border bg-card" style={{ height: VISIBLE * ROW_H }}>
+      {/* center selection band */}
       <div
-        className="pointer-events-none absolute inset-y-1 left-1/2 -translate-x-1/2 rounded-md border-2 border-primary/50 bg-primary/5"
-        style={{ width: ODDS_ITEM_W }}
+        className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 border-y border-primary/40 bg-primary/5"
+        style={{ height: ROW_H }}
       />
-      <div
-        ref={ref}
-        onScroll={handleScroll}
-        className="flex h-full items-center overflow-x-auto overflow-y-hidden snap-x snap-mandatory [&::-webkit-scrollbar]:hidden"
-        style={{ scrollbarWidth: "none" }}
-      >
-        <div className="shrink-0" style={{ width: spacer }} />
-        {values.map((v) => (
-          <button
-            key={v}
-            type="button"
-            onClick={() => onChange(String(v))}
-            className={`shrink-0 snap-center tabular-nums transition-colors ${
-              v === current ? "text-lg font-bold text-foreground" : "text-sm text-muted-foreground"
-            }`}
-            style={{ width: ODDS_ITEM_W }}
-          >
-            {v}
-          </button>
-        ))}
-        <div className="shrink-0" style={{ width: spacer }} />
+      <div className="flex h-full">
+        <div className="w-16 shrink-0 border-r border-border/50">
+          <Wheel options={SIGN_OPTIONS} value={sign} onChange={(v) => onSign(v as "+" | "-")} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <Wheel options={magnitudeOptions} value={magnitude} onChange={onMagnitude} />
+        </div>
+        <div className="w-28 shrink-0 border-l border-border/50">
+          <Wheel options={DIRECTION_OPTIONS} value={direction} onChange={(v) => onDirection(v as "higher" | "lower")} />
+        </div>
       </div>
     </div>
   );
