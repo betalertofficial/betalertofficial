@@ -447,6 +447,31 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
         }
       }
 
+      // Event-bind "once" triggers created from a game card to THAT exact game,
+      // so the alert means "just this game" (not the team's next game). Pick the
+      // Odds API event whose team matches and whose commence is closest to the
+      // tapped card's start (handles same-day doubleheaders / next-day dupes).
+      // Falls back to team-level "once" when no confident game match is found.
+      let boundEventId: string | null = null;
+      let boundEventCommence: string | null = null;
+      if (frequency === "once" && selectedCard) {
+        const cardMs = selectedCard.commenceTime ? new Date(selectedCard.commenceTime).getTime() : NaN;
+        const team = selectedTeam.toLowerCase();
+        let best: { e: OddsApiEvent; d: number } | null = null;
+        for (const e of events) {
+          const home = e.home_team.toLowerCase();
+          const away = e.away_team.toLowerCase();
+          const teamMatch = home.includes(team) || away.includes(team) || team.includes(home) || team.includes(away);
+          if (!teamMatch) continue;
+          const d = Number.isNaN(cardMs) ? 0 : Math.abs(new Date(e.commence_time).getTime() - cardMs);
+          if (!best || d < best.d) best = { e, d };
+        }
+        if (best && best.d <= 6 * 60 * 60 * 1000) {
+          boundEventId = best.e.id;
+          boundEventCommence = best.e.commence_time;
+        }
+      }
+
       console.log("Creating trigger with data:", {
         sport: selectedSport,
         team_or_player: selectedTeam,
@@ -474,7 +499,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
         vendor_id: oddsApiVendor.id,
         bookmaker: null,
         time_period_type: timePeriodType,
-        time_period_min: timePeriodMin
+        time_period_min: timePeriodMin,
+        event_id: boundEventId,
+        event_commence: boundEventCommence
       });
 
       toast({

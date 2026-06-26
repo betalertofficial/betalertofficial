@@ -14,6 +14,11 @@ interface CreateTriggerParams {
   status: string;
   time_period_type?: string | null;
   time_period_min?: number | null;
+  // Event binding for "just this game" (once) triggers. When set, the cron
+  // matches ONLY this Odds API event; event_commence drives auto-expiry once
+  // the game is over.
+  event_id?: string | null;
+  event_commence?: string | null;
 }
 
 export const triggerService = {
@@ -82,8 +87,11 @@ export const triggerService = {
         vendor_id: params.vendor_id,
         bookmaker: params.bookmaker,
         time_period_type: params.time_period_type || null,
-        time_period_min: params.time_period_min || null
-      }])
+        time_period_min: params.time_period_min || null,
+        // Event-bound "once" triggers only (null otherwise → team-level).
+        event_id: params.event_id || null,
+        event_commence: params.event_commence || null,
+      } as any])
       .select()
       .single();
 
@@ -114,7 +122,7 @@ export const triggerService = {
       console.error("Error creating profile_trigger:", ptError);
       throw ptError;
     }
-    
+
     return profileTrigger as ProfileTrigger;
   },
 

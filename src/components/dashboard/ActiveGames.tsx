@@ -248,6 +248,7 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
       g.bucket === "tomorrow"
         ? `Tomorrow · ${formatGameTime(g.event.commence_time)}`
         : formatGameTime(g.event.commence_time),
+    commenceTime: g.event.commence_time,
     situation: g.situation,
   });
 

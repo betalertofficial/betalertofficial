@@ -23,6 +23,8 @@ export interface GameCardData {
   liveDetail: string | null;
   /** Pre-game time label, e.g. "7:15 PM" or "Tomorrow · 7:15 PM" (non-live). */
   timeLabel: string | null;
+  /** Raw ISO commence time of this game — used to bind "once" triggers to it. */
+  commenceTime: string;
   situation: EspnSituation | null;
 }
 

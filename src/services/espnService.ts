@@ -1,15 +1,17 @@
 /**
  * ESPN Scoreboard Service
  * Free API - no authentication required
- * Supports: NBA, MLB, and soccer (EPL, MLS, UCL, FIFA World Cup)
+ * Supports: NBA, MLB, NFL, NHL, and soccer (EPL, MLS, UCL, FIFA World Cup)
  */
 
 const ESPN_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports";
 
-// Sport-specific endpoints
+// Sport-specific endpoints (Odds API sport key → ESPN scoreboard URL)
 const SPORT_ENDPOINTS: Record<string, string> = {
   "basketball_nba": `${ESPN_BASE_URL}/basketball/nba/scoreboard`,
   "baseball_mlb": `${ESPN_BASE_URL}/baseball/mlb/scoreboard`,
+  "americanfootball_nfl": `${ESPN_BASE_URL}/football/nfl/scoreboard`,
+  "icehockey_nhl": `${ESPN_BASE_URL}/hockey/nhl/scoreboard`,
   // Soccer: ESPN exposes the live match minute via status.displayClock ("63'")
   // and status.type.detail/shortDetail, which findGameScore returns as clock/detail.
   "soccer_epl": `${ESPN_BASE_URL}/soccer/eng.1/scoreboard`,
@@ -46,6 +48,7 @@ interface ESPNStatus {
   displayClock: string;
   type: {
     name: string;
+    state: string;
     detail: string;
     shortDetail: string;
   };
@@ -157,6 +160,54 @@ export const espnService = {
     } catch (error) {
       console.error(`Error fetching ESPN ${sport} scoreboard:`, error);
       throw error;
+    }
+  },
+
+  /**
+   * Return all currently in-progress games for a sport (free liveness check).
+   * Used by the poller to decide which sports actually have a live game right
+   * now — so we only spend paid Odds API credits on sports that are live.
+   * Returns [] for unsupported sports or on any error (never throws).
+   */
+  async getLiveGames(sport: string, date?: string): Promise<ESPNScore[]> {
+    try {
+      if (!date) {
+        date = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }).replace(/-/g, "");
+      }
+
+      const scoreboard = await this.getScoreboard(sport, date);
+      const live: ESPNScore[] = [];
+
+      for (const event of scoreboard.events || []) {
+        const competition = event.competitions?.[0];
+        if (!competition) continue;
+
+        const status = competition.status;
+        if (status?.type?.state !== "in") continue; // in-progress only
+
+        const home = competition.competitors.find((c) => c.homeAway === "home");
+        const away = competition.competitors.find((c) => c.homeAway === "away");
+        if (!home || !away) continue;
+
+        live.push({
+          found: true,
+          homeTeam: home.team.displayName,
+          awayTeam: away.team.displayName,
+          homeScore: parseInt(home.score || "0"),
+          awayScore: parseInt(away.score || "0"),
+          period: status.period,
+          clock: status.displayClock,
+          state: status.type.name,
+          detail: status.type.detail,
+          espnGameId: event.id,
+        });
+      }
+
+      console.log(`[ESPN] ${sport}: ${live.length} live game(s)`);
+      return live;
+    } catch (error) {
+      console.error(`[ESPN] Error fetching live games for ${sport}:`, error);
+      return [];
     }
   },
 

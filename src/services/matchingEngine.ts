@@ -15,6 +15,9 @@ interface Trigger {
   frequency?: string; // 'once' or 'recurring'
   time_period_type?: string | null; // No longer used in matching engine
   time_period_min?: number | null; // No longer used in matching engine
+  // When set (event-bound "once" triggers), the trigger matches ONLY this
+  // specific Odds API event — i.e. "just this game", not any game of the team.
+  event_id?: string | null;
 }
 
 interface OddsSnapshot {
@@ -68,7 +71,7 @@ const BET_TYPE_MAPPING: Record<string, string> = {
  * @param existingMatches - Map of trigger_id -> Set of event_ids that have already matched
  */
 export function findMatches(
-  triggers: Trigger[], 
+  triggers: Trigger[],
   oddsData: OddsSnapshot[],
   existingMatches: Map<string, Set<string>> = new Map()
 ): Match[] {
@@ -76,7 +79,7 @@ export function findMatches(
 
   console.log(`[MatchingEngine] Starting match process: ${triggers.length} triggers, ${oddsData.length} odds snapshots`);
   console.log(`[MatchingEngine] Existing matches for ${existingMatches.size} recurring triggers`);
-  
+
   // Filter out pregame odds - only include games that have started
   const currentTime = new Date();
   const liveOdds = oddsData.filter(odds => {
@@ -93,7 +96,7 @@ export function findMatches(
     console.log(`[MatchingEngine] Filtered out ${filteredCount} pregame odds (games not started yet)`);
   }
   console.log(`[MatchingEngine] Processing ${liveOdds.length} live game odds`);
-  
+
   // DEBUG: Show sample odds data
   if (liveOdds.length > 0) {
     console.log("[MatchingEngine] DEBUG - Sample live odds data (first 3):");
@@ -109,12 +112,15 @@ export function findMatches(
     if (trigger.bookmaker) {
       console.log(`[MatchingEngine] Bookmaker filter: ${trigger.bookmaker}`);
     }
+    if (trigger.event_id) {
+      console.log(`[MatchingEngine] Event-bound: only matching event ${trigger.event_id}`);
+    }
 
     // trigger.sport now uses league_key format (e.g., "basketball_nba")
     // odds.sport also uses league_key format
     const oddsApiSport = trigger.sport;
     console.log(`[MatchingEngine] League: ${trigger.sport}`);
-    
+
     // Map bet type to Odds API format
     const oddsApiBetType = BET_TYPE_MAPPING[trigger.bet_type.toLowerCase()] || trigger.bet_type.toLowerCase();
     console.log(`[MatchingEngine] Mapped bet type: ${trigger.bet_type} → ${oddsApiBetType}`);
@@ -133,7 +139,7 @@ export function findMatches(
     let bookmakerMismatches = 0;
     let oddsMismatches = 0;
     let alreadyMatchedSkips = 0;
-    
+
     for (const odds of liveOdds) {
       // Skip if this is a recurring trigger that already matched this event
       if (trigger.frequency === 'recurring' && alreadyMatchedEvents.has(odds.event_id)) {
@@ -147,8 +153,13 @@ export function findMatches(
         continue;
       }
 
+      // 1b. Event-bound triggers ("just this game") only match their own event.
+      if (trigger.event_id && odds.event_id !== trigger.event_id) {
+        continue;
+      }
+
       // 2. Match team/player (case-insensitive, partial match)
-      const teamMatch = 
+      const teamMatch =
         odds.team_or_player.toLowerCase().includes(trigger.team_or_player.toLowerCase()) ||
         trigger.team_or_player.toLowerCase().includes(odds.team_or_player.toLowerCase());
       if (!teamMatch) {
@@ -263,7 +274,7 @@ export function deduplicateMatches(matches: Match[]): Match[] {
 
   for (const match of matches) {
     const existing = bestMatches.get(match.triggerId);
-    
+
     if (!existing || match.oddsValue > existing.oddsValue) {
       bestMatches.set(match.triggerId, match);
     }
@@ -271,7 +282,7 @@ export function deduplicateMatches(matches: Match[]): Match[] {
 
   const deduplicated = Array.from(bestMatches.values());
   console.log(`[MatchingEngine] Deduplicated ${matches.length} matches to ${deduplicated.length} best matches`);
-  
+
   return deduplicated;
 }
 
