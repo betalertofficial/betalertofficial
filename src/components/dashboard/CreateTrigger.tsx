@@ -147,6 +147,8 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
   const [oddsSign, setOddsSign] = useState<"+" | "-">("+");
   const [oddsValue, setOddsValue] = useState("");
   const [oddsDirection, setOddsDirection] = useState<"higher" | "lower">("higher");
+  // Custom mode: type any odds value (for lines outside the wheel's range).
+  const [customOdds, setCustomOdds] = useState(false);
   const [gameTimeContext, setGameTimeContext] = useState("anytime");
   const [frequency, setFrequency] = useState<TriggerFrequency>("once");
 
@@ -172,6 +174,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
     setOddsSign("+");
     setOddsValue("200");
     setOddsDirection("higher");
+    setCustomOdds(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -609,8 +612,16 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
   // nearest 10 (the picker steps by 10), whenever live odds load or bet type changes.
   useEffect(() => {
     if (currentLiveOdds === null || currentLiveOdds === undefined) return;
+    const mag = Math.abs(currentLiveOdds);
     setOddsSign(currentLiveOdds >= 0 ? "+" : "-");
-    setOddsValue(String(Math.min(2500, Math.max(100, Math.round(Math.abs(currentLiveOdds) / 10) * 10))));
+    if (mag > 2500) {
+      // Beyond the wheel's range (e.g. +8000) → custom mode with the exact value.
+      setCustomOdds(true);
+      setOddsValue(String(Math.round(mag)));
+    } else {
+      setCustomOdds(false);
+      setOddsValue(String(Math.max(100, Math.round(mag / 10) * 10)));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentLiveOdds]);
 
@@ -1139,25 +1150,86 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <Label className="text-sm font-medium text-foreground">Odds Threshold</Label>
-                {currentLiveOdds !== null && currentLiveOdds !== undefined && (
-                  <span className="text-xs text-muted-foreground">
-                    now <span className="font-semibold text-foreground">{formatOdds(currentLiveOdds)}</span>
-                  </span>
-                )}
+                <div className="flex items-center gap-3">
+                  {currentLiveOdds !== null && currentLiveOdds !== undefined && (
+                    <span className="text-xs text-muted-foreground">
+                      now <span className="font-semibold text-foreground">{formatOdds(currentLiveOdds)}</span>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCustomOdds((v) => {
+                        const next = !v;
+                        if (!next) {
+                          // Switching back to the wheel — snap into its range/step.
+                          const n = parseInt(oddsValue || "", 10);
+                          const clamped = Math.min(2500, Math.max(100, Math.round((Number.isNaN(n) ? 200 : n) / 10) * 10));
+                          setOddsValue(String(clamped));
+                        }
+                        return next;
+                      })
+                    }
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    {customOdds ? "Use picker" : "Custom"}
+                  </button>
+                </div>
               </div>
 
-              {/* iOS-style vertical wheel picker in one container:
-                  [ +/- ] [ number (steps of 10) ] [ Higher / Lower ] */}
-              <OddsPicker
-                sign={oddsSign}
-                onSign={setOddsSign}
-                magnitude={oddsValue || "200"}
-                onMagnitude={setOddsValue}
-                direction={oddsDirection}
-                onDirection={setOddsDirection}
-              />
+              {customOdds ? (
+                /* Custom mode: type any value (for lines outside the wheel range) */
+                <div className="flex items-stretch gap-2">
+                  <div className="flex shrink-0 rounded-lg border border-border bg-card p-0.5">
+                    {(["+", "-"] as const).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setOddsSign(s)}
+                        className={`h-10 w-9 rounded-md text-base font-bold transition-colors ${
+                          oddsSign === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="e.g. 8000"
+                    value={oddsValue}
+                    onChange={(e) => setOddsValue(e.target.value.replace(/[^0-9]/g, ""))}
+                    className="min-w-0 flex-1 bg-card border-border text-center text-lg font-bold"
+                  />
+                  <div className="flex shrink-0 rounded-lg border border-border bg-card p-0.5">
+                    {([["higher", "Higher"], ["lower", "Lower"]] as const).map(([val, label]) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setOddsDirection(val)}
+                        className={`h-10 px-3 rounded-md text-sm font-medium transition-colors ${
+                          oddsDirection === val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                /* iOS-style vertical wheel picker: [ +/- ] [ number (steps of 10) ] [ Higher / Lower ] */
+                <OddsPicker
+                  sign={oddsSign}
+                  onSign={setOddsSign}
+                  magnitude={oddsValue || "200"}
+                  onMagnitude={setOddsValue}
+                  direction={oddsDirection}
+                  onDirection={setOddsDirection}
+                />
+              )}
             </div>
 
             <div className="space-y-2">
