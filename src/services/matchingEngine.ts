@@ -3,6 +3,8 @@
  * No database dependencies - can be tested independently
  */
 
+import { teamNamesMatch } from "@/lib/teamMatch";
+
 interface Trigger {
   id: string;
   sport: string;
@@ -158,11 +160,9 @@ export function findMatches(
         continue;
       }
 
-      // 2. Match team/player (case-insensitive, partial match)
-      const teamMatch =
-        odds.team_or_player.toLowerCase().includes(trigger.team_or_player.toLowerCase()) ||
-        trigger.team_or_player.toLowerCase().includes(odds.team_or_player.toLowerCase());
-      if (!teamMatch) {
+      // 2. Match team/player (normalized; handles ESPN↔Odds aliases like
+      //    USA↔United States, Türkiye↔Turkey, and Lakers↔Los Angeles Lakers)
+      if (!teamNamesMatch(odds.team_or_player, trigger.team_or_player)) {
         teamMismatches++;
         continue;
       }

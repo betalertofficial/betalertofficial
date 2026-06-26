@@ -13,6 +13,7 @@ import { triggerService } from "@/services/triggerService";
 import { teamsService, type Team } from "@/services/teamsService";
 import type { BetType, TriggerFrequency } from "@/types/database";
 import { GameCard, type GameCardData } from "./GameCard";
+import { teamNamesMatch } from "@/lib/teamMatch";
 
 export interface CreateTriggerProps {
   open?: boolean;
@@ -460,13 +461,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
       let boundEventCommence: string | null = null;
       if (frequency === "once" && selectedCard) {
         const cardMs = selectedCard.commenceTime ? new Date(selectedCard.commenceTime).getTime() : NaN;
-        const team = selectedTeam.toLowerCase();
         let best: { e: OddsApiEvent; d: number } | null = null;
         for (const e of events) {
-          const home = e.home_team.toLowerCase();
-          const away = e.away_team.toLowerCase();
-          const teamMatch = home.includes(team) || away.includes(team) || team.includes(home) || team.includes(away);
-          if (!teamMatch) continue;
+          if (!teamNamesMatch(e.home_team, selectedTeam) && !teamNamesMatch(e.away_team, selectedTeam)) continue;
           const d = Number.isNaN(cardMs) ? 0 : Math.abs(new Date(e.commence_time).getTime() - cardMs);
           if (!best || d < best.d) best = { e, d };
         }
