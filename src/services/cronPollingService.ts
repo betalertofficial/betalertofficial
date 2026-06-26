@@ -17,6 +17,7 @@ import { markEventsAsLive, markEventsAsCompleted } from "./scheduleService";
 import { findMatches, deduplicateMatches } from "./matchingEngine";
 import { espnService } from "./espnService";
 import { alertService } from "./alertService";
+import { teamNamesMatch } from "@/lib/teamMatch";
 
 type Trigger = Database["public"]["Tables"]["triggers"]["Row"];
 
@@ -42,13 +43,6 @@ interface CronPollResult {
   skippedReason?: string;
   liveEventsCount?: number;
   activeSports?: string[];
-}
-
-/** Bidirectional, case-insensitive team-name match (ESPN vs Odds API names). */
-function teamsNameMatch(a?: string, b?: string): boolean {
-  const x = (a || "").toLowerCase();
-  const y = (b || "").toLowerCase();
-  return !!x && !!y && (x.includes(y) || y.includes(x));
 }
 
 /**
@@ -419,8 +413,8 @@ export async function runCronPoll(
     for (const [eventId, info] of uniqueOddsEvents) {
       const liveList = liveGamesBySport.get(info.sport) || [];
       const espnGame =
-        liveList.find((g) => teamsNameMatch(g.homeTeam, info.home) && teamsNameMatch(g.awayTeam, info.away)) ||
-        liveList.find((g) => teamsNameMatch(g.homeTeam, info.home) || teamsNameMatch(g.awayTeam, info.away));
+        liveList.find((g) => teamNamesMatch(g.homeTeam, info.home) && teamNamesMatch(g.awayTeam, info.away)) ||
+        liveList.find((g) => teamNamesMatch(g.homeTeam, info.home) || teamNamesMatch(g.awayTeam, info.away));
       if (!espnGame) continue;
 
       espnDataCache.set(eventId, espnGame);
@@ -450,10 +444,7 @@ export async function runCronPoll(
       return allOdds.some((odds) => {
         if (boundEventId && odds.event_id !== boundEventId) return false;
 
-        const teamMatch =
-          odds.team_or_player.toLowerCase().includes(trigger.team_or_player.toLowerCase()) ||
-          trigger.team_or_player.toLowerCase().includes(odds.team_or_player.toLowerCase());
-        if (!teamMatch) return false;
+        if (!teamNamesMatch(odds.team_or_player, trigger.team_or_player)) return false;
 
         const eventPeriod = eventPeriods.get(odds.event_id);
         const eventPeriodType = eventPeriodTypes.get(odds.event_id);

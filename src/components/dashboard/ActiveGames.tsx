@@ -3,6 +3,7 @@ import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { LEAGUES, leagueLabel } from "@/lib/leagues";
 import { isGameToday, formatGameTime, getTeamMoneyline } from "@/lib/gameUtils";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
+import { teamNamesMatch } from "@/lib/teamMatch";
 import type { EspnSituation } from "@/hooks/useEspnLive";
 import { GameCard, type GameCardData } from "./GameCard";
 import { LeaguePills } from "./LeaguePills";
@@ -63,25 +64,17 @@ function toInt(v: unknown): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
-// Loose, bidirectional team-name match (ESPN displayName vs Odds API name).
-// Both sources use identical canonical names for US leagues + country names for
-// the World Cup, so substring matching is safe and tolerant of minor variants.
-function nameMatch(a: string, b: string): boolean {
-  const x = (a || "").toLowerCase();
-  const y = (b || "").toLowerCase();
-  return !!x && !!y && (x.includes(y) || y.includes(x));
-}
-
-// Find a team's moneyline across a league's Odds API events. Reads the line
-// using the Odds API's own team names (exact-match inside getTeamMoneyline) once
-// we've located the event by substring, so name variants never break the lookup.
+// Find a team's moneyline across a league's Odds API events. Team-name matching
+// (ESPN ↔ Odds API, incl. national-team aliases like USA↔United States and
+// Türkiye↔Turkey) is handled by teamNamesMatch; the line is then read using the
+// Odds API's own team name (exact-match inside getTeamMoneyline).
 function findMoneyline(events: OddsApiEvent[], teamName: string): number | null {
   for (const e of events) {
-    if (nameMatch(e.home_team, teamName)) {
+    if (teamNamesMatch(e.home_team, teamName)) {
       const m = getTeamMoneyline(e, e.home_team);
       if (m !== null) return m;
     }
-    if (nameMatch(e.away_team, teamName)) {
+    if (teamNamesMatch(e.away_team, teamName)) {
       const m = getTeamMoneyline(e, e.away_team);
       if (m !== null) return m;
     }
