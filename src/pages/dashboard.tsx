@@ -10,7 +10,7 @@ import { CreateTrigger } from "@/components/dashboard/CreateTrigger";
 import type { GameCardData } from "@/components/dashboard/GameCard";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { User } from "lucide-react";
+import { User, RefreshCw, Loader2 } from "lucide-react";
 import { SEO } from "@/components/SEO";
 import { useToast } from "@/hooks/use-toast";
 
@@ -33,6 +33,16 @@ export default function Dashboard() {
   const [triggerOpen, setTriggerOpen] = useState(false);
   const [prefill, setPrefill] = useState<Prefill>({});
   const [triggerRefresh, setTriggerRefresh] = useState(0);
+  // Bumping this re-fetches the main dashboard data sections (Pick a Team,
+  // Active & Upcoming Games, Comeback's On).
+  const [dataRefresh, setDataRefresh] = useState(0);
+  const [dataRefreshing, setDataRefreshing] = useState(false);
+
+  const refreshDashboardData = () => {
+    setDataRefresh((n) => n + 1);
+    setDataRefreshing(true);
+    setTimeout(() => setDataRefreshing(false), 900);
+  };
 
   // Handle Telegram auth callback from URL params
   useEffect(() => {
@@ -132,14 +142,27 @@ export default function Dashboard() {
           <div className="grid lg:grid-cols-[1fr_360px] gap-8 items-start">
             {/* Main column: live data sections */}
             <div className="space-y-10 min-w-0">
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
-                <p className="text-muted-foreground mt-1">Manage your betting triggers and track your alerts</p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
+                  <p className="text-muted-foreground mt-1">Manage your betting triggers and track your alerts</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  title="Refresh games & odds"
+                  aria-label="Refresh dashboard data"
+                  disabled={dataRefreshing}
+                  onClick={refreshDashboardData}
+                >
+                  {dataRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                </Button>
               </div>
 
-              <PickATeam onSelectTeam={openTrigger} />
-              <ActiveGames onSelectGame={openTrigger} />
-              <ComebacksOn onSelect={openTrigger} />
+              <PickATeam onSelectTeam={openTrigger} refreshSignal={dataRefresh} />
+              <ActiveGames onSelectGame={openTrigger} refreshSignal={dataRefresh} />
+              <ComebacksOn onSelect={openTrigger} refreshSignal={dataRefresh} />
             </div>
 
             {/* Right column: My Triggers drawer */}

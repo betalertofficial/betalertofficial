@@ -27,7 +27,7 @@ function leagueToSportKey(value: string | null | undefined): string | null {
   return null;
 }
 
-export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection) => void }) {
+export function PickATeam({ onSelectTeam, refreshSignal }: { onSelectTeam: (sel: TeamSelection) => void; refreshSignal?: number }) {
   const [league, setLeague] = useState<string>("all");
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +50,7 @@ export function PickATeam({ onSelectTeam }: { onSelectTeam: (sel: TeamSelection)
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshSignal]);
 
   useEffect(() => {
     rowRef.current?.scrollTo({ left: 0 });

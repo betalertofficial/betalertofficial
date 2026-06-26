@@ -28,7 +28,7 @@ export interface ComebackSelection {
   team: string;
 }
 
-export function ComebacksOn({ onSelect }: { onSelect: (sel: ComebackSelection) => void }) {
+export function ComebacksOn({ onSelect, refreshSignal }: { onSelect: (sel: ComebackSelection) => void; refreshSignal?: number }) {
   const [league, setLeague] = useState("all");
   const [items, setItems] = useState<Comeback[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +51,7 @@ export function ComebacksOn({ onSelect }: { onSelect: (sel: ComebackSelection) =
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshSignal]);
 
   const matchesLeague = (c: Comeback, sportKey: string) => c.sport_key === sportKey || c.league_key === sportKey;
 

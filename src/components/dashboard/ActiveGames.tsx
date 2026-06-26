@@ -171,7 +171,7 @@ async function fetchLeagueGames(sportKey: string): Promise<GameVM[]> {
   return out;
 }
 
-export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelection) => void }) {
+export function ActiveGames({ onSelectGame, refreshSignal }: { onSelectGame: (sel: GameSelection) => void; refreshSignal?: number }) {
   const [league, setLeague] = useState("all");
   const [games, setGames] = useState<GameVM[]>([]);
   const [loading, setLoading] = useState(true);
@@ -221,7 +221,7 @@ export function ActiveGames({ onSelectGame }: { onSelectGame: (sel: GameSelectio
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshSignal]);
 
   // Build the fully-resolved card view-model (logos + formatted time) so the same
   // object renders the dashboard card AND seeds the Create Trigger modal header.
