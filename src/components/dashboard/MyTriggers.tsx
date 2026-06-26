@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { triggerService } from "@/services/triggerService";
-import { CreateTrigger } from "./CreateTrigger";
 import { ActiveTriggerRow } from "./ActiveTriggerRow";
 import { CompletedTriggerRow } from "./CompletedTriggerRow";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import type { ProfileTrigger } from "@/types/database";
 
 export function MyTriggers({ refreshSignal }: { refreshSignal?: number } = {}) {
@@ -15,7 +14,6 @@ export function MyTriggers({ refreshSignal }: { refreshSignal?: number } = {}) {
   const [completedTriggers, setCompletedTriggers] = useState<ProfileTrigger[]>([]);
   const [lastPollAt, setLastPollAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
 
   const loadTriggers = async () => {
@@ -46,7 +44,7 @@ export function MyTriggers({ refreshSignal }: { refreshSignal?: number } = {}) {
       setTriggers([]);
       setLoading(false);
     }
-    // Reload when a trigger is created elsewhere (e.g. the dashboard quick-create).
+    // Reload when a trigger is created elsewhere (the dashboard quick-create).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, authLoading, refreshSignal]);
 
@@ -95,14 +93,8 @@ export function MyTriggers({ refreshSignal }: { refreshSignal?: number } = {}) {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-bold">My Triggers</h2>
-        <Button size="sm" onClick={() => setCreateModalOpen(true)} disabled={remaining <= 0}>
-          <Plus className="h-4 w-4 mr-1" />
-          New
-        </Button>
-      </div>
+      {/* Header — triggers are created from the dashboard (tap a team/game). */}
+      <h2 className="text-lg font-bold">My Triggers</h2>
 
       {remaining <= 0 && (
         <div className="rounded-lg border border-accent/20 bg-accent/10 px-3 py-2 text-xs text-accent">
@@ -131,11 +123,10 @@ export function MyTriggers({ refreshSignal }: { refreshSignal?: number } = {}) {
         <TabsContent value="active" className="mt-4">
           {activeTriggers.length === 0 ? (
             <div className="rounded-xl border border-dashed border-gray-200 py-8 px-4 text-center">
-              <p className="mb-3 text-sm text-muted-foreground">No active triggers yet.</p>
-              <Button size="sm" onClick={() => setCreateModalOpen(true)}>
-                <Plus className="h-4 w-4 mr-1" />
-                Create your first
-              </Button>
+              <p className="text-sm text-muted-foreground">No active triggers yet.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Pick a team or tap a game on the left to create one.
+              </p>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
@@ -167,8 +158,6 @@ export function MyTriggers({ refreshSignal }: { refreshSignal?: number } = {}) {
           )}
         </TabsContent>
       </Tabs>
-
-      <CreateTrigger open={createModalOpen} onOpenChange={setCreateModalOpen} onSuccess={loadTriggers} />
     </div>
   );
 }
