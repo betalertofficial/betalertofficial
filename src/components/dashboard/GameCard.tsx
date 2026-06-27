@@ -1,7 +1,9 @@
 import type { EspnSituation } from "@/hooks/useEspnLive";
+import type { TeamForm } from "@/hooks/useTeamForm";
 import { leagueLabel } from "@/lib/leagues";
 import { formatOdds } from "@/lib/gameUtils";
 import { TeamLogoImg } from "./TeamLogoImg";
+import { TeamFormBadge } from "./TeamFormBadge";
 
 /**
  * Fully-resolved, serializable view-model for a game card. Built on the
@@ -26,6 +28,9 @@ export interface GameCardData {
   /** Raw ISO commence time of this game — used to bind "once" triggers to it. */
   commenceTime: string;
   situation: EspnSituation | null;
+  /** Recent-form ("hot/not") per team; null when unavailable. */
+  awayForm?: TeamForm | null;
+  homeForm?: TeamForm | null;
 }
 
 /**
@@ -69,6 +74,7 @@ export function GameCard({
         live={live}
         selected={!!selectedTeam && selectedTeam === data.awayTeam}
         onSelectTeam={onSelectTeam}
+        form={data.awayForm ?? null}
       />
       <div className="h-px bg-gray-100 mx-1" />
       <TeamRow
@@ -79,6 +85,7 @@ export function GameCard({
         live={live}
         selected={!!selectedTeam && selectedTeam === data.homeTeam}
         onSelectTeam={onSelectTeam}
+        form={data.homeForm ?? null}
       />
 
       {live && data.situation ? <SituationStrip situation={data.situation} /> : null}
@@ -94,6 +101,7 @@ function TeamRow({
   live,
   selected,
   onSelectTeam,
+  form,
 }: {
   name: string;
   logo: string | null;
@@ -102,17 +110,23 @@ function TeamRow({
   live: boolean;
   selected: boolean;
   onSelectTeam?: (team: string) => void;
+  form?: TeamForm | null;
 }) {
   const inner = (
     <>
       <span className="flex min-w-0 items-center gap-2">
         <TeamLogoImg url={logo} alt={name} className="h-5 w-5 shrink-0 object-contain" />
-        <span className="truncate text-sm font-semibold text-gray-900">{name}</span>
-        {selected ? (
-          <span className="shrink-0 rounded bg-gray-900 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-            Pick
+        <span className="flex min-w-0 flex-col">
+          <span className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-semibold text-gray-900">{name}</span>
+            {selected ? (
+              <span className="shrink-0 rounded bg-gray-900 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                Pick
+              </span>
+            ) : null}
           </span>
-        ) : null}
+          {form ? <TeamFormBadge form={form} className="mt-0.5" /> : null}
+        </span>
       </span>
       <div className="flex shrink-0 items-center gap-2">
         {ml !== null ? <span className="text-xs tabular-nums text-gray-500">{formatOdds(ml)}</span> : null}
