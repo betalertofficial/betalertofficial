@@ -46,8 +46,11 @@ export async function syncEventSchedules(
 
   for (const leagueKey of leagueKeys) {
     try {
-      // Fetch events from Odds API
-      const apiUrl = `https://api.the-odds-api.com/v4/sports/${leagueKey}/odds?apiKey=${oddsApiKey}&regions=us&markets=h2h`;
+      // Fetch events from Odds API. oddsFormat=american is REQUIRED so opening
+      // moneylines are stored in American format (negative = favorite); without
+      // it the API returns decimal odds and the Comebacks "favorite" detection
+      // (home_ml < 0) never triggers.
+      const apiUrl = `https://api.the-odds-api.com/v4/sports/${leagueKey}/odds?apiKey=${oddsApiKey}&regions=us&markets=h2h&oddsFormat=american`;
       const response = await fetch(apiUrl);
 
       if (!response.ok) {
