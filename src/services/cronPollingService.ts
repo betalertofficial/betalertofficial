@@ -284,10 +284,13 @@ export async function runCronPoll(
       console.error("[CronPoll] Error expiring finished once-triggers:", expireError.message);
     }
 
-    // Step 1: Fetch active triggers
+    // Step 1: Fetch active triggers that still belong to a user. The !inner
+    // embed on profile_triggers excludes ORPHANS — triggers whose owner link was
+    // deleted (the trigger row lingers active) — so we never waste a poll on a
+    // trigger nobody will ever be alerted for.
     const { data: triggers, error: triggersError } = await supabase
       .from("triggers")
-      .select("*")
+      .select("*, profile_triggers!inner(profile_id)")
       .eq("status", "active");
 
     if (triggersError) {
