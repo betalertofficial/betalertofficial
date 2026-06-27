@@ -1,22 +1,58 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
+import { espnService } from "@/services/espnService";
+import { SPORT_KEYS } from "@/lib/leagues";
+import { teamNamesMatch } from "@/lib/teamMatch";
 
 /**
  * GET /api/odds/comebacks
  *
- * Public read endpoint powering the "Comeback's On" dashboard section:
- * live games where the team that OPENED as the favorite (negative opening
- * moneyline) is CURRENTLY TRAILING on the scoreboard.
+ * "Comeback's On" — live games where the team that OPENED as the favorite
+ * (negative opening moneyline) is CURRENTLY TRAILING on the scoreboard.
  *
- * Data sources (all server-side via the service-role client):
- *  - event_schedules (status = 'live')        → which games are live now
- *  - game_opening_odds (home_ml / away_ml)     → who opened as favorite
- *  - odds_snapshots.scores_data (latest)       → current score + status detail
- *  - odds_snapshots (bet_type='h2h', latest)   → current live moneyline
- *
- * Note: game_opening_odds is populated by the daily schedule sync, so this
- * returns results only for games whose opening line was captured pre-game.
+ * Decoupled from the poller: live games + scores come from ESPN (free), the
+ * opening favorite comes from game_opening_odds (captured pre-game by the daily
+ * sync), and the current live moneyline is fetched from the Odds API only for
+ * the few sports that actually have a comeback candidate. Teams are matched
+ * across sources by name (teamNamesMatch), so it no longer depends on the
+ * stale event_schedules table or cron-written odds_snapshots.
  */
+
+interface OpeningRow {
+  event_id: string;
+  sport: string;
+  home_team: string;
+  away_team: string;
+  home_ml: number | null;
+  away_ml: number | null;
+  commence_time: string;
+}
+
+/** Fetch current h2h moneylines for a sport from the Odds API → name → price. */
+async function fetchCurrentMl(sport: string, apiKey: string): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  try {
+    const r = await fetch(
+      `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${apiKey}&regions=us&markets=h2h&bookmakers=fanduel,draftkings&oddsFormat=american`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!r.ok) return out;
+    const events = await r.json();
+    for (const ev of events || []) {
+      for (const bm of ev.bookmakers || []) {
+        const mkt = (bm.markets || []).find((m: any) => m.key === "h2h");
+        if (!mkt) continue;
+        for (const o of mkt.outcomes || []) {
+          if (out[o.name] === undefined) out[o.name] = Number(o.price);
+        }
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+  return out;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -27,112 +63,106 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!url || !serviceKey) {
     return res.status(500).json({ error: "Supabase not configured" });
   }
-
   const supabase = createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
   try {
-    // 1. Live games right now.
-    const { data: liveEvents, error: liveErr } = await supabase
-      .from("event_schedules")
-      .select("event_id, league_key, sport_key, home_team, away_team, commence_time")
-      .eq("status", "live");
-    if (liveErr) throw liveErr;
-    if (!liveEvents || liveEvents.length === 0) {
+    // 1. Live games + scores from ESPN (free) for each tracked league.
+    const perLeague = await Promise.all(
+      SPORT_KEYS.map(async (sk) => ({ sk, games: await espnService.getLiveGames(sk).catch(() => []) }))
+    );
+    const liveGames = perLeague.flatMap(({ sk, games }) => games.map((g) => ({ ...g, sportKey: sk })));
+
+    if (liveGames.length === 0) {
       res.setHeader("Cache-Control", "public, s-maxage=30");
       return res.status(200).json({ comebacks: [] });
     }
 
-    const eventIds = liveEvents.map((e: any) => e.event_id);
-
-    // 2. Opening odds (immutable opening lines).
-    const { data: opening } = await (supabase as any)
+    // 2. Opening lines captured for TODAY's games (scope to last 12h so we don't
+    //    match a team's stale opener from a previous game).
+    const since = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+    const { data: openingRows } = await (supabase as any)
       .from("game_opening_odds")
-      .select("event_id, home_team, away_team, home_ml, away_ml")
-      .in("event_id", eventIds);
-    const openingById: Record<string, any> = {};
-    (opening || []).forEach((o: any) => { openingById[o.event_id] = o; });
+      .select("event_id, sport, home_team, away_team, home_ml, away_ml, commence_time")
+      .gte("commence_time", since);
+    const opening: OpeningRow[] = openingRows || [];
 
-    // 3. Latest score snapshot per event.
-    const { data: scoreSnaps } = await supabase
-      .from("odds_snapshots")
-      .select("event_id, scores_data, snapshot_at")
-      .in("event_id", eventIds)
-      .not("scores_data", "is", null)
-      .order("snapshot_at", { ascending: false });
-    const latestScore: Record<string, any> = {};
-    (scoreSnaps || []).forEach((s: any) => {
-      if (!latestScore[s.event_id]) latestScore[s.event_id] = s.scores_data;
-    });
-
-    // 4. Latest current moneyline per event+team.
-    const { data: mlRows } = await supabase
-      .from("odds_snapshots")
-      .select("event_id, team_or_player, odds_value, snapshot_at")
-      .in("event_id", eventIds)
-      .eq("bet_type", "h2h")
-      .order("snapshot_at", { ascending: false });
-    const currentMl: Record<string, Record<string, number>> = {};
-    (mlRows || []).forEach((r: any) => {
-      currentMl[r.event_id] = currentMl[r.event_id] || {};
-      if (currentMl[r.event_id][r.team_or_player] === undefined) {
-        currentMl[r.event_id][r.team_or_player] = Number(r.odds_value);
-      }
-    });
-
-    const comebacks: any[] = [];
-    for (const ev of liveEvents as any[]) {
-      const open = openingById[ev.event_id];
-      const score = latestScore[ev.event_id];
-      if (!open || !score) continue;
-
-      const homeScore = Number(score.homeScore ?? score.home_score);
-      const awayScore = Number(score.awayScore ?? score.away_score);
-      if (Number.isNaN(homeScore) || Number.isNaN(awayScore)) continue;
+    // 3. Match each live game to its opening line and keep favorites that trail.
+    const candidates: any[] = [];
+    for (const g of liveGames) {
+      const open = opening.find(
+        (o) =>
+          (teamNamesMatch(o.home_team, g.homeTeam) && teamNamesMatch(o.away_team, g.awayTeam)) ||
+          (teamNamesMatch(o.home_team, g.awayTeam) && teamNamesMatch(o.away_team, g.homeTeam))
+      );
+      if (!open) continue;
 
       const homeMl = Number(open.home_ml);
       const awayMl = Number(open.away_ml);
+      if (Number.isNaN(homeMl) || Number.isNaN(awayMl)) continue;
 
-      // Determine the opening favorite (the more-negative / negative moneyline).
-      let favTeam: string | null = null;
-      let oppTeam: string | null = null;
+      // Opening favorite (more-negative moneyline) by opening-row team name.
+      let favName: string | null = null;
+      let oppName: string | null = null;
       let favOpenMl: number | null = null;
-      let favScore = 0;
-      let oppScore = 0;
-
-      const homeIsFav = homeMl < 0 && (awayMl >= 0 || homeMl < awayMl);
-      const awayIsFav = awayMl < 0 && (homeMl >= 0 || awayMl < homeMl);
-
-      if (homeIsFav) {
-        favTeam = ev.home_team; oppTeam = ev.away_team; favOpenMl = homeMl; favScore = homeScore; oppScore = awayScore;
-      } else if (awayIsFav) {
-        favTeam = ev.away_team; oppTeam = ev.home_team; favOpenMl = awayMl; favScore = awayScore; oppScore = homeScore;
+      if (homeMl < 0 && (awayMl >= 0 || homeMl < awayMl)) {
+        favName = open.home_team; oppName = open.away_team; favOpenMl = homeMl;
+      } else if (awayMl < 0 && (homeMl >= 0 || awayMl < homeMl)) {
+        favName = open.away_team; oppName = open.home_team; favOpenMl = awayMl;
       }
+      if (!favName) continue;
 
-      if (!favTeam || favScore >= oppScore) continue; // only favorites that are currently trailing
+      // Map the favorite onto the ESPN home/away to read the live score.
+      const favIsEspnHome = teamNamesMatch(favName, g.homeTeam);
+      const favScore = favIsEspnHome ? g.homeScore : g.awayScore;
+      const oppScore = favIsEspnHome ? g.awayScore : g.homeScore;
+      if (favScore === undefined || oppScore === undefined) continue;
+      if (favScore >= oppScore) continue; // favorite must currently be TRAILING
 
-      comebacks.push({
-        event_id: ev.event_id,
-        sport_key: ev.sport_key,
-        league_key: ev.league_key,
-        favorite_team: favTeam,
-        opponent_team: oppTeam,
+      candidates.push({
+        event_id: open.event_id,
+        sport_key: g.sportKey,
+        league_key: g.sportKey,
+        favorite_team: favName,
+        opponent_team: oppName,
         opening_ml: favOpenMl,
-        current_ml: currentMl[ev.event_id]?.[favTeam] ?? null,
+        current_ml: null as number | null,
         favorite_score: favScore,
         opponent_score: oppScore,
-        home_team: ev.home_team,
-        away_team: ev.away_team,
-        home_score: homeScore,
-        away_score: awayScore,
-        status_detail: score.detail || score.status || "LIVE",
-        commence_time: ev.commence_time,
+        home_team: g.homeTeam,
+        away_team: g.awayTeam,
+        home_score: g.homeScore,
+        away_score: g.awayScore,
+        status_detail: g.detail || "LIVE",
+        commence_time: open.commence_time,
       });
     }
 
+    // 4. Fill the current live moneyline — one Odds API call per sport that has
+    //    a comeback (cheap; usually zero). Best-effort; null if unavailable.
+    const apiKey = process.env.ODDS_API_KEY;
+    if (candidates.length > 0 && apiKey) {
+      const sports = Array.from(new Set(candidates.map((c) => c.sport_key)));
+      const mlBySport: Record<string, Record<string, number>> = {};
+      await Promise.all(
+        sports.map(async (s) => {
+          mlBySport[s] = await fetchCurrentMl(s, apiKey);
+        })
+      );
+      for (const c of candidates) {
+        const byName = mlBySport[c.sport_key] || {};
+        for (const tn of Object.keys(byName)) {
+          if (teamNamesMatch(tn, c.favorite_team)) {
+            c.current_ml = byName[tn];
+            break;
+          }
+        }
+      }
+    }
+
     res.setHeader("Cache-Control", "public, s-maxage=30");
-    return res.status(200).json({ comebacks });
+    return res.status(200).json({ comebacks: candidates });
   } catch (error) {
     console.error("[/api/odds/comebacks] error:", error);
     return res.status(500).json({ error: "Failed to load comebacks" });
