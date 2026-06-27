@@ -3,6 +3,7 @@ import { oddsApiService, type OddsApiEvent } from "@/services/oddsApiService";
 import { LEAGUES, leagueLabel } from "@/lib/leagues";
 import { isGameToday, formatGameTime, getTeamMoneyline } from "@/lib/gameUtils";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
+import { useTeamForm } from "@/hooks/useTeamForm";
 import { teamNamesMatch } from "@/lib/teamMatch";
 import type { EspnSituation } from "@/hooks/useEspnLive";
 import { GameCard, type GameCardData } from "./GameCard";
@@ -177,6 +178,8 @@ export function ActiveGames({ onSelectGame, refreshSignal }: { onSelectGame: (se
   const [loading, setLoading] = useState(true);
   const [showTomorrow, setShowTomorrow] = useState(false);
   const { logoFor } = useTeamLogos();
+  const allSportKeys = useMemo(() => LEAGUES.map((l) => l.sportKey), []);
+  const { formFor } = useTeamForm(allSportKeys);
 
   useEffect(() => {
     let active = true;
@@ -243,6 +246,8 @@ export function ActiveGames({ onSelectGame, refreshSignal }: { onSelectGame: (se
         : formatGameTime(g.event.commence_time),
     commenceTime: g.event.commence_time,
     situation: g.situation,
+    awayForm: formFor(g.sportKey, g.event.away_team),
+    homeForm: formFor(g.sportKey, g.event.home_team),
   });
 
   const byCommence = (a: GameVM, b: GameVM) =>

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { teamsService, type Team } from "@/services/teamsService";
 import { LEAGUES, getTeamLogoUrl } from "@/lib/leagues";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
+import { useTeamForm } from "@/hooks/useTeamForm";
 import { LeaguePills } from "./LeaguePills";
+import { TeamFormBadge } from "./TeamFormBadge";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export interface TeamSelection {
@@ -33,6 +35,8 @@ export function PickATeam({ onSelectTeam, refreshSignal }: { onSelectTeam: (sel:
   const [loading, setLoading] = useState(true);
   const rowRef = useRef<HTMLDivElement>(null);
   const { logoFor, leagueFor } = useTeamLogos();
+  const allSportKeys = useMemo(() => LEAGUES.map((l) => l.sportKey), []);
+  const { formFor } = useTeamForm(allSportKeys);
 
   useEffect(() => {
     let active = true;
@@ -123,6 +127,7 @@ export function PickATeam({ onSelectTeam, refreshSignal }: { onSelectTeam: (sel:
             >
               <TeamLogo team={t} url={logoFor(t.name) || getTeamLogoUrl(t.league, t.abbrev)} />
               <span className="text-[11px] text-gray-600 text-center leading-tight line-clamp-2">{t.name}</span>
+              <TeamFormBadge form={formFor(sportKeyOf(t) ?? "", t.name)} />
             </button>
           ))}
         </div>
