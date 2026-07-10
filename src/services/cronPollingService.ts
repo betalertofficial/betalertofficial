@@ -50,6 +50,12 @@ interface CronPollResult {
   skippedReason?: string;
   liveEventsCount?: number;
   activeSports?: string[];
+  /**
+   * True when this run found a live game featuring a team an active trigger
+   * covers (i.e. it did a paid Odds poll). poll-triggers.ts stores this as
+   * last_poll_live to pick the live vs idle interval on the next tick.
+   */
+  wasLive?: boolean;
 }
 
 /**
@@ -331,30 +337,18 @@ export async function runCronPoll(
     }
 
     if (!triggers || triggers.length === 0) {
-      console.log("[CronPoll] No active triggers found");
-      const durationMs = Date.now() - startTime;
-      const { data: evalRun } = await supabase
-        .from("evaluation_runs")
-        .insert({
-          status: "completed",
-          triggers_evaluated: 0,
-          matches_found: 0,
-          alerts_sent: 0,
-          duration_ms: durationMs,
-          completed_at: new Date().toISOString(),
-          error_message: "No active triggers",
-        })
-        .select()
-        .single();
-
+      // Idle tick — nothing to evaluate. Skip the evaluation_runs insert so this
+      // table doesn't accumulate a row every minute forever.
+      console.log("[CronPoll] No active triggers found - idle tick");
       return {
         success: true,
-        evaluationRunId: evalRun?.id,
         triggersChecked: 0,
         matchesFound: 0,
         alertsCreated: 0,
         webhooksSent: 0,
-        durationMs,
+        durationMs: Date.now() - startTime,
+        skippedReason: "No active triggers",
+        wasLive: false,
       };
     }
 
@@ -380,44 +374,57 @@ export async function runCronPoll(
     }
     const activeSports = [...liveGamesBySport.keys()];
 
-    if (activeSports.length === 0) {
-      console.log("[CronPoll] No live games for any sport with triggers - skipping odds");
-      const durationMs = Date.now() - startTime;
-      const { data: evalRun } = await supabase
-        .from("evaluation_runs")
-        .insert({
-          status: "completed",
-          triggers_evaluated: triggers.length,
-          matches_found: 0,
-          alerts_sent: 0,
-          duration_ms: durationMs,
-          completed_at: new Date().toISOString(),
-          error_message: "No live games for active triggers",
-        })
-        .select()
-        .single();
+    // TIERED / GAME-LEVEL GATING — only spend Odds API credits when a live game
+    // actually features a team an active trigger cares about. A sport can have
+    // plenty of live games with none of the user's teams in them; paying for the
+    // whole sport in that case is pure waste (the trigger can't match anyway).
+    // paidSports = sports that have a live game whose home/away matches some
+    // active trigger's team (national-team aliases handled by teamNamesMatch).
+    const paidSports: string[] = [];
+    for (const sport of activeSports) {
+      const liveList = liveGamesBySport.get(sport) || [];
+      const hasTriggeredLive = triggers.some(
+        (t) =>
+          t.sport === sport &&
+          liveList.some(
+            (g) =>
+              teamNamesMatch(g.homeTeam, t.team_or_player) ||
+              teamNamesMatch(g.awayTeam, t.team_or_player)
+          )
+      );
+      if (hasTriggeredLive) paidSports.push(sport);
+    }
+    const wasLive = paidSports.length > 0;
 
+    // Idle tick: no triggered team is live right now. We already did the FREE
+    // ESPN liveness check; stop here — no Odds API call and no evaluation_runs
+    // row. poll-triggers.ts sees wasLive=false and backs off to the slower idle
+    // interval until a triggered game actually goes live.
+    if (!wasLive) {
+      console.log(
+        `[CronPoll] ${activeSports.length} live sport(s) but no triggered team is live - idle tick (no Odds API call)`
+      );
       return {
         success: true,
-        evaluationRunId: evalRun?.id,
         triggersChecked: triggers.length,
         matchesFound: 0,
         alertsCreated: 0,
         webhooksSent: 0,
-        durationMs,
-        skippedReason: "No live games",
+        durationMs: Date.now() - startTime,
+        skippedReason: activeSports.length === 0 ? "No live games" : "No triggered team live",
         liveEventsCount: 0,
         activeSports: [],
+        wasLive: false,
       };
     }
 
-    console.log(`[CronPoll] ${activeSports.length} sport(s) live:`, activeSports);
+    console.log(`[CronPoll] ${paidSports.length} sport(s) with a live triggered game:`, paidSports);
 
     // Only request the markets the live triggers actually use, per sport. This
     // is the primary Odds API credit lever (markets × regions): a moneyline-only
     // slate costs 1 credit/sport/poll instead of 3.
     const marketsBySport = new Map<string, string>();
-    for (const sport of activeSports) {
+    for (const sport of paidSports) {
       const keys = new Set<string>();
       for (const t of triggers) {
         if (t.sport === sport) keys.add(betTypeToMarketKey(t.bet_type));
@@ -425,7 +432,7 @@ export async function runCronPoll(
       if (keys.size === 0) keys.add("h2h");
       marketsBySport.set(sport, Array.from(keys).sort().join(","));
     }
-    console.log("[CronPoll] Markets per live sport:", Object.fromEntries(marketsBySport));
+    console.log("[CronPoll] Markets per paid sport:", Object.fromEntries(marketsBySport));
 
     // Step 4: Create evaluation run (running)
     const { data: evalRun, error: evalError } = await supabase
@@ -438,8 +445,9 @@ export async function runCronPoll(
       throw new Error(`Failed to create evaluation run: ${evalError?.message}`);
     }
 
-    // Step 5: Fetch paid odds ONLY for live sports, ONLY for needed markets
-    const allOdds = await fetchLiveOddsForSports(oddsApiKey, activeSports, marketsBySport);
+    // Step 5: Fetch paid odds ONLY for sports with a live triggered game, ONLY
+    // for the markets those triggers need.
+    const allOdds = await fetchLiveOddsForSports(oddsApiKey, paidSports, marketsBySport);
 
     // Step 6: Map each odds event → ESPN period + scores by team name. The ESPN
     // games came from getLiveGames above (free), so no extra ESPN calls here.
@@ -550,7 +558,8 @@ export async function runCronPoll(
         webhooksSent: 0,
         durationMs,
         liveEventsCount: eventPeriods.size,
-        activeSports,
+        activeSports: paidSports,
+        wasLive: true,
       };
     }
 
@@ -715,7 +724,8 @@ export async function runCronPoll(
       webhooksSent,
       durationMs,
       liveEventsCount: eventPeriods.size,
-      activeSports,
+      activeSports: paidSports,
+      wasLive: true,
     };
   } catch (error) {
     console.error("[CronPoll] Error:", error);
@@ -728,6 +738,7 @@ export async function runCronPoll(
       alertsCreated: 0,
       webhooksSent: 0,
       durationMs,
+      wasLive: false,
     };
   }
 }

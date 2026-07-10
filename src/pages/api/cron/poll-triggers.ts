@@ -6,9 +6,15 @@ import { runCronPoll } from "@/services/cronPollingService";
  * Smart cron endpoint for trigger evaluation
  * GET /api/cron/poll-triggers
  *
- * Runs every minute via Vercel Cron, but only executes polling if:
+ * Runs every minute via Vercel Cron, but only executes a poll if:
  * 1. admin_settings.odds_polling_status = 'true'
- * 2. Enough time has passed since last poll (based on polling_interval_seconds)
+ * 2. Enough time has passed since the last poll, using a TIERED interval:
+ *      - poll_interval_live_seconds  (default 60)  when the previous tick found
+ *        a live game featuring a triggered team (last_poll_live = 'true')
+ *      - poll_interval_idle_seconds  (default 300) otherwise
+ *    Idle ticks cost ZERO Odds API credits (the liveness check is free ESPN),
+ *    so the idle interval mainly trades wake-up latency for fewer invocations /
+ *    less DB churn and can be lowered without spending credits.
  *
  * Requires: Authorization: Bearer CRON_SECRET
  */
@@ -67,7 +73,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: settingsRows, error: settingsError } = await supabase
       .from("admin_settings")
       .select("setting_key, setting_value")
-      .in("setting_key", ["odds_polling_status", "polling_interval_seconds", "last_poll_at"]);
+      .in("setting_key", [
+        "odds_polling_status",
+        "polling_interval_seconds", // legacy fallback for the live interval
+        "poll_interval_live_seconds",
+        "poll_interval_idle_seconds",
+        "last_poll_at",
+        "last_poll_live",
+      ]);
 
     if (settingsError) {
       console.error("[Cron] Error fetching admin settings:", settingsError);
@@ -81,10 +94,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     const pollingEnabled = settings.odds_polling_status === "true";
-    const intervalSeconds = parseInt(settings.polling_interval_seconds || "60");
+    const legacyInterval = parseInt(settings.polling_interval_seconds || "60");
+    const liveInterval = parseInt(settings.poll_interval_live_seconds || String(legacyInterval));
+    const idleInterval = parseInt(settings.poll_interval_idle_seconds || "300");
     const lastPollAt = settings.last_poll_at || null;
+    // Whether the previous poll found a live triggered game. Drives which
+    // interval applies this tick (a 1-tick-lagging heuristic, which is fine:
+    // when a game ends we do one extra live-cadence tick before backing off; a
+    // game going live is picked up within one idle interval).
+    const lastPollLive = settings.last_poll_live === "true";
+    const intervalSeconds = lastPollLive ? liveInterval : idleInterval;
 
-    console.log(`[Cron] Settings: polling_enabled=${pollingEnabled}, interval=${intervalSeconds}s, last_poll=${lastPollAt}`);
+    console.log(
+      `[Cron] Settings: polling_enabled=${pollingEnabled}, mode=${lastPollLive ? "live" : "idle"}, ` +
+      `interval=${intervalSeconds}s (live=${liveInterval}s, idle=${idleInterval}s), last_poll=${lastPollAt}`
+    );
 
     // If polling is disabled, skip
     if (!pollingEnabled) {
@@ -95,19 +119,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // Check if enough time has passed since last poll
+    // Check if enough time has passed since last poll (tiered interval)
     const now = new Date();
-    
+
     if (lastPollAt) {
       const lastPoll = new Date(lastPollAt);
       const secondsSinceLastPoll = (now.getTime() - lastPoll.getTime()) / 1000;
-      
+
       if (secondsSinceLastPoll < intervalSeconds) {
         const remainingSeconds = Math.ceil(intervalSeconds - secondsSinceLastPoll);
-        console.log(`[Cron] Skipping poll - only ${Math.floor(secondsSinceLastPoll)}s since last poll (interval: ${intervalSeconds}s, ${remainingSeconds}s remaining)`);
+        console.log(`[Cron] Skipping poll - only ${Math.floor(secondsSinceLastPoll)}s since last poll (${lastPollLive ? "live" : "idle"} interval: ${intervalSeconds}s, ${remainingSeconds}s remaining)`);
         return res.status(200).json({
           skipped: true,
           reason: "Polling interval not reached",
+          mode: lastPollLive ? "live" : "idle",
           seconds_since_last_poll: Math.floor(secondsSinceLastPoll),
           required_interval: intervalSeconds,
           seconds_remaining: remainingSeconds,
@@ -115,13 +140,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    console.log(`[Cron] Starting poll (interval: ${intervalSeconds}s, last poll: ${lastPollAt || 'never'})`);
+    console.log(`[Cron] Starting poll (${lastPollLive ? "live" : "idle"} interval: ${intervalSeconds}s, last poll: ${lastPollAt || 'never'})`);
 
     // Update last_poll_at BEFORE running (prevents concurrent runs)
     // Use upsert to handle case where last_poll_at setting doesn't exist yet
     const { error: updateError } = await supabase
       .from("admin_settings")
-      .upsert({ 
+      .upsert({
         setting_key: "last_poll_at",
         setting_value: now.toISOString(),
         updated_at: now.toISOString()
@@ -137,15 +162,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Run cron poll (webhookUrl is read from process.env inside alertService directly)
     const result = await runCronPoll(supabase, oddsApiKey, webhookUrl ?? "");
 
+    // Persist whether a triggered game was live this run so the NEXT tick picks
+    // the correct tier (live vs idle). Best-effort; non-critical.
+    const { error: modeError } = await supabase
+      .from("admin_settings")
+      .upsert({
+        setting_key: "last_poll_live",
+        setting_value: result.wasLive ? "true" : "false",
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: "setting_key",
+      });
+    if (modeError) {
+      console.error("[Cron] Error updating last_poll_live:", modeError);
+    }
+
     return res.status(200).json({
       success: result.success,
+      polling_mode: result.wasLive ? "live" : "idle",
       evaluation_run_id: result.evaluationRunId,
       triggers_checked: result.triggersChecked,
       matches_found: result.matchesFound,
       alerts_created: result.alertsCreated,
       webhooks_sent: result.webhooksSent,
       duration_ms: result.durationMs,
-      polling_interval_seconds: intervalSeconds,
+      live_interval_seconds: liveInterval,
+      idle_interval_seconds: idleInterval,
       error: result.error,
     });
   } catch (error) {
