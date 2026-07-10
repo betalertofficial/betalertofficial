@@ -5,10 +5,17 @@
  * - Loads active triggers, derives the set of sports they care about
  * - Detects which of those sports have a LIVE game right now from ESPN (free)
  * - Fetches paid Odds API odds ONLY for sports with a live game
+ * - Fetches ONLY the markets those triggers need (moneyline-only slate = 1
+ *   credit/sport instead of 3)
  * - Period/inning gating + live scores come from the same ESPN fetch
  *
- * This removes the previous dependency on the once-a-day event_schedules sync
- * (which could be stale and silently hide live games from the poller).
+ * COST DISCIPLINE:
+ * - Odds API cost = markets × regions. We request exactly the markets the live
+ *   triggers use (see marketsBySport), so a moneyline-only poll costs 1 credit
+ *   per live sport, not 3 (h2h+spreads+totals).
+ * - odds_snapshots is written ONLY for odds rows that actually match a trigger
+ *   (see Step 8). Historically every fetched row was stored forever, which grew
+ *   the table to 300 MB+ while <0.1% of rows were ever referenced by an alert.
  */
 
 import { SupabaseClient } from "@supabase/supabase-js";
@@ -46,6 +53,21 @@ interface CronPollResult {
 }
 
 /**
+ * Map an app bet_type to its Odds API market key, so we fetch ONLY the markets
+ * active triggers actually use. Most triggers are moneyline → h2h (1 credit).
+ */
+function betTypeToMarketKey(betType: string | null | undefined): string {
+  const b = (betType || "").toLowerCase();
+  if (b.includes("spread") || b.includes("run_line") || b.includes("runline") || b.includes("puck")) {
+    return "spreads";
+  }
+  if (b.includes("total") || b.includes("over") || b.includes("under")) {
+    return "totals";
+  }
+  return "h2h"; // moneyline / default
+}
+
+/**
  * Derive the current period number + type for an event from an ESPN game.
  * Mirrors the trigger time_period_type values: inning / quarter / period / minute.
  */
@@ -70,11 +92,16 @@ function derivePeriod(sport: string, espn: any): { period: number | null; type: 
 }
 
 /**
- * Fetch live odds from Odds API for specific sports
+ * Fetch live odds from Odds API for specific sports.
+ *
+ * `marketsBySport` maps each sport to the comma-separated Odds API market keys
+ * to request (e.g. "h2h" or "h2h,totals"). Cost is markets × regions, so
+ * requesting only the markets the live triggers need is the main credit lever.
  */
 async function fetchLiveOddsForSports(
   oddsApiKey: string,
-  sports: string[]
+  sports: string[],
+  marketsBySport: Map<string, string>
 ): Promise<OddsSnapshot[]> {
   const allOdds: OddsSnapshot[] = [];
   const now = new Date();
@@ -92,7 +119,10 @@ async function fetchLiveOddsForSports(
 
   for (const sport of sports) {
     try {
-      console.log(`[CronPoll] Fetching odds for ${sport}...`);
+      // Only the markets active triggers on this sport actually need. Defaults
+      // to h2h so we never accidentally fetch (and pay for) all three markets.
+      const markets = marketsBySport.get(sport) || "h2h";
+      console.log(`[CronPoll] Fetching odds for ${sport} (markets=${markets})...`);
 
       // includeLinks=true makes DraftKings/FanDuel responses carry deep links:
       //   bookmaker.link → the game/event page on the book
@@ -100,7 +130,7 @@ async function fetchLiveOddsForSports(
       // (universal links that open the sportsbook app on mobile). Captured
       // per-row below so each alert can deep-link to its matched book.
       const response = await fetch(
-        `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${oddsApiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=fanduel,draftkings&oddsFormat=american&includeLinks=true`
+        `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${oddsApiKey}&regions=us&markets=${markets}&bookmakers=fanduel,draftkings&oddsFormat=american&includeLinks=true`
       );
 
       if (!response.ok) {
@@ -169,7 +199,12 @@ async function fetchLiveOddsForSports(
 }
 
 /**
- * Store odds snapshots in database
+ * Store odds snapshots in database.
+ *
+ * IMPORTANT: callers pass ONLY the odds rows that matched a trigger (see
+ * runCronPoll Step 8). Persisting every fetched row is what previously grew this
+ * table unbounded. A snapshot exists to back a fired alert (trigger_matches has
+ * an FK to it); rows that never match are not worth storing.
  */
 async function storeOddsSnapshots(
   supabase: SupabaseClient<Database>,
@@ -180,7 +215,7 @@ async function storeOddsSnapshots(
     return [];
   }
 
-  console.log(`[CronPoll] Storing ${oddsData.length} odds snapshots...`);
+  console.log(`[CronPoll] Storing ${oddsData.length} matched odds snapshots...`);
 
   // Fetch ESPN data for all unique events
   const uniqueEvents = new Map<string, { sport: string; home: string; away: string }>();
@@ -194,9 +229,7 @@ async function storeOddsSnapshots(
     }
   }
 
-  console.log(`[CronPoll] Fetching ESPN data for ${uniqueEvents.size} unique events...`);
-
-  // Fetch ESPN data for events not already in cache
+  // Fetch ESPN data for events not already in cache (usually all cached already)
   for (const [eventId, eventInfo] of uniqueEvents) {
     if (!espnDataCache.has(eventId)) {
       try {
@@ -208,7 +241,6 @@ async function storeOddsSnapshots(
 
         if (espnData.found) {
           espnDataCache.set(eventId, espnData);
-          console.log(`[CronPoll] Fetched ESPN data for ${eventInfo.away} @ ${eventInfo.home}: ${espnData.detail}`);
         }
       } catch (error) {
         console.error(`[CronPoll] Error fetching ESPN data for event ${eventId}:`, error);
@@ -252,9 +284,10 @@ async function storeOddsSnapshots(
  *
  * 1. Load active triggers; derive the set of sports they cover
  * 2. From ESPN (free), find which of those sports have a live game right now
- * 3. Fetch paid Odds API odds ONLY for those live sports
+ * 3. Fetch paid Odds API odds ONLY for those live sports, ONLY for the markets
+ *    those triggers need
  * 4. Gate time-period triggers against the live inning/period (from ESPN)
- * 5. Match + alert
+ * 5. Match, then persist ONLY matched snapshots, then alert
  */
 export async function runCronPoll(
   supabase: SupabaseClient<Database>,
@@ -380,6 +413,20 @@ export async function runCronPoll(
 
     console.log(`[CronPoll] ${activeSports.length} sport(s) live:`, activeSports);
 
+    // Only request the markets the live triggers actually use, per sport. This
+    // is the primary Odds API credit lever (markets × regions): a moneyline-only
+    // slate costs 1 credit/sport/poll instead of 3.
+    const marketsBySport = new Map<string, string>();
+    for (const sport of activeSports) {
+      const keys = new Set<string>();
+      for (const t of triggers) {
+        if (t.sport === sport) keys.add(betTypeToMarketKey(t.bet_type));
+      }
+      if (keys.size === 0) keys.add("h2h");
+      marketsBySport.set(sport, Array.from(keys).sort().join(","));
+    }
+    console.log("[CronPoll] Markets per live sport:", Object.fromEntries(marketsBySport));
+
     // Step 4: Create evaluation run (running)
     const { data: evalRun, error: evalError } = await supabase
       .from("evaluation_runs")
@@ -391,8 +438,8 @@ export async function runCronPoll(
       throw new Error(`Failed to create evaluation run: ${evalError?.message}`);
     }
 
-    // Step 5: Fetch paid odds ONLY for live sports
-    const allOdds = await fetchLiveOddsForSports(oddsApiKey, activeSports);
+    // Step 5: Fetch paid odds ONLY for live sports, ONLY for needed markets
+    const allOdds = await fetchLiveOddsForSports(oddsApiKey, activeSports, marketsBySport);
 
     // Step 6: Map each odds event → ESPN period + scores by team name. The ESPN
     // games came from getLiveGames above (free), so no extra ESPN calls here.
@@ -507,17 +554,8 @@ export async function runCronPoll(
       };
     }
 
-    // Step 8: Store odds snapshots (reusing the ESPN data fetched above)
-    const storedSnapshots = await storeOddsSnapshots(supabase, allOdds, espnDataCache);
-
-    const snapshotMap = new Map<string, string>();
-    storedSnapshots.forEach((snapshot, index) => {
-      const odds = allOdds[index];
-      const key = `${odds.event_id}|${odds.team_or_player}|${odds.bookmaker}|${odds.bet_type}`;
-      snapshotMap.set(key, snapshot.id);
-    });
-
-    // Step 9: Load existing matches for recurring triggers (dedupe per game)
+    // Step 8 (dedupe context): load existing matches for recurring triggers so a
+    // recurring alert fires at most once per game.
     const recurringTriggerIds = validTriggers
       .filter((t) => t.frequency === "recurring")
       .map((t) => t.id);
@@ -538,10 +576,31 @@ export async function runCronPoll(
       }
     });
 
-    // Step 10: Find matches (matchingEngine honors per-trigger event_id binding)
+    // Step 9: Find matches FIRST (matchingEngine honors per-trigger event_id
+    // binding), so we can persist only the snapshots that back a real alert.
     const allMatches = findMatches(validTriggers, allOdds, existingMatchMap);
     const uniqueMatches = deduplicateMatches(allMatches);
     console.log(`[CronPoll] Found ${uniqueMatches.length} unique matches`);
+
+    // Step 10: Persist ONLY the odds rows that matched (keyed identically to the
+    // match), then build the key→snapshotId map the alert step needs. When
+    // nothing matches (the overwhelmingly common case), we write ZERO rows.
+    const matchedKeys = new Set(
+      uniqueMatches.map((m) => `${m.eventId}|${m.teamOrPlayer}|${m.bookmaker}|${m.betType}`)
+    );
+    const matchedOdds = allOdds.filter((o) =>
+      matchedKeys.has(`${o.event_id}|${o.team_or_player}|${o.bookmaker}|${o.bet_type}`)
+    );
+
+    const storedSnapshots = await storeOddsSnapshots(supabase, matchedOdds, espnDataCache);
+
+    const snapshotMap = new Map<string, string>();
+    storedSnapshots.forEach((snapshot, index) => {
+      const odds = matchedOdds[index];
+      if (!odds) return;
+      const key = `${odds.event_id}|${odds.team_or_player}|${odds.bookmaker}|${odds.bet_type}`;
+      snapshotMap.set(key, snapshot.id);
+    });
 
     // Step 11: Create trigger_matches and send alerts
     let alertsCreated = 0;
