@@ -68,7 +68,20 @@ export default function Dashboard() {
           }),
         });
 
-        if (!response.ok) throw new Error("Authentication failed");
+        if (!response.ok) {
+          // Surface the server's real failure reason so a recurrence is
+          // diagnosable from the client (and captured in the console) instead
+          // of a generic message. The callback returns a short `reason` code.
+          let reason = "";
+          try {
+            const body = await response.json();
+            reason = body?.reason || body?.error || "";
+          } catch {
+            /* non-JSON error body */
+          }
+          console.error(`[Dashboard] Telegram auth failed (HTTP ${response.status})`, reason || "(no reason)");
+          throw new Error(reason || `HTTP ${response.status}`);
+        }
 
         const result = await response.json();
         console.log("[Dashboard] Telegram auth successful:", result);
@@ -81,9 +94,10 @@ export default function Dashboard() {
         window.location.href = "/dashboard";
       } catch (error) {
         console.error("Telegram auth error:", error);
+        const detail = error instanceof Error && error.message ? ` (${error.message})` : "";
         toast({
           title: "Authentication Error",
-          description: "Failed to authenticate with Telegram. Please try again.",
+          description: `Couldn't sign in with Telegram${detail}. Please try again.`,
           variant: "destructive",
         });
         router.replace("/dashboard", undefined, { shallow: true });
