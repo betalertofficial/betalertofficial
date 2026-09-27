@@ -4,7 +4,9 @@ import { normalizeTeamName, teamNamesMatch } from "@/lib/teamMatch";
 /**
  * Recent-form ("hot/not") lookup per team, sourced from ESPN (free):
  *  - Soccer  → the scoreboard competitor `form` string (last 5, e.g. "WWDLW")
- *  - MLB/NBA/NHL/NFL → the standings `lasttengames` stat (e.g. "7-3") + streak
+ *  - MLB/NBA/NHL → the standings `lasttengames` stat (e.g. "7-3") + streak
+ *  - NFL → last 5 games, derived from recent weekly scoreboards (ESPN's NFL
+ *    standings have no last-10 stat, and with one game a week L5 is the useful window)
  *
  * Results are cached per league (module-level, short TTL) so the dashboard's
  * sections share one fetch. Teams are matched by name via the shared matcher.
@@ -117,10 +119,85 @@ async function loadStandingsForm(path: string): Promise<Record<string, TeamForm>
   return out;
 }
 
+/**
+ * NFL: true last-5 from completed games in the recent weekly scoreboards.
+ * One game per team per week, so the current week plus the 5 before it always
+ * covers a team's last 5 (bye weeks included). ~6 small ESPN calls, cached.
+ */
+async function loadNflForm(): Promise<Record<string, TeamForm>> {
+  const base = `${ESPN_BASE}/site/v2/sports/football/nfl/scoreboard`;
+  const cur = await fetch(base).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const week: number | undefined = cur?.week?.number;
+  const seasonType: number | undefined = cur?.season?.type;
+
+  // Preseason / offseason / unknown week → just use whatever the default board has.
+  const boards: any[] = [cur];
+  if (week && seasonType) {
+    const weeks: number[] = [];
+    for (let w = Math.max(1, week - 5); w < week; w++) weeks.push(w);
+    const past = await Promise.all(
+      weeks.map((w) =>
+        fetch(`${base}?seasontype=${seasonType}&week=${w}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null)
+      )
+    );
+    boards.push(...past);
+  }
+
+  // team → [{date, result}] for completed games only
+  const games = new Map<string, { name: string; list: { at: number; r: "W" | "L" | "T" }[] }>();
+  const seen = new Set<string>();
+  for (const b of boards) {
+    for (const ev of b?.events ?? []) {
+      if (!ev?.id || seen.has(ev.id)) continue;
+      const comp = ev.competitions?.[0];
+      if (comp?.status?.type?.state !== "post") continue;
+      seen.add(ev.id);
+      const cs: any[] = comp.competitors ?? [];
+      if (cs.length !== 2) continue;
+      const [a, b2] = cs;
+      const sa = parseInt(a.score, 10);
+      const sb = parseInt(b2.score, 10);
+      const at = new Date(ev.date).getTime();
+      for (const [me, mine, theirs] of [
+        [a, sa, sb],
+        [b2, sb, sa],
+      ] as const) {
+        const name: string | undefined = me.team?.displayName;
+        if (!name) continue;
+        const r: "W" | "L" | "T" = mine > theirs ? "W" : mine < theirs ? "L" : "T";
+        const key = normalizeTeamName(name);
+        if (!games.has(key)) games.set(key, { name, list: [] });
+        games.get(key)!.list.push({ at, r });
+      }
+    }
+  }
+
+  const out: Record<string, TeamForm> = {};
+  for (const [key, { list }] of games) {
+    const last = list.sort((x, y) => x.at - y.at).slice(-5);
+    if (last.length === 0) continue;
+    const form = last.map((g) => g.r).join(""); // oldest → newest, e.g. "WLWWW"
+    const w = last.filter((g) => g.r === "W").length;
+    const l = last.filter((g) => g.r === "L").length;
+    const t = last.length - w - l;
+    const label = t > 0 ? `${w}-${l}-${t}` : `${w}-${l}`;
+    out[key] = {
+      label,
+      suffix: "L5",
+      tone: toneFromWL(w, l),
+      title: `Last ${last.length}: ${form} (${label})`,
+    };
+  }
+  return out;
+}
+
 async function loadLeagueForm(sportKey: string): Promise<Record<string, TeamForm>> {
   const path = LEAGUE_PATH[sportKey];
   if (!path) return {};
   try {
+    if (sportKey === "americanfootball_nfl") return await loadNflForm();
     return sportKey.startsWith("soccer") ? await loadSoccerForm(path) : await loadStandingsForm(path);
   } catch {
     return {};
