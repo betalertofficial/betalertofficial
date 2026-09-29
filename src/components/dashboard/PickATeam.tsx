@@ -63,21 +63,30 @@ export function PickATeam({ onSelectTeam, refreshSignal }: { onSelectTeam: (sel:
   // Classify each team by NAME (ESPN) first, then the DB league column.
   const sportKeyOf = (t: Team) => leagueFor(t.name) || leagueToSportKey(t.league);
 
+  // Only show teams from leagues currently on the dashboard (e.g. the 48 World
+  // Cup teams stay in the DB for past triggers but are hidden here). The DB
+  // `league` column is the Odds API sport key, so filter on it directly.
+  const activeKeys = useMemo(() => new Set(allSportKeys), [allSportKeys]);
+  const visibleTeams = useMemo(
+    () => teams.filter((t) => activeKeys.has(t.league)),
+    [teams, activeKeys]
+  );
+
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: teams.length };
+    const c: Record<string, number> = { all: visibleTeams.length };
     LEAGUES.forEach((l) => {
-      c[l.sportKey] = teams.filter((t) => sportKeyOf(t) === l.sportKey).length;
+      c[l.sportKey] = visibleTeams.filter((t) => sportKeyOf(t) === l.sportKey).length;
     });
     return c;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teams, leagueFor]);
+  }, [visibleTeams, leagueFor]);
 
   const pills = [
     { key: "all", label: "All", count: counts.all },
     ...LEAGUES.map((l) => ({ key: l.sportKey, label: l.label, count: counts[l.sportKey] || 0 })),
   ];
 
-  const filtered = league === "all" ? teams : teams.filter((t) => sportKeyOf(t) === league);
+  const filtered = league === "all" ? visibleTeams : visibleTeams.filter((t) => sportKeyOf(t) === league);
 
   const slide = (dir: number) => rowRef.current?.scrollBy({ left: dir * 360, behavior: "smooth" });
 

@@ -16,17 +16,25 @@ export const LEAGUES: LeagueConfig[] = [
   { label: "NBA", sportKey: "basketball_nba", teamLeague: "nba", espnLeague: "nba" },
   { label: "NFL", sportKey: "americanfootball_nfl", teamLeague: "nfl", espnLeague: "nfl" },
   { label: "NHL", sportKey: "icehockey_nhl", teamLeague: "nhl", espnLeague: "nhl" },
-  { label: "World Cup", sportKey: "soccer_fifa_world_cup", teamLeague: "fifa_world_cup", espnLeague: null },
 ];
 
 export const SPORT_KEYS = LEAGUES.map((l) => l.sportKey);
+
+/**
+ * Labels for leagues that are no longer shown on the dashboard but still appear
+ * on past triggers (e.g. the 2026 World Cup), so history rows keep a readable
+ * name instead of the raw Odds API key.
+ */
+const RETIRED_LEAGUE_LABELS: Record<string, string> = {
+  soccer_fifa_world_cup: "World Cup",
+};
 
 export function leagueBySportKey(sportKey: string): LeagueConfig | undefined {
   return LEAGUES.find((l) => l.sportKey === sportKey);
 }
 
 export function leagueLabel(sportKey: string): string {
-  return leagueBySportKey(sportKey)?.label ?? sportKey;
+  return leagueBySportKey(sportKey)?.label ?? RETIRED_LEAGUE_LABELS[sportKey] ?? sportKey;
 }
 
 /**
