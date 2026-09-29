@@ -103,9 +103,15 @@ async function loadStandingsForm(path: string): Promise<Record<string, TeamForm>
           const overall =
             find((s) => s.type === "total" || s.name === "overall" || s.type === "vsdivision")?.displayValue || null;
           if (!l10) continue;
-          const wl = parseRecord(l10);
+          // NHL reports e.g. "6-3-1, 13 PTS" — keep just the W-L-OTL record for
+          // the compact badge (full string stays in the tooltip).
+          const record = l10.split(",")[0].trim();
+          // Before a season's first game every team is "0-0-0" — no signal, so
+          // show no badge rather than a row of gray zeros.
+          if (/^0(-0)+$/.test(record)) continue;
+          const wl = parseRecord(record);
           out[normalizeTeamName(name)] = {
-            label: l10,
+            label: record,
             suffix: "L10",
             tone: wl ? toneFromWL(wl.w, wl.l) : "neutral",
             title: `Last 10: ${l10}${streak ? ` · streak ${streak}` : ""}${overall ? ` · ${overall}` : ""}`,
