@@ -1,4 +1,4 @@
-import type { EspnSituation } from "@/hooks/useEspnLive";
+import type { LiveSituation, BaseballSituation, FootballSituation, HockeySituation } from "@/lib/liveSituation";
 import type { TeamForm } from "@/hooks/useTeamForm";
 import { leagueLabel } from "@/lib/leagues";
 import { formatOdds } from "@/lib/gameUtils";
@@ -27,7 +27,8 @@ export interface GameCardData {
   timeLabel: string | null;
   /** Raw ISO commence time of this game — used to bind "once" triggers to it. */
   commenceTime: string;
-  situation: EspnSituation | null;
+  /** Sport-specific live details (bases/count, down & distance, shots…). */
+  situation: LiveSituation | null;
   /** Recent-form ("hot/not") per team; null when unavailable. */
   awayForm?: TeamForm | null;
   homeForm?: TeamForm | null;
@@ -75,6 +76,7 @@ export function GameCard({
         selected={!!selectedTeam && selectedTeam === data.awayTeam}
         onSelectTeam={onSelectTeam}
         form={data.awayForm ?? null}
+        hasBall={live && data.situation?.kind === "football" && data.situation.possession === "away"}
       />
       <div className="h-px bg-gray-100 mx-1" />
       <TeamRow
@@ -86,6 +88,7 @@ export function GameCard({
         selected={!!selectedTeam && selectedTeam === data.homeTeam}
         onSelectTeam={onSelectTeam}
         form={data.homeForm ?? null}
+        hasBall={live && data.situation?.kind === "football" && data.situation.possession === "home"}
       />
 
       {live && data.situation ? <SituationStrip situation={data.situation} /> : null}
@@ -102,6 +105,7 @@ function TeamRow({
   selected,
   onSelectTeam,
   form,
+  hasBall,
 }: {
   name: string;
   logo: string | null;
@@ -111,6 +115,8 @@ function TeamRow({
   selected: boolean;
   onSelectTeam?: (team: string) => void;
   form?: TeamForm | null;
+  /** Football: this team has possession (shows a small ball marker). */
+  hasBall?: boolean;
 }) {
   const inner = (
     <>
@@ -119,6 +125,11 @@ function TeamRow({
         <span className="flex min-w-0 flex-col">
           <span className="flex items-center gap-1.5">
             <span className="truncate text-sm font-semibold text-gray-900">{name}</span>
+            {hasBall ? (
+              <span className="shrink-0 text-[11px] leading-none" title="Has the ball" aria-label="Has the ball">
+                🏈
+              </span>
+            ) : null}
             {selected ? (
               <span className="shrink-0 rounded bg-gray-900 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
                 Pick
@@ -155,7 +166,7 @@ function TeamRow({
   );
 }
 
-function Bases({ situation }: { situation: EspnSituation }) {
+function Bases({ situation }: { situation: BaseballSituation }) {
   const base = (on?: boolean) =>
     `absolute h-2.5 w-2.5 rounded-sm ${on ? "bg-yellow-400" : "border border-gray-300"}`;
   return (
@@ -170,14 +181,27 @@ function Bases({ situation }: { situation: EspnSituation }) {
   );
 }
 
-function SituationStrip({ situation }: { situation: EspnSituation }) {
+const STRIP = "mt-2 border-t border-gray-100 pt-2";
+
+/** One-line "last play" text, shared by football/hockey/basketball. */
+function LastPlay({ text }: { text: string | null }) {
+  if (!text) return null;
+  return (
+    <p className="truncate px-1 text-[11px] text-gray-500" title={text}>
+      <span className="font-semibold text-gray-400">Last play: </span>
+      {text}
+    </p>
+  );
+}
+
+function BaseballStrip({ situation }: { situation: BaseballSituation }) {
   const rows = [
-    { label: "B", max: 4, count: situation.balls ?? 0, color: "bg-green-500" },
-    { label: "S", max: 3, count: situation.strikes ?? 0, color: "bg-yellow-500" },
-    { label: "O", max: 3, count: situation.outs ?? 0, color: "bg-red-500" },
+    { label: "B", max: 4, count: situation.balls, color: "bg-green-500" },
+    { label: "S", max: 3, count: situation.strikes, color: "bg-yellow-500" },
+    { label: "O", max: 3, count: situation.outs, color: "bg-red-500" },
   ];
   return (
-    <div className="mt-2 flex items-center justify-center gap-4 border-t border-gray-100 pt-2">
+    <div className={`${STRIP} flex items-center justify-center gap-4`}>
       <Bases situation={situation} />
       <div className="flex items-center gap-2.5">
         {rows.map(({ label, max, count, color }) => (
@@ -193,4 +217,62 @@ function SituationStrip({ situation }: { situation: EspnSituation }) {
       </div>
     </div>
   );
+}
+
+function FootballStrip({ situation }: { situation: FootballSituation }) {
+  return (
+    <div className={`${STRIP} space-y-1`}>
+      {situation.downDistance ? (
+        <div className="flex items-center justify-center gap-2">
+          {situation.isRedZone ? (
+            <span className="rounded bg-red-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+              Red zone
+            </span>
+          ) : null}
+          <span className={`text-xs font-semibold ${situation.isRedZone ? "text-red-600" : "text-gray-700"}`}>
+            {situation.downDistance}
+          </span>
+        </div>
+      ) : null}
+      <LastPlay text={situation.lastPlay} />
+    </div>
+  );
+}
+
+function HockeyStrip({ situation }: { situation: HockeySituation }) {
+  const hasShots = situation.awayShots !== null || situation.homeShots !== null;
+  return (
+    <div className={`${STRIP} space-y-1`}>
+      {hasShots ? (
+        <div className="flex items-center justify-center gap-2 text-xs">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Shots on goal</span>
+          <span className="font-semibold tabular-nums text-gray-700">
+            {situation.awayAbbr} {situation.awayShots ?? "–"}
+            <span className="mx-1 text-gray-300">·</span>
+            {situation.homeAbbr} {situation.homeShots ?? "–"}
+          </span>
+        </div>
+      ) : null}
+      <LastPlay text={situation.lastPlay} />
+    </div>
+  );
+}
+
+function SituationStrip({ situation }: { situation: LiveSituation }) {
+  switch (situation.kind) {
+    case "baseball":
+      return <BaseballStrip situation={situation} />;
+    case "football":
+      return <FootballStrip situation={situation} />;
+    case "hockey":
+      return <HockeyStrip situation={situation} />;
+    case "basketball":
+      return situation.lastPlay ? (
+        <div className={STRIP}>
+          <LastPlay text={situation.lastPlay} />
+        </div>
+      ) : null;
+    default:
+      return null;
+  }
 }

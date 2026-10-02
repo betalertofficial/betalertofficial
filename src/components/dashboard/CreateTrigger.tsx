@@ -285,8 +285,10 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
         const detail: string = status.type.shortDetail || status.type.detail || "";
 
         // MLB live situation: balls, strikes, outs, bases
+        // Only a real baseball situation carries the count — ESPN also sends a
+        // `situation` for hockey/football, which must not render as bases/BSO.
         const sit = competition.situation;
-        const situation: ESPNSituation | null = sit
+        const situation: ESPNSituation | null = sit && typeof sit.balls === "number"
           ? {
               balls:    sit.balls    ?? 0,
               strikes:  sit.strikes  ?? 0,

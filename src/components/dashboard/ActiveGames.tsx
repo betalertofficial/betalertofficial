@@ -5,7 +5,7 @@ import { isGameToday, formatGameTime, getTeamMoneyline } from "@/lib/gameUtils";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { useTeamForm } from "@/hooks/useTeamForm";
 import { teamNamesMatch } from "@/lib/teamMatch";
-import type { EspnSituation } from "@/hooks/useEspnLive";
+import { parseLiveSituation, type LiveSituation } from "@/lib/liveSituation";
 import { GameCard, type GameCardData } from "./GameCard";
 import { LeaguePills } from "./LeaguePills";
 import { ChevronDown, ChevronUp } from "lucide-react";
@@ -24,8 +24,8 @@ interface GameVM {
   awayMl: number | null;
   // Live status detail straight from ESPN, e.g. "Top 7th", "Q3 5:21", "63'".
   liveDetail: string | null;
-  // MLB only: balls/strikes/outs + bases, from ESPN competition.situation.
-  situation: EspnSituation | null;
+  // Sport-specific live details (bases/count, down & distance, shots on goal…).
+  situation: LiveSituation | null;
 }
 
 export interface GameSelection {
@@ -131,7 +131,6 @@ async function fetchLeagueGames(sportKey: string): Promise<GameVM[]> {
 
       seen.add(ev.id);
       const live = bucket === "live";
-      const s = comp.situation;
 
       out.push({
         event: {
@@ -155,16 +154,7 @@ async function fetchLeagueGames(sportKey: string): Promise<GameVM[]> {
         liveDetail: live
           ? comp.status?.type?.shortDetail || comp.status?.type?.detail || "Live"
           : null,
-        situation: s
-          ? {
-              balls: s.balls,
-              strikes: s.strikes,
-              outs: s.outs,
-              onFirst: s.onFirst,
-              onSecond: s.onSecond,
-              onThird: s.onThird,
-            }
-          : null,
+        situation: live ? parseLiveSituation(sportKey, comp) : null,
       });
     }
   }
