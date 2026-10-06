@@ -13,6 +13,7 @@ import { triggerService } from "@/services/triggerService";
 import { teamsService, type Team } from "@/services/teamsService";
 import type { BetType, TriggerFrequency } from "@/types/database";
 import { GameCard, type GameCardData } from "./GameCard";
+import { TrendsPanel } from "./TrendsPanel";
 import { teamNamesMatch } from "@/lib/teamMatch";
 
 export interface CreateTriggerProps {
@@ -658,6 +659,28 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
 
   const tomorrowEvents = events.filter(event => isGameTomorrow(event.commence_time));
 
+  // Matchup for the trends panel: the tapped dashboard card, or the game picked
+  // in the manual flow.
+  const trendsGame = selectedCard
+    ? { sportKey: selectedCard.sportKey, homeTeam: selectedCard.homeTeam, awayTeam: selectedCard.awayTeam }
+    : selectedEvent && selectedTeam
+    ? { sportKey: selectedSport, homeTeam: selectedEvent.home_team, awayTeam: selectedEvent.away_team }
+    : null;
+
+  // Today's total (Over line) from the selected game's live odds — preferred
+  // sportsbook first, then any book that prices it.
+  const currentTotalLine = useMemo(() => {
+    const books = selectedEvent?.bookmakers ?? [];
+    const pref = sportsbook === "fanduel" ? "fanduel" : "draftkings";
+    const ordered = [...books].sort((a, b) => (a.key === pref ? -1 : b.key === pref ? 1 : 0));
+    for (const b of ordered) {
+      const m = b.markets?.find((x: any) => x.key === "totals");
+      const over = m?.outcomes?.find((o: any) => o.name === "Over");
+      if (over && typeof over.point === "number") return over.point as number;
+    }
+    return null;
+  }, [selectedEvent, sportsbook]);
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1102,6 +1125,16 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Team W/L + Over/Under trends for the selected matchup */}
+            {trendsGame && (
+              <TrendsPanel
+                sportKey={trendsGame.sportKey}
+                homeTeam={trendsGame.homeTeam}
+                awayTeam={trendsGame.awayTeam}
+                line={currentTotalLine}
+              />
             )}
 
             {/* Fallback pill when team was selected via search (no event context) */}
