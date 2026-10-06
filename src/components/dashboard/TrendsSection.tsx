@@ -144,10 +144,10 @@ export function TrendsSection({ onSelect, refreshSignal }: { onSelect: (sel: Tre
                       className="group w-full rounded-lg px-2 py-1.5 text-left hover:bg-gray-50"
                       title={i.kind === "totals" ? `Set a ${i.side === "over" ? "Over" : "Under"} alert` : "Set a moneyline alert"}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="flex min-w-0 items-center gap-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="flex min-w-0 items-start gap-1.5">
                           <span
-                            className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+                            className={`mt-px shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
                               i.kind === "totals"
                                 ? i.side === "over"
                                   ? "bg-green-50 text-green-700"
@@ -157,7 +157,7 @@ export function TrendsSection({ onSelect, refreshSignal }: { onSelect: (sel: Tre
                           >
                             {i.kind === "totals" ? (i.side === "over" ? "Over" : "Under") : "ML"}
                           </span>
-                          <span className="truncate text-xs text-gray-700">{i.text}</span>
+                          <span className="text-xs leading-snug text-gray-700">{i.text}</span>
                         </span>
                         <span className="shrink-0 text-xs font-bold tabular-nums text-gray-900">{i.pct}%</span>
                       </div>
