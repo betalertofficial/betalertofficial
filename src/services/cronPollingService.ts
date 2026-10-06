@@ -35,6 +35,8 @@ interface OddsSnapshot {
   bookmaker: string;
   bet_type: string;
   odds_value: number;
+  /** Line for spreads/totals outcomes (e.g. 8.5); null for moneyline. */
+  point?: number | null;
   event_data?: any;
 }
 
@@ -182,6 +184,7 @@ async function fetchLiveOddsForSports(
                 bookmaker: normalizedBookmaker,
                 bet_type: market.key,
                 odds_value: outcome.price,
+                point: typeof outcome.point === "number" ? outcome.point : null,
                 // Per-row event_data: shared event fields + THIS outcome's
                 // bet-slip link + THIS bookmaker's event link, so the alert
                 // builder can deep-link straight to the matched selection.
@@ -265,6 +268,7 @@ async function storeOddsSnapshots(
       bookmaker: odds.bookmaker,
       bet_type: odds.bet_type,
       odds_value: odds.odds_value,
+      point: odds.point ?? null,
       event_data: odds.event_data,
       scores_data: espnData || null, // Store ESPN data for debugging
       snapshot_at: new Date().toISOString(),
@@ -383,15 +387,19 @@ export async function runCronPoll(
     const paidSports: string[] = [];
     for (const sport of activeSports) {
       const liveList = liveGamesBySport.get(sport) || [];
-      const hasTriggeredLive = triggers.some(
-        (t) =>
-          t.sport === sport &&
-          liveList.some(
-            (g) =>
-              teamNamesMatch(g.homeTeam, t.team_or_player) ||
-              teamNamesMatch(g.awayTeam, t.team_or_player)
-          )
-      );
+      const now = Date.now();
+      const hasTriggeredLive = triggers.some((t) => {
+        if (t.sport !== sport) return false;
+        // Game-bound triggers (e.g. totals: team_or_player is "Over"/"Under")
+        // are live once their game has started (and for up to 6h after).
+        const commence = (t as any).event_commence ? new Date((t as any).event_commence).getTime() : NaN;
+        if ((t as any).event_id && !Number.isNaN(commence) && now >= commence && now - commence < 6 * 3600 * 1000) {
+          return true;
+        }
+        return liveList.some(
+          (g) => teamNamesMatch(g.homeTeam, t.team_or_player) || teamNamesMatch(g.awayTeam, t.team_or_player)
+        );
+      });
       if (hasTriggeredLive) paidSports.push(sport);
     }
     const wasLive = paidSports.length > 0;

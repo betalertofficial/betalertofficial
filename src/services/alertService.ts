@@ -191,9 +191,21 @@ export const alertService = {
           BOOK_HOME_URLS[bookKey] ||
           undefined;
 
+        // Totals alerts have no team: show the game and "Total Over 8.5"
+        // (plus the live line if it has moved past the user's number).
+        const isTotals = String(trigger.bet_type || "").toLowerCase().startsWith("total");
+        const espnGame = espnData?.awayTeam && espnData?.homeTeam ? `${espnData.awayTeam} @ ${espnData.homeTeam}` : null;
+        const livePoint = typeof snapshot.point === "number" ? snapshot.point : null;
+        const userLine = typeof trigger.line_value === "number" ? trigger.line_value : null;
+        const gameLabel = isTotals ? trigger.game_label || espnGame || "Game total" : trigger.team_or_player;
+        const marketLabel = isTotals
+          ? `Total ${trigger.team_or_player}${userLine !== null ? ` ${userLine}` : ""}` +
+            (livePoint !== null && userLine !== null && livePoint !== userLine ? ` (line now ${livePoint})` : "")
+          : trigger.bet_type;
+
         const telegramMessage = formatTelegramAlert({
-          game: trigger.team_or_player,
-          market: trigger.bet_type,
+          game: gameLabel,
+          market: marketLabel,
           detail: snapshot.bookmaker,
           currentOdds: snapshot.odds_value,
           targetOdds: trigger.odds_value,

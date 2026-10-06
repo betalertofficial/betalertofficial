@@ -28,6 +28,16 @@ function getBetTypeLabel(betType: string): string {
   return labels[betType.toLowerCase()] ?? betType;
 }
 
+/** Totals triggers show "Over 8.5" + the game; team triggers show the team. */
+function isTotalsTrigger(t: { bet_type: string }) {
+  return String(t.bet_type || "").toLowerCase().startsWith("total");
+}
+
+function triggerTitle(t: { bet_type: string; team_or_player: string; line_value?: number | null }) {
+  if (isTotalsTrigger(t)) return `${t.team_or_player}${t.line_value != null ? ` ${t.line_value}` : ""}`;
+  return t.team_or_player;
+}
+
 function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
@@ -114,6 +124,14 @@ function HitMissBadge({ won }: { won: boolean | null }) {
   return <span className="shrink-0 text-xs text-gray-400">Pending</span>;
 }
 
+/** Totals: did the Over/Under win against the user's line? null = can't determine. */
+function didTotalHit(side: string, line: number | null | undefined, final: any): boolean | null {
+  if (!final || line == null) return null;
+  const sum = Number(final.homeScore) + Number(final.awayScore);
+  if (Number.isNaN(sum) || sum === Number(line)) return null;
+  return side.toLowerCase() === "over" ? sum > Number(line) : sum < Number(line);
+}
+
 /** Did the user's team win, based on the final score? null = can't determine. */
 function didTeamWin(team: string, final: any): boolean | null {
   if (!final) return null;
@@ -154,11 +172,17 @@ export function CompletedTriggerRow({ profileTrigger, onDelete }: CompletedTrigg
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
-            <h3 className="font-bold text-sm leading-tight truncate">{trigger.team_or_player}</h3>
+            <h3 className="font-bold text-sm leading-tight truncate">{triggerTitle(trigger as any)}</h3>
             <Badge className="shrink-0 border-transparent bg-gray-100 px-1.5 py-0 text-[10px] text-gray-500">done</Badge>
           </div>
           <p className="mt-0.5 ml-5 flex items-center gap-1 text-xs text-muted-foreground">
             <span>{leagueLabel(trigger.sport)}</span>
+            {(trigger as any).game_label ? (
+              <>
+                <span>·</span>
+                <span className="truncate">{(trigger as any).game_label}</span>
+              </>
+            ) : null}
             {latestMatch && (
               <>
                 <span>·</span>
@@ -184,7 +208,7 @@ export function CompletedTriggerRow({ profileTrigger, onDelete }: CompletedTrigg
       <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
         <DetailRow
           label="Condition"
-          value={`${getBetTypeLabel(trigger.bet_type)} ${getComparatorLabel(trigger.odds_comparator)} ${formatOdds(Number(trigger.odds_value))}`}
+          value={`${isTotalsTrigger(trigger) ? `${triggerTitle(trigger as any)} odds` : getBetTypeLabel(trigger.bet_type)} ${getComparatorLabel(trigger.odds_comparator)} ${formatOdds(Number(trigger.odds_value))}`}
         />
         <DetailRow label="Frequency" value={trigger.frequency === "once" ? "One time" : "Each game"} />
         <DetailRow label="Period" value={formatPeriod(trigger.time_period_type, trigger.time_period_min)} />
@@ -228,7 +252,7 @@ export function CompletedTriggerRow({ profileTrigger, onDelete }: CompletedTrigg
                     homeTeam={finalScore.homeTeam}
                     homeScore={finalScore.homeScore}
                   />
-                  <HitMissBadge won={didTeamWin(trigger.team_or_player, finalScore)} />
+                  <HitMissBadge won={isTotalsTrigger(trigger) ? didTotalHit(trigger.team_or_player, (trigger as any).line_value, finalScore) : didTeamWin(trigger.team_or_player, finalScore)} />
                 </div>
               }
             />

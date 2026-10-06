@@ -19,6 +19,10 @@ interface CreateTriggerParams {
   // the game is over.
   event_id?: string | null;
   event_commence?: string | null;
+  // Totals triggers: the user's line (team_or_player is "Over"/"Under") and a
+  // display label for the bound game, e.g. "LAD @ ATL".
+  line_value?: number | null;
+  game_label?: string | null;
 }
 
 export const triggerService = {
@@ -44,6 +48,9 @@ export const triggerService = {
           vendor_id,
           time_period_type,
           time_period_min,
+          line_value,
+          game_label,
+          event_id,
           created_at,
           updated_at,
           trigger_matches (
@@ -91,6 +98,8 @@ export const triggerService = {
         // Event-bound "once" triggers only (null otherwise → team-level).
         event_id: params.event_id || null,
         event_commence: params.event_commence || null,
+        line_value: params.line_value ?? null,
+        game_label: params.game_label || null,
       } as any])
       .select()
       .single();
