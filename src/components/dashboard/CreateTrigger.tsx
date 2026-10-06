@@ -31,6 +31,8 @@ export interface CreateTriggerProps {
 interface TeamOdds {
   moneyline?: number;
   spread?: { point: number; odds: number };
+  /** Game total (not team-specific): the line and the Over/Under prices. */
+  total?: { point: number; over: number; under: number };
 }
 
 interface GameScore {
@@ -152,6 +154,9 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
   const [customOdds, setCustomOdds] = useState(false);
   const [gameTimeContext, setGameTimeContext] = useState("anytime");
   const [frequency, setFrequency] = useState<TriggerFrequency>("once");
+  // Totals alerts: which side and the user's line (string for the input).
+  const [totalSide, setTotalSide] = useState<"over" | "under">("over");
+  const [totalLine, setTotalLine] = useState("");
 
   const gameTimeOptions = selectedSport.startsWith("soccer")
     ? SOCCER_GAME_TIME_CONTEXT
@@ -397,6 +402,15 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
       }
     }
 
+    const totalsMarket = bookmaker.markets.find(m => m.key === "totals");
+    if (totalsMarket) {
+      const over = totalsMarket.outcomes.find(o => o.name === "Over");
+      const under = totalsMarket.outcomes.find(o => o.name === "Under");
+      if (over && under && over.point !== undefined) {
+        odds.total = { point: over.point, over: over.price, under: under.price };
+      }
+    }
+
     setTeamOdds(odds);
   };
 
@@ -479,6 +493,26 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
         }
       }
 
+      // Totals: bind to the exact game (Over/Under has no team to match on).
+      const isTotals = betType === "totals";
+      const lineNum = parseFloat(totalLine);
+      if (isTotals) {
+        if (!Number.isFinite(lineNum)) {
+          throw new Error("Enter a total line (e.g. 8.5).");
+        }
+        if (!boundEventId && selectedEvent && (selectedEvent.bookmakers?.length ?? 0) > 0) {
+          boundEventId = selectedEvent.id;
+          boundEventCommence = selectedEvent.commence_time;
+        }
+        if (!boundEventId) {
+          throw new Error("Couldn't find this game's odds yet — give it a moment and try again.");
+        }
+      }
+      const shortTeam = (n?: string) => (n || "").trim().split(/\s+/).pop() || "";
+      const awayName = selectedCard?.awayTeam ?? selectedEvent?.away_team;
+      const homeName = selectedCard?.homeTeam ?? selectedEvent?.home_team;
+      const gameLabel = awayName && homeName ? `${shortTeam(awayName)} @ ${shortTeam(homeName)}` : null;
+
       console.log("Creating trigger with data:", {
         sport: selectedSport,
         team_or_player: selectedTeam,
@@ -496,19 +530,21 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
 
       const trigger = await triggerService.createTrigger(user.id, {
         sport: selectedSport,
-        team_or_player: selectedTeam,
-        team_id: selectedTeamId || null,
+        team_or_player: isTotals ? (totalSide === "over" ? "Over" : "Under") : selectedTeam,
+        team_id: isTotals ? null : selectedTeamId || null,
         bet_type: betType,
         odds_comparator: oddsComparator,
         odds_value: finalOddsValue,
-        frequency,
+        frequency: isTotals ? "once" : frequency,
         status: "active",
         vendor_id: oddsApiVendor.id,
         bookmaker: null,
         time_period_type: timePeriodType,
         time_period_min: timePeriodMin,
         event_id: boundEventId,
-        event_commence: boundEventCommence
+        event_commence: boundEventCommence,
+        line_value: isTotals ? lineNum : null,
+        game_label: gameLabel,
       });
 
       toast({
@@ -609,7 +645,21 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
 
   // The current live odds for the selected team + bet type (null if unavailable).
   const currentLiveOdds =
-    betType === "spread" ? teamOdds?.spread?.odds ?? null : teamOdds?.moneyline ?? null;
+    betType === "spread"
+      ? teamOdds?.spread?.odds ?? null
+      : betType === "totals"
+      ? (totalSide === "over" ? teamOdds?.total?.over : teamOdds?.total?.under) ?? null
+      : teamOdds?.moneyline ?? null;
+
+  // Totals: pre-fill the line with today's total when it loads (once per game).
+  useEffect(() => {
+    if (teamOdds?.total?.point !== undefined) setTotalLine(String(teamOdds.total.point));
+  }, [teamOdds?.total?.point]);
+
+  // Totals alerts are always "just this game".
+  useEffect(() => {
+    if (betType === "totals") setFrequency("once");
+  }, [betType]);
 
   // Pre-fill the Odds Threshold with the team's CURRENT live odds, rounded to the
   // nearest 10 (the picker steps by 10), whenever live odds load or bet type changes.
@@ -1153,7 +1203,7 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
 
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">Bet Type</Label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <button
                   type="button"
                   className={`flex flex-col items-start p-4 rounded-lg border-2 transition-all ${
@@ -1181,8 +1231,67 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
                     </div>
                   )}
                 </button>
+                <button
+                  type="button"
+                  className={`flex flex-col items-start p-4 rounded-lg border-2 transition-all ${
+                    betType === "totals" ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"
+                  }`}
+                  onClick={() => handleBetTypeSelect("totals")}
+                >
+                  <p className="text-sm font-semibold text-foreground">Total (O/U)</p>
+                  {teamOdds?.total && (
+                    <div className="mt-0.5">
+                      <span className="text-xl font-bold text-primary">{teamOdds.total.point}</span>
+                      <span className="text-xs text-muted-foreground ml-1.5">
+                        O {formatOdds(teamOdds.total.over)} · U {formatOdds(teamOdds.total.under)}
+                      </span>
+                    </div>
+                  )}
+                </button>
               </div>
             </div>
+
+            {/* Totals: pick Over/Under and the line. Fires when the live line is
+                at least as good as yours AND the price meets the threshold. */}
+            {betType === "totals" && (
+              <div className="space-y-3 rounded-lg border border-border bg-card p-3">
+                <div className="grid grid-cols-2 gap-3">
+                  {(["over", "under"] as const).map((side) => {
+                    const price = side === "over" ? teamOdds?.total?.over : teamOdds?.total?.under;
+                    return (
+                      <button
+                        key={side}
+                        type="button"
+                        onClick={() => setTotalSide(side)}
+                        className={`flex items-center justify-between rounded-lg border-2 px-3 py-2 transition-all ${
+                          totalSide === side ? "border-primary bg-primary/10" : "border-border hover:bg-muted"
+                        }`}
+                      >
+                        <span className="text-sm font-semibold text-foreground">{side === "over" ? "Over" : "Under"}</span>
+                        {price !== undefined && <span className="text-sm font-bold text-primary">{formatOdds(price)}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-3">
+                  <Label className="shrink-0 text-sm font-medium text-foreground">Line</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.5"
+                    value={totalLine}
+                    onChange={(e) => setTotalLine(e.target.value)}
+                    className="h-9 w-28 bg-background text-foreground"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {totalSide === "over"
+                      ? "Fires if the line is at or below this"
+                      : "Fires if the line is at or above this"}
+                    {teamOdds?.total ? ` · now ${teamOdds.total.point}` : ""}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
@@ -1308,6 +1417,8 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
                       : "border-border bg-card hover:bg-muted"
                   }`}
                   onClick={() => setFrequency("recurring")}
+                  disabled={betType === "totals"}
+                  title={betType === "totals" ? "Total alerts are for a single game" : undefined}
                 >
                   <p className="font-semibold text-foreground mb-1">This game and future games</p>
                   <p className="text-sm text-muted-foreground text-left">

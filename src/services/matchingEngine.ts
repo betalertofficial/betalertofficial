@@ -20,6 +20,8 @@ interface Trigger {
   // When set (event-bound "once" triggers), the trigger matches ONLY this
   // specific Odds API event — i.e. "just this game", not any game of the team.
   event_id?: string | null;
+  /** Totals triggers: the user's line (e.g. 8.5). */
+  line_value?: number | null;
 }
 
 interface OddsSnapshot {
@@ -29,6 +31,8 @@ interface OddsSnapshot {
   bookmaker: string;
   bet_type: string;
   odds_value: number;
+  /** Line for spreads/totals outcomes (e.g. 8.5). */
+  point?: number | null;
   event_data?: any; // Event data from Odds API (includes commence_time)
 }
 
@@ -175,6 +179,20 @@ export function findMatches(
           console.log(`[MatchingEngine] Bet type mismatch: "${odds.bet_type}" (${oddsBetType}) != "${trigger.bet_type}" (${oddsApiBetType})`);
         }
         continue;
+      }
+
+      // 3b. Totals: "Over"/"Under" isn't tied to a team, so a totals trigger
+      //     must be bound to one game, and the live line must be at least as
+      //     good as the user's: Over wants the line at or BELOW theirs, Under
+      //     at or ABOVE (e.g. "Over 8.5" also fires if the line drops to 8).
+      if (oddsApiBetType === "totals") {
+        if (!trigger.event_id) continue;
+        const line = trigger.line_value;
+        if (typeof line === "number" && Number.isFinite(line)) {
+          if (typeof odds.point !== "number") continue;
+          const isOver = odds.team_or_player.toLowerCase() === "over";
+          if (isOver ? odds.point > line : odds.point < line) continue;
+        }
       }
 
       // 4. Match bookmaker if specified (case-insensitive)

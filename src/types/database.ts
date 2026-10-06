@@ -1,4 +1,4 @@
-export type BetType = "moneyline" | "spread";
+export type BetType = "moneyline" | "spread" | "totals";
 export type OddsComparator = ">=" | "<=" | ">" | "<" | "==";
 export type TriggerFrequency = "once" | "recurring";
 export type TriggerStatus = "active" | "paused" | "completed" | "deleted";
@@ -44,6 +44,11 @@ export interface Trigger {
   bookmaker?: string | null;
   time_period_type?: string | null;
   time_period_min?: number | null;
+  /** Totals triggers: the user's line (e.g. 8.5); team_or_player is "Over"/"Under". */
+  line_value?: number | null;
+  /** Display label for game-bound triggers, e.g. "LAD @ ATL". */
+  game_label?: string | null;
+  event_id?: string | null;
   created_at: string;
   updated_at: string;
 }
