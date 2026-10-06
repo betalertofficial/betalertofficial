@@ -6,6 +6,7 @@ import { Settings } from "@/components/dashboard/Settings";
 import { PickATeam } from "@/components/dashboard/PickATeam";
 import { ActiveGames } from "@/components/dashboard/ActiveGames";
 import { ComebacksOn } from "@/components/dashboard/ComebacksOn";
+import { TrendsSection } from "@/components/dashboard/TrendsSection";
 import { CreateTrigger } from "@/components/dashboard/CreateTrigger";
 import type { GameCardData } from "@/components/dashboard/GameCard";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -22,6 +23,9 @@ interface Prefill {
   // Present when opened from an Active Games card — lets the modal render the
   // exact same card as its header.
   card?: GameCardData;
+  // From a Trends card: open on the bet the trend points at.
+  betType?: "moneyline" | "totals";
+  totalSide?: "over" | "under";
 }
 
 export default function Dashboard() {
@@ -176,6 +180,7 @@ export default function Dashboard() {
 
               <PickATeam onSelectTeam={openTrigger} refreshSignal={dataRefresh} />
               <ActiveGames onSelectGame={openTrigger} refreshSignal={dataRefresh} />
+              <TrendsSection onSelect={openTrigger} refreshSignal={dataRefresh} />
               <ComebacksOn onSelect={openTrigger} refreshSignal={dataRefresh} />
             </div>
 
@@ -208,6 +213,8 @@ export default function Dashboard() {
         initialTeamId={prefill.teamId}
         initialEvent={prefill.event}
         initialCard={prefill.card}
+        initialBetType={prefill.betType}
+        initialTotalSide={prefill.totalSide}
         onSuccess={() => {
           setTriggerOpen(false);
           setTriggerRefresh((n) => n + 1);

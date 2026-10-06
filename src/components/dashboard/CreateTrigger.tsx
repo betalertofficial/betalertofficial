@@ -26,6 +26,9 @@ export interface CreateTriggerProps {
   initialTeamId?: string;
   initialEvent?: any;
   initialCard?: GameCardData;
+  /** Open pre-set to a bet type (e.g. from a Trends card). */
+  initialBetType?: BetType;
+  initialTotalSide?: "over" | "under";
 }
 
 interface TeamOdds {
@@ -112,7 +115,7 @@ const SPORT_DISPLAY_NAMES: Record<string, string> = {
   "baseball_mlb": "MLB"
 };
 
-export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSport, initialTeam, initialTeamId, initialEvent, initialCard }: CreateTriggerProps) {
+export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSport, initialTeam, initialTeamId, initialEvent, initialCard, initialBetType, initialTotalSide }: CreateTriggerProps) {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -176,6 +179,8 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
     if (initialEvent !== undefined) setSelectedEvent(initialEvent ?? null);
     // Reset each open: present only when launched from an Active Games card.
     setSelectedCard(initialCard ?? null);
+    setBetType(initialBetType ?? "moneyline");
+    setTotalSide(initialTotalSide ?? "over");
     // Fresh threshold defaults each open (live odds prefill overrides below).
     setOddsSign("+");
     setOddsValue("200");
