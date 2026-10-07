@@ -30,7 +30,7 @@ export interface TrendSelection {
   totalSide?: "over" | "under";
 }
 
-const VISIBLE = 6;
+const VISIBLE = 4;
 
 /**
  * Trends: today's games with their most lopsided team / total trends, ranked.
@@ -111,7 +111,7 @@ export function TrendsSection({ onSelect, refreshSignal }: { onSelect: (sel: Tre
         <div className="text-sm text-gray-400 py-6">Loading trends…</div>
       ) : (
         <>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             {shown.map((g) => (
               <div key={g.id} className="rounded-xl border border-gray-200 bg-white p-3">
                 <button type="button" onClick={() => open(g)} className="w-full text-left" title="Set an alert on this game">
