@@ -28,9 +28,13 @@ interface OpeningRow {
   commence_time: string;
 }
 
-/** Fetch current h2h moneylines for a sport from the Odds API → name → price. */
-async function fetchCurrentMl(sport: string, apiKey: string): Promise<Record<string, number>> {
-  const out: Record<string, number> = {};
+/**
+ * Fetch current h2h moneylines for a sport from the Odds API, keyed by EVENT id
+ * then team name. Keyed by event (not just team) so a team's line for a future
+ * game can never be shown as the live line for tonight's game.
+ */
+async function fetchCurrentMl(sport: string, apiKey: string): Promise<Record<string, Record<string, number>>> {
+  const out: Record<string, Record<string, number>> = {};
   try {
     const r = await fetch(
       `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${apiKey}&regions=us&markets=h2h&bookmakers=fanduel,draftkings&oddsFormat=american`,
@@ -42,8 +46,9 @@ async function fetchCurrentMl(sport: string, apiKey: string): Promise<Record<str
       for (const bm of ev.bookmakers || []) {
         const mkt = (bm.markets || []).find((m: any) => m.key === "h2h");
         if (!mkt) continue;
+        const byTeam = (out[ev.id] ||= {});
         for (const o of mkt.outcomes || []) {
-          if (out[o.name] === undefined) out[o.name] = Number(o.price);
+          if (byTeam[o.name] === undefined) byTeam[o.name] = Number(o.price);
         }
       }
     }
@@ -81,11 +86,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 2. Opening lines captured for TODAY's games (scope to last 12h so we don't
     //    match a team's stale opener from a previous game).
+    //    Only games that have already started (within the last 12h) — a live
+    //    game's opener must not be confused with the same teams' NEXT game
+    //    (e.g. a preseason game tonight vs their regular-season opener).
     const since = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+    const until = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     const { data: openingRows } = await (supabase as any)
       .from("game_opening_odds")
       .select("event_id, sport, home_team, away_team, home_ml, away_ml, commence_time")
-      .gte("commence_time", since);
+      .gte("commence_time", since)
+      .lte("commence_time", until);
     const opening: OpeningRow[] = openingRows || [];
 
     // 3. Match each live game to its opening line and keep favorites that trail.
@@ -144,14 +154,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const apiKey = process.env.ODDS_API_KEY;
     if (candidates.length > 0 && apiKey) {
       const sports = Array.from(new Set(candidates.map((c) => c.sport_key)));
-      const mlBySport: Record<string, Record<string, number>> = {};
+      const mlBySport: Record<string, Record<string, Record<string, number>>> = {};
       await Promise.all(
         sports.map(async (s) => {
           mlBySport[s] = await fetchCurrentMl(s, apiKey);
         })
       );
       for (const c of candidates) {
-        const byName = mlBySport[c.sport_key] || {};
+        const byName = (mlBySport[c.sport_key] || {})[c.event_id] || {};
         for (const tn of Object.keys(byName)) {
           if (teamNamesMatch(tn, c.favorite_team)) {
             c.current_ml = byName[tn];
