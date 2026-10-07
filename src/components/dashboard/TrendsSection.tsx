@@ -153,20 +153,17 @@ export function TrendsSection({ onSelect, refreshSignal }: { onSelect: (sel: Tre
                     >
                       <div className="flex items-start justify-between gap-2">
                         <span className="flex min-w-0 items-start gap-1.5">
-                          <span
-                            className={`mt-px shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
-                              i.kind === "totals"
-                                ? i.side === "over"
-                                  ? "bg-green-50 text-green-700"
-                                  : "bg-blue-50 text-blue-700"
-                                : "bg-gray-100 text-gray-600"
-                            }`}
-                          >
-                            {i.kind === "totals" ? (i.side === "over" ? "Over" : "Under") : `${shortTeam(i.team || "")} ML`}
-                          </span>
+                          <TrendTag i={i} totalLine={g.totalLine} logoFor={logoFor} homeTeam={g.homeTeam} awayTeam={g.awayTeam} />
                           <span className="text-xs leading-snug text-gray-700">{i.text}</span>
                         </span>
-                        <span className="shrink-0 text-xs font-bold tabular-nums text-gray-900">{i.pct}%</span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          {i.price != null ? (
+                            <span className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-gray-700">
+                              {i.price > 0 ? `+${i.price}` : i.price}
+                            </span>
+                          ) : null}
+                          <span className="w-9 text-right text-xs font-bold tabular-nums text-gray-900">{i.pct}%</span>
+                        </span>
                       </div>
                       <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-gray-100">
                         <div
@@ -204,6 +201,50 @@ function TeamChip({ name, logo, score, alignRight }: { name: string; logo: strin
       <TeamLogoImg url={logo} alt={name} className="h-6 w-6 shrink-0 object-contain" />
       <span className="truncate text-sm font-semibold text-gray-900">{short}</span>
       {score != null && !Number.isNaN(score) ? <span className="text-sm font-bold tabular-nums text-gray-900">{score}</span> : null}
+    </span>
+  );
+}
+
+/**
+ * Left-hand tag: who the bet is on + what it is. Always shows a small logo and
+ * name — the team for ML and team-based totals trends, both logos + "Game" for
+ * head-to-head totals.
+ */
+function TrendTag({
+  i,
+  totalLine,
+  logoFor,
+  homeTeam,
+  awayTeam,
+}: {
+  i: TrendInsight;
+  totalLine: number | null;
+  logoFor: (n?: string | null) => string | null;
+  homeTeam: string;
+  awayTeam: string;
+}) {
+  const team = i.kind === "moneyline" ? i.team : i.subject;
+  const bet =
+    i.kind === "moneyline" ? "ML" : `${i.side === "over" ? "Over" : "Under"}${totalLine != null ? ` ${totalLine}` : ""}`;
+  const tone =
+    i.kind === "moneyline"
+      ? "bg-gray-100 text-gray-700"
+      : i.side === "over"
+      ? "bg-green-50 text-green-700"
+      : "bg-blue-50 text-blue-700";
+  return (
+    <span className={`mt-px inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>
+      {team ? (
+        <TeamLogoImg url={logoFor(team)} alt={team} className="h-3.5 w-3.5 shrink-0 object-contain" />
+      ) : (
+        <span className="flex -space-x-1">
+          <TeamLogoImg url={logoFor(awayTeam)} alt={awayTeam} className="h-3.5 w-3.5 shrink-0 object-contain" />
+          <TeamLogoImg url={logoFor(homeTeam)} alt={homeTeam} className="h-3.5 w-3.5 shrink-0 object-contain" />
+        </span>
+      )}
+      <span>{team ? shortTeam(team) : "Game"}</span>
+      <span className="opacity-60">·</span>
+      <span>{bet}</span>
     </span>
   );
 }

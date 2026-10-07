@@ -33,8 +33,18 @@ export interface TrendGame {
   homeScore: number | null;
   awayScore: number | null;
   totalLine: number | null;
+  /** Current prices from ESPN (DraftKings), pre-game only. */
+  homeMl: number | null;
+  awayMl: number | null;
+  overPrice: number | null;
+  underPrice: number | null;
   insights: TrendInsight[];
   topStrength: number;
+}
+
+function price(v: unknown): number | null {
+  const n = parseInt(String(v ?? "").replace(/^\+/, ""), 10);
+  return Number.isFinite(n) ? n : null;
 }
 
 async function getJson(url: string): Promise<any | null> {
@@ -103,6 +113,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               homeScore: live ? parseInt(home?.score, 10) : null,
               awayScore: live ? parseInt(away?.score, 10) : null,
               totalLine: line,
+              homeMl: price(c.odds?.[0]?.moneyline?.home?.close?.odds),
+              awayMl: price(c.odds?.[0]?.moneyline?.away?.close?.odds),
+              overPrice: price(c.odds?.[0]?.total?.over?.close?.odds),
+              underPrice: price(c.odds?.[0]?.total?.under?.close?.odds),
             };
           })
         );
@@ -121,7 +135,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         return games.map((g) => {
           const tr = computeMatchupTrends(lg.sportKey, g.homeTeam, g.awayTeam, rows, g.totalLine);
-          const insights = buildInsights(tr, g.homeTeam, g.awayTeam);
+          const insights = buildInsights(tr, g.homeTeam, g.awayTeam).map((i) => ({
+            ...i,
+            price:
+              i.kind === "totals"
+                ? i.side === "over"
+                  ? g.overPrice
+                  : g.underPrice
+                : i.team === g.homeTeam
+                ? g.homeMl
+                : i.team === g.awayTeam
+                ? g.awayMl
+                : null,
+          }));
           return { ...g, insights, topStrength: insights[0]?.strength ?? 0 } as TrendGame;
         });
       })

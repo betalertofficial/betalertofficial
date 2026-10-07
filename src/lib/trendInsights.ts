@@ -19,6 +19,10 @@ export interface TrendInsight {
   team?: string;
   /** Totals insights: the side the trend favors. */
   side?: "over" | "under";
+  /** Team the trend is ABOUT (totals trends from one team's games); unset = both teams (head-to-head). */
+  subject?: string;
+  /** Current price for the bet this trend points at (American odds), when known. */
+  price?: number | null;
   /** Ranking strength (higher = more lopsided, bigger sample). */
   strength: number;
 }
@@ -80,19 +84,19 @@ function teamInsights(t: TeamTrend, opp: string, line: number | null, out: Trend
   const ouN = t.ou.over + t.ou.under;
   if (strong(t.ou.over, ouN, 5)) {
     if (t.ou.over / ouN >= 0.7) {
-      push(out, { text: `Over hit in ${t.ou.over} of the ${poss(me)} last ${ouN}`, hit: t.ou.over, of: ouN, kind: "totals", side: "over" });
+      push(out, { text: `Over hit in ${t.ou.over} of the ${poss(me)} last ${ouN}`, hit: t.ou.over, of: ouN, kind: "totals", side: "over", subject: t.team });
     } else {
-      push(out, { text: `Under hit in ${t.ou.under} of the ${poss(me)} last ${ouN}`, hit: t.ou.under, of: ouN, kind: "totals", side: "under" });
+      push(out, { text: `Under hit in ${t.ou.under} of the ${poss(me)} last ${ouN}`, hit: t.ou.under, of: ouN, kind: "totals", side: "under", subject: t.team });
     }
   }
 
   // Against TODAY's number
   if (line != null && t.overToday != null && strong(t.overToday, t.games, 5)) {
     if (t.overToday / t.games >= 0.7) {
-      push(out, { text: `The ${poss(me)} last ${t.games} went over ${line} in ${t.overToday}`, hit: t.overToday, of: t.games, kind: "totals", side: "over" });
+      push(out, { text: `The ${poss(me)} last ${t.games} went over ${line} in ${t.overToday}`, hit: t.overToday, of: t.games, kind: "totals", side: "over", subject: t.team });
     } else {
       const under = t.games - t.overToday;
-      push(out, { text: `The ${poss(me)} last ${t.games} stayed under ${line} in ${under}`, hit: under, of: t.games, kind: "totals", side: "under" });
+      push(out, { text: `The ${poss(me)} last ${t.games} stayed under ${line} in ${under}`, hit: under, of: t.games, kind: "totals", side: "under", subject: t.team });
     }
   }
   void them;
