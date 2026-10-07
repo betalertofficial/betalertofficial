@@ -369,9 +369,17 @@ export function CreateTrigger({ open, onOpenChange, onBack, onSuccess, initialSp
   };
 
   const loadTeamOdds = () => {
-    const event = events.find(e => 
-      e.home_team === selectedTeam || e.away_team === selectedTeam
-    );
+    // When opened from a game card, only use the Odds API event for THAT game
+    // (closest start, within 6h). Preseason games aren't in the Odds API, and a
+    // plain team-name match would show the team's next game's odds instead.
+    const cardMs = selectedCard?.commenceTime ? new Date(selectedCard.commenceTime).getTime() : NaN;
+    const candidates = events.filter(e => e.home_team === selectedTeam || e.away_team === selectedTeam);
+    const event = Number.isNaN(cardMs)
+      ? candidates[0]
+      : candidates
+          .map(e => ({ e, d: Math.abs(new Date(e.commence_time).getTime() - cardMs) }))
+          .filter(x => x.d <= 6 * 3600 * 1000)
+          .sort((x, y) => x.d - y.d)[0]?.e;
 
     if (!event) {
       setSelectedEvent(null);
