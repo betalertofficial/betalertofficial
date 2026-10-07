@@ -157,11 +157,7 @@ export function TrendsSection({ onSelect, refreshSignal }: { onSelect: (sel: Tre
                           <span className="text-xs leading-snug text-gray-700">{i.text}</span>
                         </span>
                         <span className="flex shrink-0 items-center gap-2">
-                          {i.price != null ? (
-                            <span className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-gray-700">
-                              {i.price > 0 ? `+${i.price}` : i.price}
-                            </span>
-                          ) : null}
+                          <PriceMove start={i.startPrice ?? null} now={i.price ?? null} line={i.priceLine ?? null} side={i.side} live={g.live} />
                           <span className="w-9 text-right text-xs font-bold tabular-nums text-gray-900">{i.pct}%</span>
                         </span>
                       </div>
@@ -247,6 +243,50 @@ function TrendTag({
       <span>{team ? shortTeam(team) : "Game"}</span>
       <span className="opacity-60">·</span>
       <span>{bet}</span>
+    </span>
+  );
+}
+
+const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+
+/**
+ * "Started → now" price. Higher American odds = bigger payout, so a rising
+ * number means the bet got cheaper (a growing deal) and shows green; falling
+ * shows red. Pre-game "started" is the opening line; live it's the pre-game close.
+ */
+function PriceMove({
+  start,
+  now,
+  line,
+  side,
+  live,
+}: {
+  start: number | null;
+  now: number | null;
+  line: number | null;
+  side?: "over" | "under";
+  live: boolean;
+}) {
+  if (start == null && now == null) return null;
+  const moved = start != null && now != null && line == null && now !== start;
+  const better = moved && now! > start!;
+  const tone = !moved ? "text-gray-700" : better ? "text-green-600" : "text-red-600";
+  return (
+    <span
+      className="flex items-center gap-1 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] tabular-nums"
+      title={live ? "Pre-game price → live price" : "Opening price → current price"}
+    >
+      {start != null ? <span className="text-gray-400">{fmt(start)}</span> : null}
+      {start != null && now != null ? <span className="text-gray-300">→</span> : null}
+      {now != null ? (
+        <span className={`font-semibold ${tone}`}>
+          {line != null ? `${side === "over" ? "o" : "u"}${line} ` : ""}
+          {fmt(now)}
+          {moved ? (better ? " ▲" : " ▼") : ""}
+        </span>
+      ) : (
+        <span className="text-gray-400">{live ? "live off" : ""}</span>
+      )}
     </span>
   );
 }

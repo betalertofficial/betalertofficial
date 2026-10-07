@@ -23,6 +23,10 @@ export interface TrendInsight {
   subject?: string;
   /** Current price for the bet this trend points at (American odds), when known. */
   price?: number | null;
+  /** Where the price started: the opening line pre-game, or the pre-game close once live. */
+  startPrice?: number | null;
+  /** Totals: the line the current price is for, when it differs from the game's listed total (live). */
+  priceLine?: number | null;
   /** Ranking strength (higher = more lopsided, bigger sample). */
   strength: number;
 }

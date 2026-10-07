@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
 import { LEAGUES } from "@/lib/leagues";
 import { computeMatchupTrends, type GameRow } from "@/lib/trends";
+import { teamNamesMatch } from "@/lib/teamMatch";
 import { buildInsights, type TrendInsight } from "@/lib/trendInsights";
 
 /**
@@ -38,6 +39,13 @@ export interface TrendGame {
   awayMl: number | null;
   overPrice: number | null;
   underPrice: number | null;
+  /** Starting prices: opening line pre-game; pre-game close for live games. */
+  homeMlStart: number | null;
+  awayMlStart: number | null;
+  overStart: number | null;
+  underStart: number | null;
+  /** Live total line from the Odds API (live games), when known. */
+  liveTotal: number | null;
   insights: TrendInsight[];
   topStrength: number;
 }
@@ -45,6 +53,54 @@ export interface TrendGame {
 function price(v: unknown): number | null {
   const n = parseInt(String(v ?? "").replace(/^\+/, ""), 10);
   return Number.isFinite(n) ? n : null;
+}
+
+// Live prices for in-progress games: ESPN stops quoting once a game starts, so
+// pull h2h + totals from the Odds API — only for sports that have a live game
+// on the Trends list, cached 10 minutes per sport (≈2 credits per sport per
+// 10 min while games are live).
+const liveCache = new Map<string, { at: number; events: any[] }>();
+async function liveOddsFor(sportKey: string): Promise<any[]> {
+  const apiKey = process.env.ODDS_API_KEY;
+  if (!apiKey) return [];
+  const c = liveCache.get(sportKey);
+  if (c && Date.now() - c.at < 10 * 60 * 1000) return c.events;
+  const events =
+    (await getJson(
+      `https://api.the-odds-api.com/v4/sports/${sportKey}/odds?apiKey=${apiKey}&regions=us&markets=h2h,totals&bookmakers=draftkings,fanduel&oddsFormat=american`
+    )) ?? [];
+  liveCache.set(sportKey, { at: Date.now(), events: Array.isArray(events) ? events : [] });
+  return Array.isArray(events) ? events : [];
+}
+
+function liveMarkets(events: any[], home: string, away: string, commence: string) {
+  const at = new Date(commence).getTime();
+  const ev = events.find(
+    (e) =>
+      teamNamesMatch(e.home_team, home) &&
+      teamNamesMatch(e.away_team, away) &&
+      Math.abs(new Date(e.commence_time).getTime() - at) < 6 * 3600 * 1000
+  );
+  if (!ev) return null;
+  const books = [...(ev.bookmakers || [])].sort((a: any, b: any) => (a.key === "draftkings" ? -1 : b.key === "draftkings" ? 1 : 0));
+  const out: { homeMl: number | null; awayMl: number | null; over: number | null; under: number | null; total: number | null } =
+    { homeMl: null, awayMl: null, over: null, under: null, total: null };
+  for (const b of books) {
+    const h2h = b.markets?.find((m: any) => m.key === "h2h");
+    if (h2h && out.homeMl === null) {
+      out.homeMl = h2h.outcomes?.find((o: any) => o.name === ev.home_team)?.price ?? null;
+      out.awayMl = h2h.outcomes?.find((o: any) => o.name === ev.away_team)?.price ?? null;
+    }
+    const tot = b.markets?.find((m: any) => m.key === "totals");
+    if (tot && out.over === null) {
+      const o = tot.outcomes?.find((x: any) => x.name === "Over");
+      const u = tot.outcomes?.find((x: any) => x.name === "Under");
+      out.over = o?.price ?? null;
+      out.under = u?.price ?? null;
+      out.total = typeof o?.point === "number" ? o.point : null;
+    }
+  }
+  return out;
 }
 
 async function getJson(url: string): Promise<any | null> {
@@ -95,13 +151,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             const home = c.competitors.find((x: any) => x.homeAway === "home");
             const away = c.competitors.find((x: any) => x.homeAway === "away");
             let line: number | null = typeof c.odds?.[0]?.overUnder === "number" ? c.odds[0].overUnder : null;
-            if (line === null) {
-              // Live games drop the scoreboard line; the summary keeps the pre-game one.
-              const s = await getJson(`${ESPN}/${path}/summary?event=${ev.id}`);
-              const ou = s?.pickcenter?.[0]?.overUnder;
-              line = typeof ou === "number" ? ou : null;
-            }
             const live = c.status.type.state === "in";
+            // Pre-game: ESPN's scoreboard odds (open + current). Live: the
+            // scoreboard drops odds, so read the pre-game close from the summary.
+            let o: any = c.odds?.[0] ?? null;
+            if (live || line === null) {
+              const s = await getJson(`${ESPN}/${path}/summary?event=${ev.id}`);
+              const pc = s?.pickcenter?.[0];
+              if (pc) o = pc;
+              if (line === null && typeof pc?.overUnder === "number") line = pc.overUnder;
+            }
+            const close = (side: any) => price(side?.close?.odds);
+            const open = (side: any) => price(side?.open?.odds);
             return {
               id: ev.id,
               sportKey: lg.sportKey,
@@ -113,13 +174,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               homeScore: live ? parseInt(home?.score, 10) : null,
               awayScore: live ? parseInt(away?.score, 10) : null,
               totalLine: line,
-              homeMl: price(c.odds?.[0]?.moneyline?.home?.close?.odds),
-              awayMl: price(c.odds?.[0]?.moneyline?.away?.close?.odds),
-              overPrice: price(c.odds?.[0]?.total?.over?.close?.odds),
-              underPrice: price(c.odds?.[0]?.total?.under?.close?.odds),
+              // Pre-game: start = open, now = current. Live: start = pre-game
+              // close; "now" is filled from the Odds API below.
+              homeMl: live ? null : close(o?.moneyline?.home),
+              awayMl: live ? null : close(o?.moneyline?.away),
+              overPrice: live ? null : close(o?.total?.over),
+              underPrice: live ? null : close(o?.total?.under),
+              homeMlStart: live ? close(o?.moneyline?.home) : open(o?.moneyline?.home),
+              awayMlStart: live ? close(o?.moneyline?.away) : open(o?.moneyline?.away),
+              overStart: live ? close(o?.total?.over) : open(o?.total?.over),
+              underStart: live ? close(o?.total?.under) : open(o?.total?.under),
+              liveTotal: null as number | null,
             };
           })
         );
+
+        // Live games: current prices from the Odds API (one cached call per sport).
+        if (games.some((g) => g.live)) {
+          const events = await liveOddsFor(lg.sportKey);
+          for (const g of games) {
+            if (!g.live) continue;
+            const m = liveMarkets(events, g.homeTeam, g.awayTeam, g.commenceTime);
+            if (!m) continue;
+            g.homeMl = m.homeMl;
+            g.awayMl = m.awayMl;
+            g.overPrice = m.over;
+            g.underPrice = m.under;
+            g.liveTotal = m.total;
+          }
+        }
 
         // One DB query per league for every team playing today.
         const names = Array.from(new Set(games.flatMap((g) => [g.homeTeam, g.awayTeam]).filter(Boolean)));
@@ -137,6 +220,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const tr = computeMatchupTrends(lg.sportKey, g.homeTeam, g.awayTeam, rows, g.totalLine);
           const insights = buildInsights(tr, g.homeTeam, g.awayTeam).map((i) => ({
             ...i,
+            startPrice:
+              i.kind === "totals"
+                ? i.side === "over"
+                  ? g.overStart
+                  : g.underStart
+                : i.team === g.homeTeam
+                ? g.homeMlStart
+                : i.team === g.awayTeam
+                ? g.awayMlStart
+                : null,
+            priceLine: i.kind === "totals" && g.liveTotal != null && g.liveTotal !== g.totalLine ? g.liveTotal : null,
             price:
               i.kind === "totals"
                 ? i.side === "over"
