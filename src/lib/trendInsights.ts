@@ -130,14 +130,15 @@ export function buildInsights(tr: MatchupTrends, homeTeam: string, awayTeam: str
     }
   }
 
-  // Strongest first; keep at most one "team won/lost" line per team so a card
-  // isn't three versions of the same fact.
+  // Strongest first, and at most ONE line per tag (same team + same bet). E.g.
+  // "Under hit in 9 of the Dodgers' last 9" and "The Dodgers' last 10 stayed
+  // under 7.5 in 9" are the same data point, so only the stronger one shows.
   out.sort((a, b) => b.strength - a.strength);
   const picked: TrendInsight[] = [];
   const seen = new Set<string>();
   for (const i of out) {
-    const key = i.kind === "moneyline" ? `ml:${i.team}` : `tot:${i.side}:${i.text.split(" ")[0]}`;
-    if (i.kind === "moneyline" && seen.has(key)) continue;
+    const key = i.kind === "moneyline" ? `ml:${i.team}` : `tot:${i.subject ?? "game"}:${i.side}`;
+    if (seen.has(key)) continue;
     seen.add(key);
     picked.push(i);
     if (picked.length >= max) break;
