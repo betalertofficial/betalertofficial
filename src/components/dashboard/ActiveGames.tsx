@@ -69,8 +69,12 @@ function toInt(v: unknown): number | null {
 // (ESPN ↔ Odds API, incl. national-team aliases like USA↔United States and
 // Türkiye↔Turkey) is handled by teamNamesMatch; the line is then read using the
 // Odds API's own team name (exact-match inside getTeamMoneyline).
-function findMoneyline(events: OddsApiEvent[], teamName: string): number | null {
+function findMoneyline(events: OddsApiEvent[], teamName: string, commence?: string): number | null {
+  const at = commence ? new Date(commence).getTime() : NaN;
   for (const e of events) {
+    // Same game only: the Odds API has no preseason games, so a team-name match
+    // could otherwise be that team's NEXT game (e.g. the regular-season opener).
+    if (!Number.isNaN(at) && Math.abs(new Date(e.commence_time).getTime() - at) > 6 * 3600 * 1000) continue;
     if (teamNamesMatch(e.home_team, teamName)) {
       const m = getTeamMoneyline(e, e.home_team);
       if (m !== null) return m;
@@ -205,8 +209,8 @@ export function ActiveGames({ onSelectGame, refreshSignal }: { onSelectGame: (se
           if (!evs || evs.length === 0) return g;
           return {
             ...g,
-            homeMl: findMoneyline(evs, g.event.home_team),
-            awayMl: findMoneyline(evs, g.event.away_team),
+            homeMl: findMoneyline(evs, g.event.home_team, g.event.commence_time),
+            awayMl: findMoneyline(evs, g.event.away_team, g.event.commence_time),
           };
         })
       );
