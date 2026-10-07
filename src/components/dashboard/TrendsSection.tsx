@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LEAGUES, leagueLabel } from "@/lib/leagues";
 import { formatGameTime } from "@/lib/gameUtils";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
-import { shortTeam, type TrendInsight } from "@/lib/trendInsights";
+import type { TrendInsight } from "@/lib/trendInsights";
 import type { GameCardData } from "./GameCard";
 import { TeamLogoImg } from "./TeamLogoImg";
 import { LeaguePills } from "./LeaguePills";
@@ -30,7 +30,7 @@ export interface TrendSelection {
   totalSide?: "over" | "under";
 }
 
-const VISIBLE = 3;
+const VISIBLE = 4;
 
 /**
  * Trends: today's games with their most lopsided team / total trends, ranked.
@@ -111,7 +111,7 @@ export function TrendsSection({ onSelect, refreshSignal }: { onSelect: (sel: Tre
         <div className="text-sm text-gray-400 py-6">Loading trends…</div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             {shown.map((g) => (
               <div key={g.id} className="rounded-xl border border-gray-200 bg-white p-3">
                 <button type="button" onClick={() => open(g)} className="w-full text-left" title="Set an alert on this game">
@@ -136,22 +136,13 @@ export function TrendsSection({ onSelect, refreshSignal }: { onSelect: (sel: Tre
                 </button>
 
                 <div className="mt-3 space-y-1.5 border-t border-gray-100 pt-2">
-                  {(() => {
-                    const mlTeams = new Set(g.insights.filter((x) => x.kind === "moneyline" && x.team).map((x) => x.team));
-                    const sides = new Set(g.insights.filter((x) => x.kind === "totals").map((x) => x.side));
-                    return mlTeams.size > 1 || sides.size > 1 ? (
-                      <p className="px-2 text-[11px] text-amber-600">
-                        Mixed signals — trends point both ways in this game.
-                      </p>
-                    ) : null;
-                  })()}
                   {g.insights.map((i, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => open(g, i)}
                       className="group w-full rounded-lg px-2 py-1.5 text-left hover:bg-gray-50"
-                      title={i.kind === "totals" ? `Set a ${i.side === "over" ? "Over" : "Under"} alert` : `Set a ${shortTeam(i.team || "")} moneyline alert`}
+                      title={i.kind === "totals" ? `Set a ${i.side === "over" ? "Over" : "Under"} alert` : "Set a moneyline alert"}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <span className="flex min-w-0 items-start gap-1.5">
@@ -164,7 +155,7 @@ export function TrendsSection({ onSelect, refreshSignal }: { onSelect: (sel: Tre
                                 : "bg-gray-100 text-gray-600"
                             }`}
                           >
-                            {i.kind === "totals" ? (i.side === "over" ? "Over" : "Under") : `${shortTeam(i.team || "")} ML`}
+                            {i.kind === "totals" ? (i.side === "over" ? "Over" : "Under") : "ML"}
                           </span>
                           <span className="text-xs leading-snug text-gray-700">{i.text}</span>
                         </span>
@@ -190,7 +181,7 @@ export function TrendsSection({ onSelect, refreshSignal }: { onSelect: (sel: Tre
               className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
             >
               <TrendingUp className="h-4 w-4" />
-              {showAll ? "Show fewer" : `View more (${filtered.length - VISIBLE})`}
+              {showAll ? "Show fewer" : `Show all ${filtered.length} games`}
             </button>
           )}
         </>
@@ -200,7 +191,7 @@ export function TrendsSection({ onSelect, refreshSignal }: { onSelect: (sel: Tre
 }
 
 function TeamChip({ name, logo, score, alignRight }: { name: string; logo: string | null; score: number | null; alignRight?: boolean }) {
-  const short = name.split(" ").slice(-1)[0];
+  const short = shortTeam(name);
   return (
     <span className={`flex min-w-0 items-center gap-1.5 ${alignRight ? "flex-row-reverse text-right" : ""}`}>
       <TeamLogoImg url={logo} alt={name} className="h-6 w-6 shrink-0 object-contain" />

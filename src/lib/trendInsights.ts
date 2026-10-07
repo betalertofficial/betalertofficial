@@ -33,7 +33,7 @@ export function shortTeam(full: string): string {
 
 /** "Dodgers" → "Dodgers'", "Wild" → "Wild's". */
 function poss(name: string) {
-  return /s$/i.test(name) ? `${name}'` : `${name}'s`;
+  return /(s|sox)$/i.test(name) ? `${name}'` : `${name}'s`;
 }
 
 function strength(hit: number, of: number) {
