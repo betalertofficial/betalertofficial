@@ -130,14 +130,15 @@ export function buildInsights(tr: MatchupTrends, homeTeam: string, awayTeam: str
     }
   }
 
-  // Strongest first, and at most ONE line per tag (same team + same bet). E.g.
-  // "Under hit in 9 of the Dodgers' last 9" and "The Dodgers' last 10 stayed
-  // under 7.5 in 9" are the same data point, so only the stronger one shows.
+  // Strongest first, and at most ONE line per bet. Every totals trend points at
+  // the same bet — the GAME total (e.g. Under 7.5) — whether the evidence is one
+  // team's games or the head-to-head, so only the strongest Over and the
+  // strongest Under show. Moneyline is one line per team.
   out.sort((a, b) => b.strength - a.strength);
   const picked: TrendInsight[] = [];
   const seen = new Set<string>();
   for (const i of out) {
-    const key = i.kind === "moneyline" ? `ml:${i.team}` : `tot:${i.subject ?? "game"}:${i.side}`;
+    const key = i.kind === "moneyline" ? `ml:${i.team}` : `tot:${i.side}`;
     if (seen.has(key)) continue;
     seen.add(key);
     picked.push(i);

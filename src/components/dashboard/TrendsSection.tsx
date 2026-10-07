@@ -223,7 +223,9 @@ function TrendTag({
   homeTeam: string;
   awayTeam: string;
 }) {
-  const team = i.kind === "moneyline" ? i.team : i.subject;
+  // Totals are always the game total (not a team total), so they're tagged
+  // "Game" with both logos; the trend text says which team's games it's from.
+  const team = i.kind === "moneyline" ? i.team : undefined;
   const bet =
     i.kind === "moneyline" ? "ML" : `${i.side === "over" ? "Over" : "Under"}${totalLine != null ? ` ${totalLine}` : ""}`;
   const tone =
