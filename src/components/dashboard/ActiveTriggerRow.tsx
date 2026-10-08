@@ -106,22 +106,21 @@ export function ActiveTriggerRow({
               {trigger.status}
             </Badge>
           </div>
-          <p className="mt-0.5 ml-3.5 flex items-center gap-1 text-xs text-muted-foreground">
-            <span>{leagueLabel(trigger.sport)}</span>
+          <p className="mt-0.5 ml-3.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+            <span className="shrink-0">{leagueLabel(trigger.sport)}</span>
             {(trigger as any).game_label ? (
               <>
-                <span>·</span>
+                <span className="shrink-0">·</span>
                 <span className="truncate">{(trigger as any).game_label}</span>
               </>
             ) : null}
-            {lastPollAt && (
-              <>
-                <span>·</span>
-                <Clock className="h-3 w-3" />
-                <span>Last checked {timeAgo(lastPollAt)}</span>
-              </>
-            )}
           </p>
+          {lastPollAt && (
+            <p className="mt-0.5 ml-3.5 flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3 shrink-0" />
+              <span>Last checked {timeAgo(lastPollAt)}</span>
+            </p>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
