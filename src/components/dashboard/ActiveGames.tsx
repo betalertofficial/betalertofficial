@@ -247,16 +247,19 @@ export function ActiveGames({ onSelectGame, refreshSignal }: { onSelectGame: (se
   const byCommence = (a: GameVM, b: GameVM) =>
     new Date(a.event.commence_time).getTime() - new Date(b.event.commence_time).getTime();
 
-  const inLeague = (g: GameVM) => league === "all" || g.sportKey === league;
+  // "live" = the Active filter (in-progress games only, any league).
+  const inLeague = (g: GameVM) =>
+    league === "all" || (league === "live" ? g.bucket === "live" : g.sportKey === league);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: games.length };
+    const c: Record<string, number> = { all: games.length, live: games.filter((g) => g.bucket === "live").length };
     LEAGUES.forEach((l) => { c[l.sportKey] = games.filter((g) => g.sportKey === l.sportKey).length; });
     return c;
   }, [games]);
 
   const pills = [
     { key: "all", label: "All", count: counts.all },
+    { key: "live", label: "● Active", count: counts.live },
     ...LEAGUES.map((l) => ({ key: l.sportKey, label: l.label, count: counts[l.sportKey] || 0 })),
   ];
 
