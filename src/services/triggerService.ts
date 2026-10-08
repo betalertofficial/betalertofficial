@@ -1,4 +1,3 @@
-import { supabase } from "@/integrations/supabase/client";
 import type { Trigger, ProfileTrigger, BetType, TriggerFrequency } from "@/types/database";
 
 interface CreateTriggerParams {
@@ -26,134 +25,51 @@ interface CreateTriggerParams {
 }
 
 export const triggerService = {
-  async getUserTriggers(userId: string): Promise<ProfileTrigger[]> {
-    const { data, error } = await supabase
-      .from("profile_triggers")
-      .select(`
-        id,
-        profile_id,
-        trigger_id,
-        created_at,
-        trigger:triggers (
-          id,
-          sport,
-          team_or_player,
-          team_id,
-          bet_type,
-          odds_comparator,
-          odds_value,
-          frequency,
-          status,
-          bookmaker,
-          vendor_id,
-          time_period_type,
-          time_period_min,
-          line_value,
-          game_label,
-          event_id,
-          created_at,
-          updated_at,
-          trigger_matches (
-            id,
-            matched_value,
-            matched_at,
-            odds_snapshot:odds_snapshots (
-              bookmaker,
-              bet_type,
-              odds_value,
-              scores_data,
-              snapshot_at
-            )
-          )
-        )
-      `)
-      .eq("profile_id", userId)
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-    return data as unknown as ProfileTrigger[];
+  // All trigger reads/writes go through server routes scoped to the signed-in
+  // user (telegram_session cookie). The tables no longer accept the browser's
+  // public key. `userId` args are kept for call-site compatibility.
+  async getUserTriggers(_userId: string): Promise<ProfileTrigger[]> {
+    const r = await fetch("/api/triggers", { credentials: "include" });
+    if (!r.ok) throw new Error(`Failed to load triggers (HTTP ${r.status})`);
+    const j = await r.json();
+    return (j.data ?? []) as ProfileTrigger[];
   },
 
   async createTrigger(userId: string, params: CreateTriggerParams): Promise<ProfileTrigger> {
     if (!userId) {
       throw new Error("User ID is required");
     }
-
-    // Insert trigger
-    const { data: trigger, error: triggerError } = await supabase
-      .from("triggers")
-      .insert([{
-        sport: params.sport,
-        team_or_player: params.team_or_player,
-        team_id: params.team_id || null, // Convert undefined/empty string to null
-        bet_type: params.bet_type,
-        odds_comparator: params.odds_comparator,
-        odds_value: params.odds_value,
-        frequency: params.frequency,
-        status: params.status,
-        vendor_id: params.vendor_id,
-        bookmaker: params.bookmaker,
-        time_period_type: params.time_period_type || null,
-        time_period_min: params.time_period_min || null,
-        // Event-bound "once" triggers only (null otherwise → team-level).
-        event_id: params.event_id || null,
-        event_commence: params.event_commence || null,
-        line_value: params.line_value ?? null,
-        game_label: params.game_label || null,
-      } as any])
-      .select()
-      .single();
-
-    if (triggerError) {
-      console.error("Error creating trigger:", triggerError);
-      throw triggerError;
-    }
-
-    // Link trigger to user profile
-    const { data: profileTrigger, error: ptError } = await supabase
-      .from("profile_triggers")
-      .insert([
-        {
-          profile_id: userId,
-          trigger_id: trigger.id
-        }
-      ])
-      .select(`
-        id,
-        profile_id,
-        trigger_id,
-        created_at,
-        trigger:triggers (*)
-      `)
-      .single();
-
-    if (ptError) {
-      console.error("Error creating profile_trigger:", ptError);
-      throw ptError;
-    }
-
-    return profileTrigger as ProfileTrigger;
+    const r = await fetch("/api/triggers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(params),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j?.error || `Failed to create trigger (HTTP ${r.status})`);
+    return j.data as ProfileTrigger;
   },
 
   async updateTrigger(triggerId: string, updates: Partial<Trigger>): Promise<Trigger> {
-    const { data, error } = await supabase
-      .from("triggers")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", triggerId)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data as Trigger;
+    const r = await fetch(`/api/triggers/${encodeURIComponent(triggerId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ status: updates.status }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j?.error || `Failed to update trigger (HTTP ${r.status})`);
+    return j.data as Trigger;
   },
 
-  async deleteTrigger(userId: string, triggerId: string): Promise<void> {
-    const { error } = await supabase
-      .from("profile_triggers")
-      .delete()
-      .eq("profile_id", userId)
-      .eq("trigger_id", triggerId);
-
-    if (error) throw error;
-  }
+  async deleteTrigger(_userId: string, triggerId: string): Promise<void> {
+    const r = await fetch(`/api/triggers/${encodeURIComponent(triggerId)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j?.error || `Failed to delete trigger (HTTP ${r.status})`);
+    }
+  },
 };
