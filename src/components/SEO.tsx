@@ -10,7 +10,7 @@ interface SEOProps {
 // SEO elements that can be used in _document.tsx (returns JSX without Head wrapper)
 export function SEOElements({
   title = "Hammer",
-  description = "Set highly customized alert conditions and get a text the moment it hits.",
+  description = "Set highly customized alert conditions and get a Telegram message the moment it hits.",
   image = "/og-image.png",
   url,
 }: SEOProps) {
@@ -40,7 +40,7 @@ export function SEOElements({
 // Note: Flattened structure (no fragment) for better Next.js Head compatibility during hot reload
 export function SEO({
   title = "Hammer",
-  description = "Set highly customized alert conditions and get a text the moment it hits.",
+  description = "Set highly customized alert conditions and get a Telegram message the moment it hits.",
   image,
   url,
 }: SEOProps) {
