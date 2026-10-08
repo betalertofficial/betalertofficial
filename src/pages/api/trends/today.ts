@@ -103,6 +103,28 @@ function liveMarkets(events: any[], home: string, away: string, commence: string
   return out;
 }
 
+/**
+ * No conflicting picks on one card: if trends back BOTH teams' moneylines, or
+ * both the Over and the Under, keep only the better side — higher hit % first;
+ * on a tie, the side whose price has moved more in the bettor's favor
+ * (now − start, higher = better deal). Losing side's trends are dropped.
+ */
+function resolveConflicts(list: TrendInsight[]): TrendInsight[] {
+  const move = (i: TrendInsight) =>
+    i.price != null && i.startPrice != null && i.priceLine == null ? i.price - i.startPrice : 0;
+  const better = (a: TrendInsight, b: TrendInsight) =>
+    a.pct !== b.pct ? a.pct > b.pct : move(a) !== move(b) ? move(a) > move(b) : a.strength >= b.strength;
+  const keyOf = (i: TrendInsight) => (i.kind === "moneyline" ? i.team ?? "" : i.side ?? "");
+
+  const winner: Record<string, string> = {};
+  for (const kind of ["moneyline", "totals"] as const) {
+    let best: TrendInsight | null = null;
+    for (const i of list) if (i.kind === kind && (!best || better(i, best))) best = i;
+    if (best) winner[kind] = keyOf(best);
+  }
+  return list.filter((i) => keyOf(i) === winner[i.kind]);
+}
+
 async function getJson(url: string): Promise<any | null> {
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
@@ -218,7 +240,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         return games.map((g) => {
           const tr = computeMatchupTrends(lg.sportKey, g.homeTeam, g.awayTeam, rows, g.totalLine);
-          const insights = buildInsights(tr, g.homeTeam, g.awayTeam).map((i) => ({
+          const candidates = buildInsights(tr, g.homeTeam, g.awayTeam, 8).map((i) => ({
             ...i,
             startPrice:
               i.kind === "totals"
@@ -242,6 +264,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 ? g.awayMl
                 : null,
           }));
+          const insights = resolveConflicts(candidates).slice(0, 3);
           return { ...g, insights, topStrength: insights[0]?.strength ?? 0 } as TrendGame;
         });
       })

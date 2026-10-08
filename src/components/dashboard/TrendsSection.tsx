@@ -136,13 +136,6 @@ export function TrendsSection({ onSelect, refreshSignal }: { onSelect: (sel: Tre
                 </button>
 
                 <div className="mt-3 space-y-1.5 border-t border-gray-100 pt-2">
-                  {(() => {
-                    const mlTeams = new Set(g.insights.filter((x) => x.kind === "moneyline" && x.team).map((x) => x.team));
-                    const sides = new Set(g.insights.filter((x) => x.kind === "totals").map((x) => x.side));
-                    return mlTeams.size > 1 || sides.size > 1 ? (
-                      <p className="px-2 text-[11px] text-amber-600">Mixed signals — trends point both ways in this game.</p>
-                    ) : null;
-                  })()}
                   {g.insights.map((i, idx) => (
                     <button
                       key={idx}
