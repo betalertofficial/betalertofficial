@@ -206,9 +206,13 @@ export default function Dashboard() {
               <ComebacksOn onSelect={openTrigger} refreshSignal={dataRefresh} />
             </div>
 
-            {/* Right column: My Triggers drawer */}
-            <aside className="lg:sticky lg:top-20">
-              <MyTriggers refreshSignal={triggerRefresh} />
+            {/* Right column: My Triggers drawer. A full-height divider separates it
+                from the dashboard (top border when stacked on mobile); the inner
+                wrapper stays sticky while the divider runs the column's length. */}
+            <aside className="self-stretch border-t border-gray-200 pt-8 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
+              <div className="lg:sticky lg:top-20">
+                <MyTriggers refreshSignal={triggerRefresh} />
+              </div>
             </aside>
           </div>
         </div>
