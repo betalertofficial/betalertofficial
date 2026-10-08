@@ -36,6 +36,9 @@ export default function Dashboard() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [triggerOpen, setTriggerOpen] = useState(false);
   const [prefill, setPrefill] = useState<Prefill>({});
+  // Main view toggle (Team / Games / Trends). Views stay mounted (just hidden)
+  // so switching is instant and doesn't refetch.
+  const [view, setView] = useState<"team" | "games" | "trends">("games");
   const [triggerRefresh, setTriggerRefresh] = useState(0);
   // Bumping this re-fetches the main dashboard data sections (Pick a Team,
   // Active & Upcoming Games, Comeback's On).
@@ -200,9 +203,44 @@ export default function Dashboard() {
                 </Button>
               </div>
 
-              <PickATeam onSelectTeam={openTrigger} refreshSignal={dataRefresh} />
-              <ActiveGames onSelectGame={openTrigger} refreshSignal={dataRefresh} />
-              <TrendsSection onSelect={openTrigger} refreshSignal={dataRefresh} />
+              <div role="tablist" aria-label="Dashboard view" className="inline-flex w-full max-w-md rounded-xl bg-gray-100 p-1">
+                {([
+                  ["team", "Team"],
+                  ["games", "Games"],
+                  ["trends", "Trends"],
+                ] as const).map(([key, label], idx, arr) => {
+                  const active = view === key;
+                  const nextActive = idx < arr.length - 1 && view === arr[idx + 1][0];
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setView(key)}
+                      className={`relative flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
+                        active ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                      } ${
+                        idx < arr.length - 1 && !active && !nextActive
+                          ? "after:absolute after:right-0 after:top-1/2 after:h-5 after:w-px after:-translate-y-1/2 after:bg-gray-300"
+                          : ""
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className={view === "team" ? "" : "hidden"}>
+                <PickATeam onSelectTeam={openTrigger} refreshSignal={dataRefresh} />
+              </div>
+              <div className={view === "games" ? "" : "hidden"}>
+                <ActiveGames onSelectGame={openTrigger} refreshSignal={dataRefresh} />
+              </div>
+              <div className={view === "trends" ? "" : "hidden"}>
+                <TrendsSection onSelect={openTrigger} refreshSignal={dataRefresh} />
+              </div>
               <ComebacksOn onSelect={openTrigger} refreshSignal={dataRefresh} />
             </div>
 
