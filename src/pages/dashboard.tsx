@@ -160,7 +160,7 @@ export default function Dashboard() {
       <div className="min-h-screen bg-gray-50">
         {/* Top nav */}
         <header className="border-b border-gray-200 bg-white sticky top-0 z-30">
-          <div className="container mx-auto px-4 h-14 flex items-center justify-between">
+          <div className="container mx-auto px-4 lg:max-w-none lg:pr-8 lg:pl-[calc((100vw-1024px)/2+1rem)] xl:pl-[calc((100vw-1280px)/2+1rem)] 2xl:pl-[calc((100vw-1536px)/2+1rem)] h-14 flex items-center justify-between">
             <span className="font-bold text-lg tracking-tight">Hammer</span>
             <Button
               variant="outline"
@@ -178,7 +178,7 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <div className="container mx-auto px-4 py-8">
+        <div className="container mx-auto px-4 lg:max-w-none lg:pr-8 lg:pl-[calc((100vw-1024px)/2+1rem)] xl:pl-[calc((100vw-1280px)/2+1rem)] 2xl:pl-[calc((100vw-1536px)/2+1rem)] py-8">
           <div className="grid lg:grid-cols-[1fr_360px] gap-8 items-start">
             {/* Main column: live data sections */}
             <div className="space-y-10 min-w-0">
