@@ -3,7 +3,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { LogOut, Check, TrendingUp } from "lucide-react";
-import { profileService } from "@/services/profileService";
 import { cn } from "@/lib/utils";
 
 const SPORTSBOOK_OPTIONS = [
@@ -26,7 +25,14 @@ export function Settings() {
     if (!profile?.id || value === currentBook || savingBook) return;
     setSavingBook(value);
     try {
-      await profileService.updateProfile(profile.id, { preferred_sportsbook: value } as any);
+      // Server-side update (the profiles table no longer accepts browser writes).
+      const r = await fetch("/api/profile/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ preferred_sportsbook: value }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       await refreshProfile();
     } catch (e) {
       console.error("[Settings] Failed to update sportsbook preference", e);
