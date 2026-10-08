@@ -10,7 +10,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white overflow-x-hidden">
       <SEO
         title="Hammer - Sports Betting Alerts"
-        description="Set highly specific triggers and get an SMS the moment it hits."
+        description="Set highly specific triggers and get a Telegram message the moment it hits."
       />
 
       {/* Hero Section */}
@@ -72,7 +72,7 @@ export default function LandingPage() {
               </div>
             </Card>
 
-            {/* SMS Notification Mockup with Pulse Animation */}
+            {/* Alert Notification Mockup with Pulse Animation */}
             <div className="absolute bottom-0 right-0 md:-bottom-8 md:-right-8 bg-gray-900 text-white rounded-2xl p-3 md:p-4 shadow-2xl w-[240px] md:max-w-xs animate-pulse-float z-10">
               <div className="flex items-start gap-2 md:gap-3">
                 <div className="bg-green-500 rounded-lg p-1.5 md:p-2 flex-shrink-0">
@@ -94,7 +94,7 @@ export default function LandingPage() {
               We watch the games when you can't.
             </h1>
             <p className="text-base md:text-lg text-gray-600 mb-6 md:mb-8 leading-relaxed">
-              Set highly specific triggers and get an SMS the moment it hits.
+              Set highly specific triggers and get a Telegram message the moment it hits.
             </p>
             {/* Single source-of-truth Telegram widget. The bottom CTA scrolls here
                 rather than mounting a second widget (two same-bot widgets don't
@@ -116,7 +116,7 @@ export default function LandingPage() {
           <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-6" style={{ textDecoration: "none" }}>
             Always finding yourself hammering the comeback when a favored team gives up an early lead?
           </h2>
-          <p className="text-base md:text-lg text-gray-600">Tell us what to look for, and we will monitor and shoot you a text on any game or team you want so you don't have to obsessively check your phone.
+          <p className="text-base md:text-lg text-gray-600">Tell us what to look for, and we will monitor and send you a Telegram message on any game or team you want so you don't have to obsessively check your phone.
           </p>
         </div>
       </section>
@@ -144,7 +144,7 @@ export default function LandingPage() {
             </div>
             <Card className="p-6 md:p-8 h-full bg-gray-50 border-gray-200">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Live Monitoring</h3>
-              <p className="text-gray-600">We monitor the game for you and shoot you a text when it hits.
+              <p className="text-gray-600">We monitor the game for you and send you a Telegram message when it hits.
               </p>
             </Card>
           </div>

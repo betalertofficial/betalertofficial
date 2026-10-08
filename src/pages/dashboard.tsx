@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "@/contexts/AuthContext";
 import { MyTriggers } from "@/components/dashboard/MyTriggers";
@@ -48,15 +48,18 @@ export default function Dashboard() {
     setTimeout(() => setDataRefreshing(false), 900);
   };
 
-  // Handle Telegram auth callback from URL params
+  // Handle the Telegram login redirect (?id=…&hash=…). Runs once per page
+  // load: a ref guard stops the effect from re-POSTing the same login when
+  // state changes, and the URL params are cleared before the request.
+  const telegramAuthStarted = useRef(false);
   useEffect(() => {
-    const handleTelegramAuth = async () => {
-      const { id, first_name, last_name, username, photo_url, auth_date, hash } = router.query;
+    if (!router.isReady || telegramAuthStarted.current) return;
+    const { id, first_name, last_name, username, photo_url, auth_date, hash } = router.query;
+    if (!id || !hash) return;
+    telegramAuthStarted.current = true;
+    setIsTelegramAuthenticating(true);
 
-      if (!id || !hash || isTelegramAuthenticating) return;
-
-      setIsTelegramAuthenticating(true);
-
+    (async () => {
       try {
         const response = await fetch("/api/auth/telegram-callback", {
           method: "POST",
@@ -73,9 +76,7 @@ export default function Dashboard() {
         });
 
         if (!response.ok) {
-          // Surface the server's real failure reason so a recurrence is
-          // diagnosable from the client (and captured in the console) instead
-          // of a generic message. The callback returns a short `reason` code.
+          // Surface the server's real failure reason (short `reason` code).
           let reason = "";
           try {
             const body = await response.json();
@@ -87,15 +88,14 @@ export default function Dashboard() {
           throw new Error(reason || `HTTP ${response.status}`);
         }
 
-        const result = await response.json();
-        console.log("[Dashboard] Telegram auth successful:", result);
-
-        toast({
-          title: "Welcome! 🎯",
-          description: `Logged in via Telegram as ${first_name}`,
-        });
-
-        window.location.href = "/dashboard";
+        // Full reload so auth state starts fresh from the new session cookie;
+        // the welcome toast is shown after the reload (see below).
+        try {
+          sessionStorage.setItem("hammer_welcome", (first_name as string) || "there");
+        } catch {
+          /* storage unavailable */
+        }
+        window.location.replace("/dashboard");
       } catch (error) {
         console.error("Telegram auth error:", error);
         const detail = error instanceof Error && error.message ? ` (${error.message})` : "";
@@ -105,13 +105,25 @@ export default function Dashboard() {
           variant: "destructive",
         });
         router.replace("/dashboard", undefined, { shallow: true });
-      } finally {
         setIsTelegramAuthenticating(false);
       }
-    };
+    })();
+  }, [router.isReady, router.query, router, toast]);
 
-    handleTelegramAuth();
-  }, [router.query, isTelegramAuthenticating, router, toast]);
+  // Welcome toast after a fresh Telegram login (set right before the reload).
+  useEffect(() => {
+    if (loading || !profile) return;
+    let name: string | null = null;
+    try {
+      name = sessionStorage.getItem("hammer_welcome");
+      if (name) sessionStorage.removeItem("hammer_welcome");
+    } catch {
+      /* storage unavailable */
+    }
+    if (name) {
+      toast({ title: "Welcome! 🎯", description: `Logged in via Telegram as ${name}` });
+    }
+  }, [loading, profile, toast]);
 
   const openTrigger = (p: Prefill) => {
     setPrefill(p);
