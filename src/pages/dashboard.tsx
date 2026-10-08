@@ -130,13 +130,23 @@ export default function Dashboard() {
     setTriggerOpen(true);
   };
 
-  if (loading || isTelegramAuthenticating) {
+  // Login required: once auth has settled, anyone without a profile goes to
+  // the homepage (the server middleware already bounces visitors with no
+  // cookie; this covers expired or invalid sessions). The Telegram login
+  // redirect (?id=…&hash=…) is excluded — it's mid-sign-in.
+  const isTelegramReturn = Boolean(router.query.id && router.query.hash);
+  const mustRedirect = router.isReady && !loading && !isTelegramAuthenticating && !profile && !isTelegramReturn;
+  useEffect(() => {
+    if (mustRedirect) router.replace("/");
+  }, [mustRedirect, router]);
+
+  if (loading || isTelegramAuthenticating || !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto"></div>
           <p className="text-muted-foreground">
-            {isTelegramAuthenticating ? "Authenticating with Telegram..." : "Loading..."}
+            {isTelegramAuthenticating ? "Authenticating with Telegram..." : mustRedirect ? "Redirecting to sign in…" : "Loading..."}
           </p>
         </div>
       </div>
