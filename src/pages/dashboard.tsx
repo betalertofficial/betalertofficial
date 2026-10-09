@@ -239,9 +239,11 @@ export default function Dashboard() {
                 <ActiveGames onSelectGame={openTrigger} refreshSignal={dataRefresh} />
               </div>
               <div className={view === "trends" ? "" : "hidden"}>
-                <TrendsSection onSelect={openTrigger} refreshSignal={dataRefresh} />
+                <div className="space-y-10">
+                  <TrendsSection onSelect={openTrigger} refreshSignal={dataRefresh} />
+                  <ComebacksOn onSelect={openTrigger} refreshSignal={dataRefresh} />
+                </div>
               </div>
-              <ComebacksOn onSelect={openTrigger} refreshSignal={dataRefresh} />
             </div>
 
             {/* Right column: My Triggers drawer. A full-height divider separates it
