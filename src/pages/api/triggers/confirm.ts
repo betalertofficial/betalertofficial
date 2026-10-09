@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
 import { parse } from "cookie";
 import { verifyTelegramJWT } from "@/lib/jwt";
-import { sendTelegramMessage } from "@/services/telegramService";
+import { sendTelegramMessage, ALERT_DISCLAIMER_HTML } from "@/services/telegramService";
 import { leagueLabel } from "@/lib/leagues";
 
 /**
@@ -84,6 +84,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `Frequency: ${t.frequency === "once" ? "Just this game" : "Every game"}`,
       "",
       "I'll message you here the moment it hits. 🔨",
+      "",
+      ALERT_DISCLAIMER_HTML,
     ].filter((l) => l !== null);
 
     const result = await sendTelegramMessage({ chatId, text: lines.join("\n"), parseMode: "HTML" });
