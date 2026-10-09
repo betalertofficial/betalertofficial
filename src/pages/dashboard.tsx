@@ -185,7 +185,7 @@ export default function Dashboard() {
         <div className="container mx-auto px-4 lg:max-w-none lg:pr-8 lg:pl-[calc((100vw_-_1024px)_/_2_+_1rem)] xl:pl-[calc((100vw_-_1280px)_/_2_+_1rem)] 2xl:pl-[calc((100vw_-_1536px)_/_2_+_1rem)] py-8">
           <div className="grid lg:grid-cols-[1fr_360px] gap-8 items-start">
             {/* Main column: live data sections */}
-            <div className="space-y-10 min-w-0">
+            <div className="space-y-5 min-w-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
