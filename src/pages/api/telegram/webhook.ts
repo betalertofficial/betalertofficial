@@ -96,7 +96,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           } as any);
       }
 
-      const welcomeMessage = `🎯 *Welcome to Hammer Notifs!*\n\nI'll send you instant notifications when your betting triggers hit.\n\n*How it works:*\n• Set up triggers in the dashboard\n• Get alerted when odds match your criteria\n• Never miss a betting opportunity\n\nTo access your dashboard, tap the menu button below.`;
+      const welcomeMessage = `🎯 *Welcome to Hammer Notifs!*\n\nI'll send you instant notifications when your betting triggers hit.\n\n*How it works:*\n• Set up triggers in the dashboard\n• Get alerted when odds match your criteria\n• Never miss a line you care about\n\nTo access your dashboard, tap the menu button below.\n\n_Hammer is an alert tool, not a sportsbook. We never take or place bets and aren't responsible for any bet you make. 21+ only. Gambling problem? Call 1-800-GAMBLER._`;
       await sendTelegramMessage(chatId, welcomeMessage);
       return res.status(200).json({ ok: true });
     }

@@ -4,8 +4,28 @@ import { Bell, Settings, Send } from "lucide-react";
 import Link from "next/link";
 import { SEO } from "@/components/SEO";
 import { TelegramLoginButton } from "@/components/auth/TelegramLoginButton";
+import { LegalFooter } from "@/components/legal/LegalFooter";
+import { useEffect, useState } from "react";
+
+const AGE_KEY = "hammer_age_ok";
 
 export default function LandingPage() {
+  // 21+ / terms acknowledgement gates the Telegram widget. The widget is an
+  // iframe we can't intercept, so it's kept non-interactive until checked.
+  const [ageOk, setAgeOk] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(AGE_KEY) === "1") setAgeOk(true);
+    } catch {}
+  }, []);
+  const toggleAge = (v: boolean) => {
+    setAgeOk(v);
+    try {
+      if (v) localStorage.setItem(AGE_KEY, "1");
+      else localStorage.removeItem(AGE_KEY);
+    } catch {}
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white overflow-x-hidden">
       <SEO
@@ -100,11 +120,31 @@ export default function LandingPage() {
                 rather than mounting a second widget (two same-bot widgets don't
                 reliably coexist on one page). scroll-mt keeps it clear of the top. */}
             <div id="telegram-login" className="space-y-3 scroll-mt-24">
-              <TelegramLoginButton
-                authUrl="https://www.hammer-app.com/dashboard"
-                usePic={false}
-                widgetId="hero"
-              />
+              <label className="flex max-w-md cursor-pointer items-start gap-2 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={ageOk}
+                  onChange={(e) => toggleAge(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-green-600"
+                />
+                <span>
+                  I&apos;m 21 or older and agree to the{" "}
+                  <Link href="/terms" className="underline hover:text-gray-900">Terms &amp; Disclaimer</Link>. I understand
+                  Hammer only sends alerts and doesn&apos;t take or place bets.
+                </span>
+              </label>
+              <div
+                className={ageOk ? "" : "pointer-events-none select-none opacity-40"}
+                aria-disabled={!ageOk}
+                title={ageOk ? undefined : "Confirm you're 21+ to continue"}
+              >
+                <TelegramLoginButton
+                  authUrl="https://www.hammer-app.com/dashboard"
+                  usePic={false}
+                  widgetId="hero"
+                />
+              </div>
+              {!ageOk ? <p className="text-xs text-gray-400">Check the box above to log in with Telegram.</p> : null}
             </div>
           </div>
         </div>
@@ -235,7 +275,7 @@ export default function LandingPage() {
       </section>
 
       {/* Final CTA Section */}
-      <section className="container mx-auto px-4 py-20 mb-20">
+      <section className="container mx-auto px-4 py-20 mb-8">
         <div className="bg-gradient-to-br from-gray-100 to-gray-50 rounded-3xl p-8 md:p-16 text-center max-w-5xl mx-auto">
           <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 md:mb-8">Just set it and forget it.
           </h2>
@@ -246,6 +286,7 @@ export default function LandingPage() {
           </Link>
         </div>
       </section>
+      <LegalFooter />
     </div>
   );
 }

@@ -104,6 +104,12 @@ function formatEspnLiveLine(espnData?: {
 // Format an alert message for Telegram.
 // NOTE: the sportsbook link is delivered as an inline keyboard BUTTON (see
 // buildBetButton + sendTelegramMessage.replyMarkup), not inline text.
+/** Footer on every alert: Hammer is info-only and takes no bets. Legacy-Markdown safe. */
+export const ALERT_DISCLAIMER_MD =
+  "_Info only. Hammer doesn't take or place bets and isn't responsible for any bet you make. 21+. Gambling problem? Call 1-800-GAMBLER._";
+export const ALERT_DISCLAIMER_HTML =
+  "<i>Info only. Hammer doesn't take or place bets and isn't responsible for any bet you make. 21+. Gambling problem? Call 1-800-GAMBLER.</i>";
+
 export function formatTelegramAlert(alert: {
   game: string;
   market: string;
@@ -124,7 +130,7 @@ export function formatTelegramAlert(alert: {
   };
 }): string {
   const direction = alert.comparator ? oddsDirection(alert.comparator) : "";
-  let message = `🚨 *Betting Alert!*
+  let message = `🚨 *Odds Alert!*
 
 *Game:* ${alert.game}
 *Market:* ${alert.market}
@@ -141,7 +147,8 @@ export function formatTelegramAlert(alert: {
     message += `\n\n${liveLine}`;
   }
 
-  message += '\n\nTime to place your bet! 🎯';
+  message += '\n\nYour trigger hit. 🎯';
+  message += `\n\n${ALERT_DISCLAIMER_MD}`;
 
   return message;
 }

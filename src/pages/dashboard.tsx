@@ -1,3 +1,4 @@
+import { LegalFooter } from "@/components/legal/LegalFooter";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "@/contexts/AuthContext";
@@ -256,6 +257,7 @@ export default function Dashboard() {
             </aside>
           </div>
         </div>
+        <LegalFooter className="mt-8" />
       </div>
 
       {/* Settings sheet */}
