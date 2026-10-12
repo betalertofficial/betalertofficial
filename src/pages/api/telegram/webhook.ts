@@ -20,7 +20,7 @@ function getAdminClient() {
   );
 }
 
-async function sendTelegramMessage(chatId: number, text: string): Promise<void> {
+async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: unknown): Promise<void> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     console.error("TELEGRAM_BOT_TOKEN not set");
@@ -30,7 +30,7 @@ async function sendTelegramMessage(chatId: number, text: string): Promise<void> 
     const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown", ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
     });
     if (!response.ok) {
       console.error("Telegram API error:", response.status);
@@ -101,9 +101,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ ok: true });
     }
 
+    if (text === "/support" || text?.startsWith("/support ") || text?.startsWith("/support@")) {
+      await sendTelegramMessage(
+        chatId,
+        "💚 *Support Hammer*\n\nHammer is independent, and support covers live odds data and hosting. Pay what you want, one-time or monthly.\n\nMonthly supporters get up to 25 active triggers and a supporter badge.\n\n_Supporting Hammer does not purchase bets or picks. Hammer is an alert tool, not a sportsbook. 21+._",
+        { inline_keyboard: [[{ text: "💚 Support Hammer", url: "https://www.hammer-app.com/dashboard?support=1" }]] }
+      );
+      return res.status(200).json({ ok: true });
+    }
+
     await sendTelegramMessage(
       chatId,
-      "Thanks for your message! Use /start to get started with Hammer Notifs."
+      "Thanks for your message! Use /start to get started with Hammer Notifs, or /support to support Hammer."
     );
     return res.status(200).json({ ok: true });
   } catch (error) {
