@@ -9,10 +9,11 @@ import { ActiveGames } from "@/components/dashboard/ActiveGames";
 import { ComebacksOn } from "@/components/dashboard/ComebacksOn";
 import { TrendsSection } from "@/components/dashboard/TrendsSection";
 import { CreateTrigger } from "@/components/dashboard/CreateTrigger";
+import { SupportDialog } from "@/components/dashboard/SupportDialog";
 import type { GameCardData } from "@/components/dashboard/GameCard";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { User, RefreshCw, Loader2 } from "lucide-react";
+import { User, RefreshCw, Loader2, Heart } from "lucide-react";
 import { SEO } from "@/components/SEO";
 import { useToast } from "@/hooks/use-toast";
 
@@ -31,10 +32,11 @@ interface Prefill {
 
 export default function Dashboard() {
   const router = useRouter();
-  const { profile, loading } = useAuth();
+  const { profile, loading, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [isTelegramAuthenticating, setIsTelegramAuthenticating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const [triggerOpen, setTriggerOpen] = useState(false);
   const [prefill, setPrefill] = useState<Prefill>({});
   // Main view toggle (Team / Games / Trends). Views stay mounted (just hidden)
@@ -46,11 +48,33 @@ export default function Dashboard() {
   const [dataRefresh, setDataRefresh] = useState(0);
   const [dataRefreshing, setDataRefreshing] = useState(false);
 
+  const p: any = profile;
+  const isSupporter =
+    p?.subscription_tier === "supporter" || (p?.supporter_until && new Date(p.supporter_until).getTime() > Date.now());
+
   const refreshDashboardData = () => {
     setDataRefresh((n) => n + 1);
     setDataRefreshing(true);
     setTimeout(() => setDataRefreshing(false), 900);
   };
+
+  // ?support=1 opens the support dialog (e.g. from the bot's /support);
+  // ?supported=1 is where Whop sends buyers back after checkout.
+  useEffect(() => {
+    if (!router.isReady) return;
+    const { support, supported } = router.query;
+    if (!support && !supported) return;
+    if (support) setSupportOpen(true);
+    if (supported) {
+      toast({ title: "Thank you for supporting Hammer! 💚", description: "Your perks will appear in a moment. Check Telegram for confirmation." });
+      setTimeout(() => refreshProfile(), 4000);
+    }
+    const q = { ...router.query };
+    delete q.support;
+    delete q.supported;
+    router.replace({ pathname: router.pathname, query: q }, undefined, { shallow: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady]);
 
   // Handle the Telegram login redirect (?id=…&hash=…). Runs once per page
   // load: a ref guard stops the effect from re-POSTing the same login when
@@ -165,7 +189,24 @@ export default function Dashboard() {
         {/* Top nav */}
         <header className="border-b border-gray-200 bg-white sticky top-0 z-30">
           <div className="container mx-auto px-4 lg:max-w-none lg:pr-8 lg:pl-[calc((100vw_-_1024px)_/_2_+_1rem)] xl:pl-[calc((100vw_-_1280px)_/_2_+_1rem)] 2xl:pl-[calc((100vw_-_1536px)_/_2_+_1rem)] h-14 flex items-center justify-between">
-            <span className="font-bold text-lg tracking-tight">Hammer</span>
+            <span className="flex items-center gap-2">
+              <span className="font-bold text-lg tracking-tight">Hammer</span>
+              {isSupporter ? (
+                <span className="rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700" title="Thanks for supporting Hammer!">
+                  💚 Supporter
+                </span>
+              ) : null}
+            </span>
+            <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 rounded-full gap-1.5"
+              onClick={() => setSupportOpen(true)}
+            >
+              <Heart className="h-4 w-4 text-green-600" />
+              <span>{isSupporter ? "Supporting" : "Support"}</span>
+            </Button>
             <Button
               variant="outline"
               size="icon"
@@ -179,6 +220,7 @@ export default function Dashboard() {
                 <User className="h-5 w-5" />
               )}
             </Button>
+            </div>
           </div>
         </header>
 
@@ -271,6 +313,8 @@ export default function Dashboard() {
           <Settings />
         </SheetContent>
       </Sheet>
+
+      <SupportDialog open={supportOpen} onOpenChange={setSupportOpen} />
 
       {/* Create Trigger modal — opened pre-filled when a team/game/comeback is clicked */}
       <CreateTrigger
