@@ -23,6 +23,24 @@ export const KALSHI_SERIES: Record<string, string> = {
   baseball_mlb: "KXMLBGAME",
 };
 
+/**
+ * URL slug per series = the series title, lower-kebab-cased (from Kalshi's
+ * series API). Game trade page: /markets/{series}/{slug}/{event_ticker}, e.g.
+ * kalshi.com/markets/kxnflgame/nfl-game/kxnflgame-26oct26dalphi
+ */
+const KALSHI_SLUG: Record<string, string> = {
+  KXNFLGAME: "nfl-game",
+  KXNBAGAME: "nba-game",
+  KXNHLGAME: "nhl-game",
+  KXMLBGAME: "professional-baseball-game",
+};
+
+export function kalshiGameUrl(series: string, eventTicker: string): string {
+  const slug = KALSHI_SLUG[series];
+  const base = `https://kalshi.com/markets/${series.toLowerCase()}`;
+  return slug ? `${base}/${slug}/${eventTicker.toLowerCase()}` : base;
+}
+
 export const KALSHI_BOOKMAKER = "Kalshi";
 
 /** Skip thin books: wide bid/ask spreads make the "price" meaningless. */
@@ -166,6 +184,7 @@ export async function fetchKalshiMoneylines(events: OddsApiEventRef[]): Promise<
             kalshi_event: side.event_ticker,
             kalshi_ask: ask,
             kalshi_bid: bid,
+            bet_link: kalshiGameUrl(series, side.event_ticker),
             event_link: `https://kalshi.com/markets/${series.toLowerCase()}`,
           },
         });
