@@ -20,7 +20,7 @@ export interface TelegramMessage {
  * universal links open the sportsbook app.
  */
 export function buildBetButton(url: string, bookmaker: string): TelegramInlineKeyboard {
-  const label = bookmaker ? `🎯 Bet on ${bookmaker}` : "🎯 Place bet";
+  const label = !bookmaker ? "🎯 Place bet" : bookmaker.toLowerCase() === "kalshi" ? "📈 Trade on Kalshi" : `🎯 Bet on ${bookmaker}`;
   return { inline_keyboard: [[{ text: label, url }]] };
 }
 
