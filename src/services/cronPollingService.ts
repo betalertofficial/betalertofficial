@@ -25,6 +25,7 @@ import { findMatches, deduplicateMatches } from "./matchingEngine";
 import { espnService } from "./espnService";
 import { alertService } from "./alertService";
 import { teamNamesMatch } from "@/lib/teamMatch";
+import { fetchKalshiMoneylines, KALSHI_SERIES, type OddsApiEventRef } from "./kalshiService";
 
 type Trigger = Database["public"]["Tables"]["triggers"]["Row"];
 
@@ -456,6 +457,32 @@ export async function runCronPoll(
     // Step 5: Fetch paid odds ONLY for sports with a live triggered game, ONLY
     // for the markets those triggers need.
     const allOdds = await fetchLiveOddsForSports(oddsApiKey, paidSports, marketsBySport);
+
+    // Step 5b: Kalshi (free) — moneyline prices for the same live games, pinned
+    // to the Odds API event ids so event-bound triggers and alerts line up.
+    const wantsKalshi = triggers.some(
+      (t) => KALSHI_SERIES[t.sport as string] && betTypeToMarketKey(t.bet_type) === "h2h" && paidSports.includes(t.sport as string)
+    );
+    if (wantsKalshi) {
+      const refs = new Map<string, OddsApiEventRef>();
+      for (const o of allOdds) {
+        if (!o.event_data || refs.has(o.event_id)) continue;
+        refs.set(o.event_id, {
+          event_id: o.event_id,
+          sport: o.sport,
+          home_team: o.event_data.home_team,
+          away_team: o.event_data.away_team,
+          commence_time: o.event_data.commence_time,
+          base: { sport_title: o.event_data.sport_title, scores: o.event_data.scores ?? null },
+        });
+      }
+      try {
+        const kalshiRows = await fetchKalshiMoneylines([...refs.values()]);
+        allOdds.push(...kalshiRows);
+      } catch (e) {
+        console.error("[CronPoll] Kalshi fetch failed:", e);
+      }
+    }
 
     // Step 6: Map each odds event → ESPN period + scores by team name. The ESPN
     // games came from getLiveGames above (free), so no extra ESPN calls here.

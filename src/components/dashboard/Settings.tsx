@@ -8,7 +8,9 @@ import { cn } from "@/lib/utils";
 const SPORTSBOOK_OPTIONS = [
   { value: "draftkings", label: "DraftKings" },
   { value: "fanduel", label: "FanDuel" },
-  { value: "best", label: "Whichever has better odds" },
+  { value: "best", label: "Whichever sportsbook has better odds" },
+  { value: "kalshi", label: "Kalshi (prediction exchange)" },
+  { value: "any", label: "Best of sportsbooks + Kalshi" },
 ];
 
 export function Settings() {
@@ -52,7 +54,7 @@ export function Settings() {
             </div>
             <div>
               <CardTitle>Sportsbook</CardTitle>
-              <CardDescription>Which book we check your triggers against</CardDescription>
+              <CardDescription>Where we check your moneyline triggers. Kalshi prices include its estimated fee.</CardDescription>
             </div>
           </div>
         </CardHeader>

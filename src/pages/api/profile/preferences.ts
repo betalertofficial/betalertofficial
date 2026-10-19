@@ -11,7 +11,7 @@ import { verifyTelegramJWT } from "@/lib/jwt";
  * profiles table no longer accepts writes from the browser's public key.
  * Only whitelisted fields can be changed here.
  */
-const SPORTSBOOKS = new Set(["draftkings", "fanduel", "best"]);
+const SPORTSBOOKS = new Set(["draftkings", "fanduel", "best", "kalshi", "any"]);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
