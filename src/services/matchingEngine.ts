@@ -204,15 +204,17 @@ export function findMatches(
       // 4b. Apply the user's preferred sportsbook (profile-level). 'best' = no filter;
       //     deduplicateMatches keeps the most favorable odds across books.
       //     'best' = best of the sportsbooks (DraftKings/FanDuel); 'any' = best of
-      //     sportsbooks AND Kalshi; a single source name = only that source.
+      //     sportsbooks AND exchanges (Kalshi, Polymarket); a single source name =
+      //     only that source.
       const preferredBook = (trigger.preferredSportsbook || "best").toLowerCase();
       const oddsBook = odds.bookmaker.toLowerCase();
-      if (preferredBook === "draftkings" || preferredBook === "fanduel" || preferredBook === "kalshi") {
+      const isExchange = oddsBook === "kalshi" || oddsBook === "polymarket";
+      if (["draftkings", "fanduel", "kalshi", "polymarket"].includes(preferredBook)) {
         if (oddsBook !== preferredBook) {
           bookmakerMismatches++;
           continue;
         }
-      } else if (preferredBook !== "any" && oddsBook === "kalshi") {
+      } else if (preferredBook !== "any" && isExchange) {
         bookmakerMismatches++;
         continue;
       }

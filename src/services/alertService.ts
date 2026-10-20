@@ -183,6 +183,7 @@ export const alertService = {
           draftkings: "https://sportsbook.draftkings.com/",
           fanduel: "https://sportsbook.fanduel.com/",
           kalshi: "https://kalshi.com/",
+          polymarket: "https://polymarket.com/sports",
         };
         const eventData = snapshot.event_data || {};
         const bookKey = (snapshot.bookmaker || "").toLowerCase();
@@ -210,7 +211,9 @@ export const alertService = {
           detail:
             bookKey === "kalshi" && typeof eventData.kalshi_ask === "number"
               ? `Kalshi (exchange) · ${Math.round(eventData.kalshi_ask * 100)}¢ + est. fee`
-              : snapshot.bookmaker,
+              : bookKey === "polymarket" && typeof eventData.poly_ask === "number"
+                ? `Polymarket · ${Math.round(eventData.poly_ask * 100)}¢ + est. fee`
+                : snapshot.bookmaker,
           currentOdds: snapshot.odds_value,
           targetOdds: trigger.odds_value,
           comparator: trigger.odds_comparator,

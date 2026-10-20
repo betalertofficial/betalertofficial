@@ -10,7 +10,8 @@ const SPORTSBOOK_OPTIONS = [
   { value: "fanduel", label: "FanDuel" },
   { value: "best", label: "Whichever sportsbook has better odds" },
   { value: "kalshi", label: "Kalshi (prediction exchange)" },
-  { value: "any", label: "Best of sportsbooks + Kalshi" },
+  { value: "polymarket", label: "Polymarket (prediction market)" },
+  { value: "any", label: "Best of everything (books + Kalshi + Polymarket)" },
 ];
 
 export function Settings() {
@@ -54,7 +55,7 @@ export function Settings() {
             </div>
             <div>
               <CardTitle>Sportsbook</CardTitle>
-              <CardDescription>Where we check your moneyline triggers. Kalshi prices include its estimated fee.</CardDescription>
+              <CardDescription>Where we check your moneyline triggers. Kalshi and Polymarket prices include their estimated fees.</CardDescription>
             </div>
           </div>
         </CardHeader>

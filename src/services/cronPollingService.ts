@@ -26,6 +26,7 @@ import { espnService } from "./espnService";
 import { alertService } from "./alertService";
 import { teamNamesMatch } from "@/lib/teamMatch";
 import { fetchKalshiMoneylines, KALSHI_SERIES, type OddsApiEventRef } from "./kalshiService";
+import { fetchPolymarketMoneylines } from "./polymarketService";
 
 type Trigger = Database["public"]["Tables"]["triggers"]["Row"];
 
@@ -458,7 +459,7 @@ export async function runCronPoll(
     // for the markets those triggers need.
     const allOdds = await fetchLiveOddsForSports(oddsApiKey, paidSports, marketsBySport);
 
-    // Step 5b: Kalshi (free) — moneyline prices for the same live games, pinned
+    // Step 5b: Kalshi + Polymarket (free) — moneyline prices for the same live games, pinned
     // to the Odds API event ids so event-bound triggers and alerts line up.
     const wantsKalshi = triggers.some(
       (t) => KALSHI_SERIES[t.sport as string] && betTypeToMarketKey(t.bet_type) === "h2h" && paidSports.includes(t.sport as string)
@@ -476,12 +477,18 @@ export async function runCronPoll(
           base: { sport_title: o.event_data.sport_title, scores: o.event_data.scores ?? null },
         });
       }
-      try {
-        const kalshiRows = await fetchKalshiMoneylines([...refs.values()]);
-        allOdds.push(...kalshiRows);
-      } catch (e) {
-        console.error("[CronPoll] Kalshi fetch failed:", e);
-      }
+      // Kalshi + Polymarket in parallel; either failing just drops its rows.
+      const [kalshiRows, polyRows] = await Promise.all([
+        fetchKalshiMoneylines([...refs.values()]).catch((e) => {
+          console.error("[CronPoll] Kalshi fetch failed:", e);
+          return [];
+        }),
+        fetchPolymarketMoneylines([...refs.values()]).catch((e) => {
+          console.error("[CronPoll] Polymarket fetch failed:", e);
+          return [];
+        }),
+      ]);
+      allOdds.push(...kalshiRows, ...polyRows);
     }
 
     // Step 6: Map each odds event → ESPN period + scores by team name. The ESPN
