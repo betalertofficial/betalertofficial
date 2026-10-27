@@ -18,7 +18,11 @@ export function SEOElements({
     <>
       <title>{title}</title>
       <meta name="description" content={description} />
-      <link rel="icon" href="/favicon.ico" />
+      <link rel="icon" type="image/png" sizes="48x48" href="/api/brand/favicon-48.png" />
+      <link rel="icon" type="image/png" sizes="32x32" href="/api/brand/favicon-32.png" />
+      <link rel="apple-touch-icon" sizes="180x180" href="/api/brand/apple-touch-icon.png" />
+      <link rel="manifest" href="/api/brand/manifest" />
+      <meta name="theme-color" content="#111111" />
 
       {/* Open Graph */}
       <meta property="og:title" content={title} />
@@ -48,7 +52,11 @@ export function SEO({
     <Head>
       <title>{title}</title>
       <meta name="description" content={description} />
-      <link rel="icon" href="/favicon.ico" />
+      <link rel="icon" type="image/png" sizes="48x48" href="/api/brand/favicon-48.png" />
+      <link rel="icon" type="image/png" sizes="32x32" href="/api/brand/favicon-32.png" />
+      <link rel="apple-touch-icon" sizes="180x180" href="/api/brand/apple-touch-icon.png" />
+      <link rel="manifest" href="/api/brand/manifest" />
+      <meta name="theme-color" content="#111111" />
 
       {/* Open Graph */}
       <meta property="og:title" content={title} />
